@@ -136,11 +136,16 @@ const fail = [];
             'skull','hatAnchor','stackAnchor'].filter(k => !capy[k]),
       rigNums: typeof capy.legRestY === 'number' && typeof capy.stackBaseY === 'number',
       legs: capy.legs.length,
+      // the external model, not a silent fall back to the procedural capybara
+      skinned: !!(capy.torso && capy.torso.isSkinnedMesh),
+      bones: capy.torso && capy.torso.skeleton ? capy.torso.skeleton.bones.length : 0,
     }));
     ok('boots and clears the loading screen', boot.loadingGone && boot.canvas);
     ok('HUD populated', boot.lives === 3 && boot.hats === 6, `lives=${boot.lives} hats=${boot.hats}`);
     ok('capybara rig complete', boot.rig.length === 0 && boot.rigNums && boot.legs === 4,
        boot.rig.length ? 'missing: ' + boot.rig.join(',') : '');
+    ok('external model in use (not the fallback)', boot.skinned && boot.bones > 0,
+       `skinned=${boot.skinned} bones=${boot.bones}`);
 
     await page.click('#btnStart');
     await page.waitForTimeout(2000);
