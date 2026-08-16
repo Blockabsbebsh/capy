@@ -1,9 +1,13 @@
 # Capybara Snack Rush
 
 A 3D browser game: a capybara catches falling food. **three.js**, not 2D canvas.
-Everything is generated at runtime — every mesh is assembled from primitives,
-every texture is painted onto a `<canvas>`, all audio is synthesized with the
-Web Audio API. There are no image, model, or sound files in the repo.
+Nearly everything is generated at runtime — meshes assembled from primitives,
+textures painted onto a `<canvas>`, all audio synthesized with the Web Audio
+API. There are no image or sound files in the repo.
+
+The one exception is the capybara itself, which is an external model:
+`assets/capybara.glb` is the source of truth, converted offline into
+`js/capymodel.js`. See "The capybara model" below.
 
 Deploys to GitHub Pages from `main`. Live at
 `https://gabrieliusskuminas-crypto.github.io/Capy/`.
@@ -26,6 +30,8 @@ Deploys to GitHub Pages from `main`. Live at
 
 `index.html` — CSS, markup, and the ordered script tags.
 `vendor/three.min.js` — three.js r160 UMD, inlined verbatim. Do not edit.
+`assets/capybara.glb` — model source of truth, only ever read by the converter.
+`tools/glb2json.mjs` — the offline converter.
 
 Load order, which is also roughly the dependency order:
 
@@ -38,7 +44,9 @@ Load order, which is also roughly the dependency order:
 | `theme.js` | `curTheme`, the theme colour lerp (`applyTheme`/`updateThemeMix`) |
 | `environment.js` | Ground, arena `patch`, `border`, pond, scenery, clouds |
 | `biomes.js` | Canvas textures, per-biome props, `refreshThemeEnvironment`, `updateThemeFX` |
-| `models.js` | `roundedBoxGeo`, `sculptBlob`, the capybara, food/hazard/hat builders |
+| `capymodel.js` | GENERATED. The converted model as one `const`. Do not hand-edit. |
+| `capyrig.js` | `buildRiggedCapybara`, the proxy/bone retarget, `syncCapyRig`, fur texture |
+| `models.js` | `roundedBoxGeo`, `sculptBlob`, the procedural capybara, food/hazard/hat builders |
 | `particles.js` | InstancedMesh pool, `burst`, `PAL` |
 | `items.js` | Falling item lifecycle: spawn, fall, `onCatch`, `onMiss` |
 | `sinkholes.js` | Hole telegraph/open/close, `holeAt` |
@@ -57,7 +65,18 @@ Load order, which is also roughly the dependency order:
 ## The capybara rig contract
 
 `buildCapybara()` in `models.js` returns an object the animation code reaches
-into by name. Anything replacing the model must supply all of it:
+into by name. It returns the rigged model (`capyrig.js`) when the model is
+present and its bones validate, otherwise the procedural build. Both satisfy
+the contract below, and `tools/shoot.js --check` asserts every name in it.
+
+**The rigged build cannot hand the game bones.** `player.js` drives the rig in
+game units — `legs[i].position.y = legRestY + lift`, with `legRestY` 0.21 —
+while a hip bone sits at a local offset of its own, so assigning 0.21 to it
+folds the model in half. Bones also carry rest rotations that an absolute
+`rotation.x =` would wipe out. So `legs`, `head`, `muzzle`, `mouth` and `skull`
+are **proxy objects** that only absorb those writes; `syncCapyRig()`, called
+once a frame from `animate()`, composes them onto the real bones on top of each
+bone's rest quaternion. `player.js` is untouched by any of this.
 
 - Group chain `root → bob → squash → tilt → body`. `bob` takes hop height,
   `squash` takes squash-and-stretch scale, `tilt` takes lean/yaw. Losing this
@@ -73,27 +92,61 @@ into by name. Anything replacing the model must supply all of it:
   `stackAnchor.position.y = capy.stackBaseY + hat.top`.
 - `eyes[]`, `torso` — currently unused by other files, kept for API stability.
 
-## Loading an external model
+## The capybara model
 
 `GLTFLoader` is **not** in the vendored bundle, and the add-on loaders ship as
-ES modules only, so it cannot be dropped in without abandoning the no-build
-setup. Verify before planning around it:
+ES modules only, so a `.glb` cannot be loaded at runtime without a build step.
+`ObjectLoader` **is** in the bundle. Verify rather than trusting this file:
 
 ```sh
 grep -c GLTFLoader vendor/three.min.js   # 0
 grep -c ObjectLoader vendor/three.min.js # 1
 ```
 
-What *is* in the bundle: `ObjectLoader`, `BufferGeometryLoader`,
-`MaterialLoader`, `AnimationMixer`, `SkinnedMesh`. So the no-build path for an
-external model is to convert it to three.js JSON **offline** (a throwaway Node
-script using GLTFLoader + `.toJSON()`), commit the JSON, and load it at runtime
-with `THREE.ObjectLoader` — zero new runtime dependencies. Skeletal animation
-would work through that path too.
+So the model is converted **offline** and committed as a plain script that
+assigns one global. No new runtime dependency, no fetch, no async at boot, and
+`file://` still works.
 
-Loading is async, so the model will not exist at boot. Keep the procedural
-capybara as the placeholder and swap it in when the file arrives. Loaders do
-not set `castShadow`; do it manually or the model looks unglued.
+### Updating the model
+
+Drop the new `.glb` over `assets/capybara.glb` and re-run:
+
+```sh
+npm i three@0.160.0        # dev only, uncommitted; must match vendor/
+node tools/glb2json.mjs assets/capybara.glb js/capymodel.js
+```
+
+Commit the regenerated `js/capymodel.js` (~815 KB raw, ~175 KB gzipped).
+
+The converter is not a straight `toJSON()` dump — the source `.glb` needs
+several things it does not carry, and each is documented at its call site:
+
+- **welds vertices and averages normals.** The Blender export splits every
+  vertex per face, so it renders flat-shaded. Welding drops 14122 verts to
+  2502 and is what produces the smooth figurine surface.
+- **generates cylindrical UVs.** The mesh has no `TEXCOORD_0` at all.
+- **bakes vertex colours from the skin weights.** Whichever bone owns a vertex
+  picks its colour, so `_ankle`/`_toe` vertices come out near-black with no
+  hand painting and no seam.
+- **bakes scale and the ground offset** into the geometry and bone
+  translations, so nothing carries a non-unit scale at runtime.
+- **collapses the armature's export rotation** — see the gotcha below.
+
+### Bone names are a contract
+
+`js/capyrig.js` drives these by name. Renaming any of them in Blender makes it
+refuse the model (loudly, on the console) and fall back to the procedural
+capybara. Adding bones is always safe.
+
+`head0`, `neck1`, and `leg_{front,hind}_{left,right}_{top0,bot0}`.
+
+The model has **no jaw, muzzle or mouth bone**, so the chew animation has
+nothing to drive. `muzzle`/`mouth`/`skull` are inert proxies; the capybara does
+not chew. Give it a jaw bone and map it in `syncCapyRig` if that changes.
+
+The animation in the `.glb` is discarded — it animates the armature's own
+transform, which would fight the `root/bob/squash/tilt` chain. `scene.toJSON()`
+omits clips anyway.
 
 ## Art direction
 
@@ -143,6 +196,22 @@ be verified any other way.
 - `metalness` > 0 on a `MeshStandardMaterial` with no environment map kills the
   diffuse term and leaves a bare specular highlight — surfaces go near-black on
   one side and shiny on the other.
+- The `.glb` carries a Z-up→Y-up rotation on the armature node. Per the glTF
+  spec a skinned mesh **ignores its own node transform**, and three honours that
+  (bindMode `attached` recomputes `bindMatrixInverse` from `matrixWorld` every
+  frame), so the mesh renders in bone space while that rotation sits on the node
+  doing nothing to it. Measure anything through `mesh.matrixWorld` and you are
+  measuring a space the mesh does not render in — and calling
+  `bind(skeleton, matrixWorld)` bakes the rotation in for real and lands the
+  capybara face-down. `glb2json.mjs` pushes the rotation into the bone chain so
+  there is exactly one coordinate space; nothing downstream should reintroduce
+  a matrix.
+- `Box3.setFromObject` **caches** its result on a `SkinnedMesh`. Rescale the
+  geometry and it keeps returning the old bounds. `glb2json.mjs` has `bboxOf()`
+  for this; do not swap it back for `setFromObject`.
+- `mat.eye` is roughness 0.25. On the procedural capybara's tiny eyes that is
+  invisible; at the model's eye size it is a hard catchlight, which the art
+  direction rules out. `capyrig.js` uses its own matte eye material.
 
 ## Known and deliberately unfixed
 
