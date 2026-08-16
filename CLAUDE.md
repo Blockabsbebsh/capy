@@ -116,7 +116,12 @@ npm i three@0.160.0        # dev only, uncommitted; must match vendor/
 node tools/glb2json.mjs assets/capybara.glb js/capymodel.js
 ```
 
-Commit the regenerated `js/capymodel.js` (~815 KB raw, ~175 KB gzipped).
+Commit the regenerated `js/capymodel.js` (~805 KB raw, ~170 KB gzipped).
+
+`TARGET_HEIGHT` at the top of the converter is the capybara's size in game
+units, floor to the top of the head. Everything else scales off it — including
+the foot-sock thresholds, which are fractions of it rather than absolute units
+for exactly that reason.
 
 The converter is not a straight `toJSON()` dump — the source `.glb` needs
 several things it does not carry, and each is documented at its call site:
@@ -234,7 +239,9 @@ rates. The user decided it was not worth fixing. Not a bug to "discover" again.
 
 ## Working agreements
 
-- Branch, commit, push. **Do not open a pull request unless asked.**
+- Branch, commit, push, **and open a pull request.** The PR is the review step —
+  it is fine to open one without asking, since it can simply be closed if the
+  work is not wanted. Never merge it yourself.
 - Do not change gameplay behaviour while doing visual or refactor work; list
   anything suspicious separately rather than fixing it inline.
 - Do not put model identifiers in commits, PRs, or code comments.
