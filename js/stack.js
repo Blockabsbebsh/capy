@@ -13,7 +13,7 @@ function setHat(id){
     currentHat.traverse(o => { if (o.isMesh) o.castShadow = true; });
     capy.hatAnchor.add(currentHat);
   }
-  capy.stackAnchor.position.y = 0.33 + def.top;
+  capy.stackAnchor.position.y = capy.stackBaseY + def.top;
   try { localStorage.setItem('capyHat', def.id); } catch(e){}
 }
 
