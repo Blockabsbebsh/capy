@@ -17,7 +17,42 @@ function roundedBoxGeo(w, h, d, soft = 0.45, seg = 22){
 }
 
 /* =======================================================================
+   SCULPTED BLOB
+   Deforms a sphere along its Z axis with a per-slice profile, so a body
+   comes out as ONE continuous surface. Overlapping primitives leave a
+   visible crease wherever two convex surfaces meet, which is most of why
+   the previous build read as assembled parts instead of a sculpted figure.
+   `prof(u)` receives u = 0 at the -Z end through 1 at the +Z end, and
+   returns width/height multipliers plus a spine offset for that slice.
+   ======================================================================= */
+function sculptBlob(len, halfW, halfH, prof, seg = 48){
+  const g = new THREE.SphereGeometry(0.5, seg, Math.round(seg * 0.7));
+  const pos = g.attributes.position;
+  const v = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++){
+    v.fromBufferAttribute(pos, i);
+    const u = v.z + 0.5;
+    const p = prof(u);
+    pos.setXYZ(i, v.x * 2 * halfW * p.w, v.y * 2 * halfH * p.h + (p.y || 0), v.z * len);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+
+/* =======================================================================
    CAPYBARA  (all primitives, hand-assembled) — faces the camera (+Z)
+
+   Built to match a smooth stylised-figurine look, which differs from an
+   anatomical capybara in ways worth writing down, because they are the
+   things that kept going wrong:
+     - the back and the head are ONE unbroken line with only a slight dip,
+       not a head lifted clear of the shoulders;
+     - every form is a soft ellipsoid, never a rounded box — corners read
+       as "assembled from parts" instantly at this size;
+     - eyes are small flat dark dots with no catchlight. Glossy highlights
+       push it toward cartoon character and away from figurine;
+     - legs are distinctly darker than the body, and there is no pale
+       belly patch at all.
    ======================================================================= */
 function buildCapybara(){
   const root  = new THREE.Group();   // world position
@@ -29,162 +64,122 @@ function buildCapybara(){
   const body = new THREE.Group();
   tilt.add(body);
 
-  /* --- body ---------------------------------------------------------------
-     The previous build was one big loaf 1.46 wide and 1.92 deep with a 0.72
-     head buried in its front face. From this camera that silhouette is a
-     single mass: a barrel with eyes. Two things fix it, and neither is
-     "make the head huge" — the body comes in narrower and shorter so the
-     head/body ratio rises on its own, and the head then sits up and forward
-     of the chest so there is a real step between the two masses.
-     Capybaras genuinely are barrel-shaped, so the torso stays a rounded
-     block; it just stops being the whole animal. */
-  const torso = new THREE.Mesh(roundedBoxGeo(1.24, 0.90, 1.50, 0.90, 26), mat.fur);
-  torso.position.set(0, 0.58, -0.22);
+  // One sculpted mass: full round rump tapering to a narrower chest, with
+  // the spine lifting slightly toward the shoulder so the back reads as a
+  // gentle arc rather than a level tube.
+  const torso = new THREE.Mesh(sculptBlob(1.80, 0.67, 0.50, u => ({
+    w: 1.0 - 0.14 * u * u,          // only a mild taper: the shoulders need to
+    h: 1.0 - 0.05 * Math.pow(u, 2.4), // stay visibly wider than the head, and
+    y: 0.09 * u * u,                  // tall enough at the chest to MEET the
+                                      // skull — too shallow and the join is a
+                                      // hard step instead of a soft dip
+  }), 52), mat.fur);
+  torso.position.set(0, 0.70, -0.16);
   torso.castShadow = true; torso.receiveShadow = true;
   body.add(torso);
 
-  // haunches, sitting a touch higher than the shoulders the way a real one does
-  const rump = new THREE.Mesh(roundedBoxGeo(1.18, 0.94, 0.72, 0.95), mat.fur);
-  rump.position.set(0, 0.62, -0.70);
-  rump.castShadow = true; rump.receiveShadow = true;
-  body.add(rump);
-
-  // chest, narrower than the barrel so the body tapers toward the neck
-  const chest = new THREE.Mesh(roundedBoxGeo(1.02, 0.80, 0.58, 0.95), mat.fur);
-  chest.position.set(0, 0.55, 0.34);
-  chest.castShadow = true; chest.receiveShadow = true;
-  body.add(chest);
-
-  // pale belly patch
-  const belly = new THREE.Mesh(roundedBoxGeo(0.98, 0.26, 1.25, 0.9), mat.furLight);
-  belly.position.set(0, 0.22, -0.18);
-  body.add(belly);
-
-  // short scruffy neck bridging chest to head, so the step reads as anatomy
-  // rather than as a head that has come loose
-  const neck = new THREE.Mesh(roundedBoxGeo(0.90, 0.64, 0.44, 0.95), mat.fur);
-  neck.position.set(0, 0.86, 0.40);
-  neck.castShadow = true;
-  body.add(neck);
-
   /* --- head ---------------------------------------------------------------
-     Set high and forward. A capybara head is the giveaway silhouette: a
-     blunt rectangular block with a broad squared-off muzzle, eyes and ears
-     pushed high and far back (they sit above the waterline while it swims),
-     and a big dark nose pad. The old head was near-cubic with a stub snout,
-     which is why it read as generic rodent rather than capybara. */
+     Overlaps the chest deeply (the skull's back half sits inside the body)
+     so the two masses merge into one silhouette with just a soft dip at the
+     neck — that junction is the whole look, and lifting the head clear of
+     it was the single biggest thing wrong before. */
   const head = new THREE.Group();
-  // carried high enough that the crown clears the back line — sitting it
-  // lower left a visible notch at the shoulder and the head read as drooping
-  head.position.set(0, 1.10, 0.58);
+  head.position.set(0, 0.92, 0.46);
   body.add(head);
 
-  const skull = new THREE.Mesh(roundedBoxGeo(0.86, 0.68, 0.84, 0.86), mat.fur);
+  const skull = new THREE.Mesh(sculptBlob(0.90, 0.44, 0.40, u => ({
+    w: 1.0 - 0.10 * u,          // narrows very slightly toward the snout
+    h: 1.0 - 0.08 * u,
+  }), 44), mat.fur);
   skull.castShadow = true; skull.receiveShadow = true;
   head.add(skull);
 
-  // heavy lower cheeks — capybaras are notably jowly, and it reads as cute
-  const cheeks = new THREE.Mesh(roundedBoxGeo(0.86, 0.32, 0.58, 0.92), mat.fur);
-  cheeks.position.set(0, -0.16, 0.06);
-  cheeks.castShadow = true;
-  head.add(cheeks);
-
-  // broad, squared muzzle carried well clear of the skull
-  const muzzle = new THREE.Mesh(roundedBoxGeo(0.64, 0.44, 0.50, 0.80), mat.fur);
-  muzzle.position.set(0, -0.09, 0.48);
+  // Snout: a soft ellipsoid sunk deep into the skull so only its front cap
+  // shows, which keeps the junction shallow enough not to crease.
+  const muzzle = new THREE.Mesh(sculptBlob(0.58, 0.305, 0.25, u => ({
+    w: 1.0 - 0.12 * u, h: 1.0 + 0.05 * u,
+  }), 36), mat.fur);
+  muzzle.position.set(0, -0.12, 0.34);
   muzzle.castShadow = true;
   head.add(muzzle);
 
-  const chin = new THREE.Mesh(roundedBoxGeo(0.50, 0.20, 0.34, 0.85), mat.furLight);
-  chin.position.set(0, -0.25, 0.55);
-  head.add(chin);
-
-  // wide dark nose pad across the top of the muzzle
-  const nose = new THREE.Mesh(roundedBoxGeo(0.34, 0.18, 0.15, 0.65), mat.nose);
-  nose.position.set(0, 0.02, 0.70);
+  // wide soft nose pad over the tip of the snout
+  const nose = new THREE.Mesh(new THREE.SphereGeometry(0.5, 20, 16), mat.nose);
+  nose.scale.set(0.22, 0.14, 0.13);
+  nose.position.set(0, -0.02, 0.60);
   head.add(nose);
   for (const sx of [-1, 1]){
-    const nl = new THREE.Mesh(new THREE.SphereGeometry(0.028, 8, 6), mat.eye);
-    nl.position.set(0.095*sx, 0.03, 0.76);
-    nl.scale.set(1, 1.3, 0.6);
+    const nl = new THREE.Mesh(new THREE.SphereGeometry(0.022, 8, 6), mat.snout);
+    nl.position.set(0.05*sx, -0.03, 0.66);
+    nl.scale.set(1, 1.25, 0.7);
     head.add(nl);
   }
 
-  const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.045, 0.06), mat.nose);
-  mouth.position.set(0, -0.21, 0.68);
+  // a shallow smile: the bottom arc of a thin torus, which is a U and so
+  // reads as content rather than as the straight dash used before
+  const MOUTH_ARC = Math.PI * 0.85;
+  const mouth = new THREE.Mesh(new THREE.TorusGeometry(0.105, 0.014, 6, 20, MOUTH_ARC), mat.nose);
+  mouth.rotation.z = -Math.PI/2 - MOUTH_ARC/2;
+  mouth.position.set(0, -0.19, 0.555);
   head.add(mouth);
 
-  // eyes: rounder and larger than before, with a proper catchlight plus a
-  // small secondary glint. The old ones were squashed to 0.62 height, which
-  // read as squinting rather than calm.
+  // Small flat dark eyes, set wide and high, no catchlight — see the note
+  // at the top of this file about why.
   const eyes = [];
   for (const sx of [-1, 1]){
-    const e = new THREE.Mesh(new THREE.SphereGeometry(0.10, 16, 14), mat.eye);
-    e.position.set(0.30*sx, 0.13, 0.22);
-    e.scale.set(1, 0.92, 0.8);
+    const e = new THREE.Mesh(new THREE.SphereGeometry(0.062, 16, 14), mat.eye);
+    e.position.set(0.315*sx, 0.135, 0.30);
+    e.scale.set(0.92, 1, 0.75);
     head.add(e);
-    const sh = new THREE.Mesh(new THREE.SphereGeometry(0.024, 10, 10), mat.eyeShine);
-    sh.position.set(0.325*sx, 0.175, 0.29);
-    head.add(sh);
-    const sh2 = new THREE.Mesh(new THREE.SphereGeometry(0.012, 8, 8), mat.eyeShine);
-    sh2.position.set(0.265*sx, 0.085, 0.30);
-    head.add(sh2);
     eyes.push(e);
   }
 
-  // ears set high and well back on the skull, small and round
+  // small rounded ears sitting on top of the skull, tipped outward
   for (const sx of [-1, 1]){
-    const ear = new THREE.Mesh(new THREE.SphereGeometry(0.12, 14, 12), mat.furDark);
-    ear.position.set(0.31*sx, 0.31, -0.14);
-    ear.scale.set(0.85, 0.78, 0.45);
-    ear.rotation.z = 0.3 * sx;
+    const ear = new THREE.Mesh(new THREE.SphereGeometry(0.5, 16, 12), mat.furDark);
+    ear.scale.set(0.25, 0.28, 0.13);
+    ear.position.set(0.30*sx, 0.36, -0.05);
+    ear.rotation.z = 0.34 * sx;
     ear.castShadow = true;
     head.add(ear);
-    const inner = new THREE.Mesh(new THREE.SphereGeometry(0.058, 10, 8), mat.snout);
-    inner.position.set(0.315*sx, 0.31, -0.09);
-    inner.scale.set(0.7, 0.9, 0.5);
+    const inner = new THREE.Mesh(new THREE.SphereGeometry(0.5, 12, 10), mat.snout);
+    inner.scale.set(0.135, 0.155, 0.07);
+    inner.position.set(0.308*sx, 0.36, 0.005);
+    inner.rotation.z = 0.34 * sx;
     head.add(inner);
   }
 
-  // mount point for hats / the stack, at the top of the skull
+  // mount point for hats / the stack, at the crown
+  const stackBaseY = 0.41;
   const hatAnchor = new THREE.Group();
-  hatAnchor.position.set(0, 0.33, -0.02);
+  hatAnchor.position.set(0, 0.38, -0.04);
   head.add(hatAnchor);
   const stackAnchor = new THREE.Group();
-  stackAnchor.position.set(0, 0.35, -0.02);
+  stackAnchor.position.set(0, stackBaseY, -0.04);
   head.add(stackAnchor);
 
-  /* --- legs ---------------------------------------------------------------
-     Actually visible now. The old stubs were 0.22 tall and parked at y=0.11,
-     entirely swallowed by the loaf above them — and updateCapybara drives
-     leg Y to a fixed rest height anyway, which pushed them further in. The
-     rest height travels with the model as `legRestY` instead of being a
-     literal over in the animation code. */
+  // Short dark stubby legs. The rest height travels with the model as
+  // `legRestY` rather than being a literal over in the animation code.
   const legs = [];
-  const legRestY = 0.26;
-  const legGeo = roundedBoxGeo(0.30, 0.44, 0.34, 0.80, 14);
-  const pawGeo = roundedBoxGeo(0.32, 0.16, 0.38, 0.70, 12);
-  const legPos = [[-0.42, 0.40], [0.42, 0.40], [-0.45, -0.62], [0.45, -0.62]];
+  const legRestY = 0.21;
+  const legGeo = sculptBlob(0.36, 0.165, 0.215, u => ({ w: 1 - 0.10*u, h: 1 }), 24);
+  const legPos = [[-0.38, 0.38], [0.38, 0.38], [-0.44, -0.58], [0.44, -0.58]];
   for (const [lx, lz] of legPos){
-    const l = new THREE.Mesh(legGeo, mat.fur);
+    const l = new THREE.Mesh(legGeo, mat.furDark);
     l.position.set(lx, legRestY, lz);
     l.castShadow = true;
-    const paw = new THREE.Mesh(pawGeo, mat.furDark);
-    paw.position.set(0, -0.20, 0.03);      // child, so it swings with the leg
-    paw.castShadow = true;
-    l.add(paw);
     body.add(l);
     legs.push(l);
   }
 
-  // near-invisible nub tail — real capybaras barely have one
-  const tail = new THREE.Mesh(new THREE.SphereGeometry(0.10, 10, 8), mat.furDark);
-  tail.position.set(0, 0.66, -1.00);
-  tail.scale.set(1, 0.9, 0.5);
+  // the little round tail nub, just visible from behind
+  const tail = new THREE.Mesh(new THREE.SphereGeometry(0.5, 12, 10), mat.fur);
+  tail.scale.set(0.19, 0.19, 0.11);
+  tail.position.set(0, 0.80, -0.99);
   body.add(tail);
 
   return { root, bob, squash, tilt, body, head, legs, eyes, torso,
-           muzzle, mouth, skull, hatAnchor, stackAnchor, legRestY };
+           muzzle, mouth, skull, hatAnchor, stackAnchor, legRestY, stackBaseY };
 }
 
 const capy = buildCapybara();
