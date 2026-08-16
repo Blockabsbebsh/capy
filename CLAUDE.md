@@ -234,7 +234,9 @@ rates. The user decided it was not worth fixing. Not a bug to "discover" again.
 
 ## Working agreements
 
-- Branch, commit, push. **Do not open a pull request unless asked.**
+- Branch, commit, push, **and open a pull request.** The PR is the review step —
+  it is fine to open one without asking, since it can simply be closed if the
+  work is not wanted. Never merge it yourself.
 - Do not change gameplay behaviour while doing visual or refactor work; list
   anything suspicious separately rather than fixing it inline.
 - Do not put model identifiers in commits, PRs, or code comments.
