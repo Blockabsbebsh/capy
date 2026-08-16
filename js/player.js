@@ -21,7 +21,9 @@ const capyState = {
   pvx: 0, pvz: 0,       // previous velocity, for stack-driving acceleration
 };
 
-const MUZZLE_Y = -0.10, MOUTH_Y = -0.22;
+// rest positions of the two pieces the chew animation drives — these track
+// where buildCapybara puts the muzzle and mouth, so they move together with it
+const MUZZLE_Y = -0.09, MOUTH_Y = -0.21;
 
 function resetCapy(){
   capyState.x = 0; capyState.z = 1.0; capyState.vx = 0; capyState.vz = 0;
@@ -259,7 +261,7 @@ function updateCapybara(dt){
   for (let i = 0; i < capy.legs.length; i++){
     const phase = capyState.step + (i % 2 ? Math.PI : 0) + (i > 1 ? Math.PI/2 : 0);
     const amp = Math.min(sp / 9, 1) * 0.14;
-    capy.legs[i].position.y = 0.29 + (grounded ? Math.max(0, Math.sin(phase)) * amp : 0.06);
+    capy.legs[i].position.y = capy.legRestY + (grounded ? Math.max(0, Math.sin(phase)) * amp : 0.06);
     capy.legs[i].rotation.x = grounded ? Math.sin(phase) * amp * 1.6 : -0.3;
   }
 

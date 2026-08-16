@@ -41,6 +41,39 @@ function makeLilyPad(x,z,s=1,rot=0){
   themeFX.add(g); return g;
 }
 
+/* ---------------------------------------------------------------------------
+   Texture resolution helpers.
+
+   `paint(drawSize, scale)` hands back a canvas that is drawSize*scale pixels
+   but pre-scaled so every drawing call still works in the original drawSize
+   coordinate space. That buys resolution without having to rescale hundreds of
+   hand-tuned coordinates, and vector work (arcs, strokes, gradients) simply
+   comes out crisper.
+
+   `finish()` sets anisotropic filtering, which matters more here than raw
+   resolution does: this camera looks across the arena at a shallow angle, and
+   without it the GPU picks an over-blurred mip for the far half of the floor.
+   That, plus the low resolutions these started at, is what read as grain.
+--------------------------------------------------------------------------- */
+const ANISO = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+function paint(drawSize, scale){
+  const c = document.createElement('canvas');
+  c.width = c.height = drawSize * scale;
+  const g = c.getContext('2d');
+  g.scale(scale, scale);
+  return [c, g];
+}
+function finish(c, { srgb = true, repeat = null } = {}){
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+  tex.anisotropy = ANISO;
+  if (repeat){
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(repeat[0], repeat[1]);
+  }
+  return tex;
+}
+
 /* Lily-pad ground texture for the main pond arena — applied to the SAME
    shared `patch` mesh every other biome uses (see the "hell" and "candy"
    textures below), instead of a separate custom-geometry object. Using a
@@ -49,8 +82,7 @@ function makeLilyPad(x,z,s=1,rot=0){
    silhouette from rotating a non-uniformly-scaled group, geometry that
    didn't match the collision ellipse, etc). */
 const lilyPadTex = (() => {
-  const c = document.createElement('canvas'); c.width = 512; c.height = 512;
-  const g = c.getContext('2d');
+  const [c, g] = paint(512, 2);            // 1024px, drawn in 512-space
   const cx = 256, cy = 256, R = 256;
   // a domed base rather than a flat fill, so the pad reads as a surface
   const base = g.createRadialGradient(cx, cy - 24, 60, cx, cy, R);
@@ -118,10 +150,34 @@ const lilyPadTex = (() => {
   margin.addColorStop(0, 'rgba(48,92,62,0)');
   margin.addColorStop(1, 'rgba(44,86,58,0.5)');
   g.fillStyle = margin; g.fillRect(0,0,512,512);
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
+  return finish(c);
 })();
+
+/* The upturned rim of a giant Victoria lily — those pads flare up at the edge
+   into a short vertical wall with a rolled lip, which is the thing that makes
+   them read as a *giant* lily rather than a big flat leaf. It doubles as a
+   hard boundary for the arena, which until now had to be inferred from a
+   change of colour on a flat disc. Built once and toggled by visibility (the
+   themeFX group is torn down and rebuilt per visit, this is not). The rim
+   sits at the patch radius, well outside the movement bounds in
+   updateCapybara, so it is purely visual and never blocks the player. */
+const lilyRim = new THREE.Group();
+{
+  const rimMat = new THREE.MeshStandardMaterial({ color:0x74b878, roughness:0.86, side:THREE.DoubleSide });
+  const h = 0.44;
+  const wall = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.0, h, 96, 1, true), rimMat);
+  wall.position.y = h / 2;
+  wall.castShadow = true; wall.receiveShadow = true;
+  lilyRim.add(wall);
+  const lip = new THREE.Mesh(new THREE.TorusGeometry(1.05, 0.075, 10, 96), rimMat);
+  lip.rotation.x = Math.PI / 2;
+  lip.position.y = h;
+  lip.castShadow = true;
+  lilyRim.add(lip);
+  lilyRim.scale.set(ARENA.halfX + 2.4, 1, ARENA.halfZ + 2.4);   // matches `patch`
+  lilyRim.visible = false;
+  world.add(lilyRim);
+}
 
 /* Water ripple texture for the pond biome's open water — a bump map
    (grayscale height, not color) of concentric ring sets, so the surface
@@ -130,8 +186,7 @@ const lilyPadTex = (() => {
    and candy backgrounds. Used as a bumpMap, not a color map, so it adds
    surface variation without changing the water's actual tint. */
 const waterRippleTex = (() => {
-  const c = document.createElement('canvas'); c.width = 256; c.height = 256;
-  const g = c.getContext('2d');
+  const [c, g] = paint(256, 2);            // 512px, drawn in 256-space
   g.fillStyle = '#808080'; g.fillRect(0,0,256,256);   // neutral gray = no bump
   // more ring-sets, higher contrast, and a touch of dark on the trough
   // side of each ring (not just a bright crest) — a bump map only reads
@@ -152,11 +207,7 @@ const waterRippleTex = (() => {
       }
     }
   }
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.NoColorSpace;
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(5,5);
-  return tex;
+  return finish(c, { srgb:false, repeat:[5,5] });
 })();
 
 function makeGumdrop(x,z,s=1){
@@ -177,14 +228,11 @@ function makeGumdrop(x,z,s=1){
 /* Candy-cane "tree" — a bent, red/white striped pole, used in place of the
    default meadow trees for the Bubblegum biome (see treeSpots below). */
 const candyCaneTex = (() => {
-  const c = document.createElement('canvas'); c.width = 32; c.height = 32;
-  const g = c.getContext('2d');
+  const [c, g] = paint(32, 8);             // 256px, drawn in 32-space
   g.fillStyle = '#fff7fa'; g.fillRect(0,0,32,32);
   g.strokeStyle = '#e8425f'; g.lineWidth = 11;
   for (let i=-32;i<64;i+=16){ g.beginPath(); g.moveTo(i,32); g.lineTo(i+32,0); g.stroke(); }
-  const tex = new THREE.CanvasTexture(c);
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(1,4);
-  return tex;
+  return finish(c, { srgb:false, repeat:[1,4] });   // no colourspace was set here originally
 })();
 function makeCandyCane(x,z,s=1){
   const g = new THREE.Group();
@@ -218,8 +266,7 @@ function makeObsidian(x,z,s=1){
    the fissures directly onto the surface that IS the arena guarantees
    they can never extend past it. */
 const obsidianTex = (() => {
-  const c = document.createElement('canvas'); c.width = 512; c.height = 512;
-  const g = c.getContext('2d');
+  const [c, g] = paint(512, 2);            // 1024px, drawn in 512-space
   // base: mottled dark basalt, not flat black
   g.fillStyle = '#15100f'; g.fillRect(0,0,512,512);
   for (let i = 0; i < 90; i++){
@@ -319,17 +366,14 @@ const obsidianTex = (() => {
     }
     strokeCrack(crackBetween(best[0],best[1], rx,ry, 7, 52), 5.4);
   }
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
+  return finish(c);
 })();
 
 /* Background lava field beyond the arena — bright, animated, tiled so
    the movement (see updateThemeFX) reads as slowly roiling lava rather
    than a static image. */
 const lavaGroundTex = (() => {
-  const c = document.createElement('canvas'); c.width = 256; c.height = 256;
-  const g = c.getContext('2d');
+  const [c, g] = paint(256, 2);            // 512px, drawn in 256-space
   const grd = g.createRadialGradient(128,128,10,128,128,180);
   grd.addColorStop(0, '#ffcf6a'); grd.addColorStop(0.35, '#ff7a1f'); grd.addColorStop(0.7, '#c23a10'); grd.addColorStop(1,'#5c1204');
   g.fillStyle = grd; g.fillRect(0,0,256,256);
@@ -347,11 +391,7 @@ const lavaGroundTex = (() => {
       g.beginPath(); g.arc(x+dx,y+dy,r,0,Math.PI*2); g.fill();
     }
   }
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(5,5);
-  return tex;
+  return finish(c, { repeat:[5,5] });
 })();
 
 /* Bubblegum background field (the big `ground` circle beyond the arena)
@@ -359,8 +399,7 @@ const lavaGroundTex = (() => {
    "candy landscape" rather than flat pink. Same tiled-texture approach
    as the lava ground above. */
 const candyBgTex = (() => {
-  const c = document.createElement('canvas'); c.width = 256; c.height = 256;
-  const g = c.getContext('2d');
+  const [c, g] = paint(256, 2);            // 512px, drawn in 256-space
   g.fillStyle = '#e7a7ca'; g.fillRect(0,0,256,256);
   // same wraparound trick as the lava texture above, so dots don't get
   // cut off at the tile edge — that hard edge was the visible seam
@@ -387,11 +426,7 @@ const candyBgTex = (() => {
     }
     g.stroke();
   }
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(6,6);
-  return tex;
+  return finish(c, { repeat:[6,6] });
 })();
 
 /* Lava bubbles — small bright blobs on the background lava field that
@@ -506,8 +541,8 @@ function makeLamp(x,z,s=1){
 }
 
 function makeHellMoon(){
-  const c=document.createElement('canvas'); c.width=256; c.height=256;
-  const g=c.getContext('2d'); g.clearRect(0,0,256,256);
+  const [c, g] = paint(256, 2);            // 512px, drawn in 256-space
+  g.clearRect(0,0,256,256);
   g.fillStyle='#ff7a2f'; g.beginPath(); g.arc(128,128,112,0,Math.PI*2); g.fill();
   g.fillStyle='#6b130e';
   g.beginPath(); g.ellipse(88,102,15,25,0.2,0,Math.PI*2); g.ellipse(168,102,15,25,-0.2,0,Math.PI*2); g.fill();
@@ -515,15 +550,14 @@ function makeHellMoon(){
   g.strokeStyle='#3a0908'; g.lineWidth=10; g.beginPath(); g.arc(128,128,58,0.1,Math.PI-0.1); g.stroke();
   g.fillStyle='#ffdf7a'; for(let i=0;i<5;i++) g.fillRect(93+i*18,136+(i%2)*3,10,16);
   g.fillStyle='#8a2415'; g.beginPath(); g.ellipse(128,61,32,17,0,0,Math.PI*2); g.fill();
-  const tex=new THREE.CanvasTexture(c); tex.colorSpace=THREE.SRGBColorSpace;
+  const tex = finish(c);
   sunDisc.material.map=tex; sunDisc.material.needsUpdate=true;
 }
 
 /* Candy-swirl ground texture for the Bubblegum arena — soft pastel polka
    dots and swirl streaks on a pink base, tiled across the arena patch. */
 const candyGroundTex = (() => {
-  const c = document.createElement('canvas'); c.width = 256; c.height = 256;
-  const g = c.getContext('2d');
+  const [c, g] = paint(256, 4);            // 1024px, drawn in 256-space
   // Deliberately a good few shades deeper than candyBgTex (the pale field
   // beyond the arena), so the play area reads as a distinct candy mat at a
   // glance. This tint used to arrive by accident, as the theme's ground
@@ -566,11 +600,7 @@ const candyGroundTex = (() => {
     g.stroke();
   }
   g.globalAlpha = 1;
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(2, 1.4);
-  return tex;
+  return finish(c, { repeat:[2, 1.4] });
 })();
 
 /* Night arena floor: a soft glowing pattern so the play field's boundary
@@ -580,8 +610,7 @@ const candyGroundTex = (() => {
    the Hell obsidian fissures) rather than relying on ambient light to
    pick out a flat color. */
 const nightGroundTex = (() => {
-  const c = document.createElement('canvas'); c.width = 512; c.height = 512;
-  const g = c.getContext('2d');
+  const [c, g] = paint(512, 2);            // 1024px, drawn in 512-space
   const cx = 256, cy = 256, R = 256;
   g.fillStyle = '#16281f'; g.fillRect(0,0,512,512);
 
@@ -624,9 +653,7 @@ const nightGroundTex = (() => {
     g.beginPath(); g.arc(x,y,r,0,Math.PI*2); g.fill();
   }
 
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
+  return finish(c);
 })();
 
 /* Ground materials for the biomes that replace the meadow's grass. Built once
@@ -651,6 +678,7 @@ function refreshThemeEnvironment(th){
   border.visible = mode==='meadow';
   pond.visible = mode==='meadow';
   pondRim.visible = mode==='meadow';
+  lilyRim.visible = mode==='pond';
   clouds.forEach(c=>c.visible = mode==='meadow' || mode==='pond');
   pinkClouds.forEach(c=>c.visible = mode==='candy');
   sceneryGroup.visible = mode==='meadow' || mode==='night';   // hidden for pond/candy/hell, which supply their own dressing
@@ -759,7 +787,13 @@ function refreshThemeEnvironment(th){
     // extend past its edge the way the old free-floating tube curves did
     patch.scale.set(ARENA.halfX + 2.4, ARENA.halfZ + 2.4, 1);
     patch.material.map = obsidianTex; patch.material.color.setHex(0xffffff);
-    patch.material.roughness = 0.4; patch.material.metalness = 0.3;
+    // Matte, and NOT metallic. metalness on a MeshStandardMaterial with no
+    // environment map to reflect kills the diffuse and leaves only a specular
+    // highlight, so the slab went near-black on the side facing away from the
+    // sun and picked up a wandering sheen on the side facing it — and since
+    // animate() orbits the sun, that sheen slid across the arena. Cooled
+    // basalt is rough rock anyway.
+    patch.material.roughness = 0.92; patch.material.metalness = 0;
     patch.material.emissiveMap = obsidianTex;
     patch.material.emissive.setHex(0xff5a1f);
     patch.material.emissiveIntensity = 0.55;
