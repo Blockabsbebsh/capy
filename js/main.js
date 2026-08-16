@@ -137,6 +137,9 @@ function animate(){
     capy.root.position.set(capyState.x, 0, capyState.z);
   }
 
+  // fold the animation proxies onto the model's bones (no-op without it)
+  syncCapyRig();
+
   updateParticles(dt);
 
   // --- camera: base pose + shake + subtle follow ------------------------
