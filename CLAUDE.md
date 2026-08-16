@@ -162,7 +162,10 @@ supplied. The things that matter, learned the hard way:
   meet the skull or the join is a hard step.
 - Small flat dark eyes, no catchlight. Glossy highlights read as cartoon
   character rather than figurine.
-- Legs distinctly darker than the body; no pale belly patch.
+- No pale belly patch. On the procedural build the whole leg is darker than the
+  body; on the model only the **feet** are dark, as short socks — the legs stay
+  body-coloured. The model's eyes also sit high and well back on the skull,
+  where a real capybara's are, not on the cheek.
 
 ## Testing
 
@@ -212,6 +215,16 @@ be verified any other way.
 - `mat.eye` is roughness 0.25. On the procedural capybara's tiny eyes that is
   invisible; at the model's eye size it is a hard catchlight, which the art
   direction rules out. `capyrig.js` uses its own matte eye material.
+- **Do not drive the foot colour from the skin weights.** It looks like the
+  principled choice and it is not: the rig's ankle/toe bones are wildly
+  asymmetric front to back — hind ankle at y 0.168, front ankle at y 0.018 — so
+  weighting by them paints a boot half way up the hind shins while catching 5-9
+  vertices per front foot, which is invisible. `paint()` masks by height
+  instead; every foot is planted at y = 0 after grounding.
+- Eye sockets are **found**, not positioned by bounding-box fractions. The head
+  has three concave dishes — sockets, nostrils, mouth line — and `capyrig.js`
+  picks the sockets by discrete curvature with the midline and muzzle fenced
+  off. A fractions guess put the eyes on the cheek.
 
 ## Known and deliberately unfixed
 
