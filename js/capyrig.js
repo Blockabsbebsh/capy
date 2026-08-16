@@ -186,14 +186,54 @@ function buildRiggedCapybara(){
     return { p: p.addScaledVector(n, out), n };
   };
 
+  const midX = (headBox.min.x + headBox.max.x) * 0.5;
   const hb = { w: headBox.max.x - headBox.min.x,
                h: headBox.max.y - headBox.min.y,
                d: headBox.max.z - headBox.min.z };
 
   /* --- eyes -------------------------------------------------------------
      Small, flat and dark, no catchlight — the art direction is explicit that
-     a glossy highlight reads as cartoon rather than figurine. The mesh has
-     the sockets sculpted but carries no colour of its own. */
+     a glossy highlight reads as cartoon rather than figurine. The mesh has the
+     sockets sculpted but carries no colour of its own.
+
+     The sockets are FOUND, not guessed at from bounding-box fractions: this
+     capybara's eyes sit high and well back on the skull (they are set up like
+     a real capybara's, near the top of the head), which is nowhere near where
+     a "60% up, 72% forward" guess lands. Concavity is the discrete Laplacian
+     projected on the normal — positive where the surface dishes inward. The
+     head has three such dishes: the eye sockets, the nostrils and the mouth
+     line, so the search is fenced off the midline and above the muzzle, which
+     leaves only the eyes. */
+  const nbr = new Map();
+  const link = (a, b) => { if (!nbr.has(a)) nbr.set(a, new Set()); nbr.get(a).add(b); };
+  const index = mesh.geometry.index;
+  for (let t = 0; t < index.count; t += 3){
+    const a = index.getX(t), b = index.getX(t+1), c = index.getX(t+2);
+    link(a,b); link(b,a); link(b,c); link(c,b); link(c,a); link(a,c);
+  }
+  const vtx = new THREE.Vector3(), nvec = new THREE.Vector3(), acc = new THREE.Vector3();
+  const socketOf = side => {
+    const cand = [];
+    for (const i of headVerts){
+      vtx.fromBufferAttribute(pos, i);
+      if (Math.sign(vtx.x - midX) !== side) continue;
+      if (Math.abs(vtx.x - midX) < hb.w * 0.35) continue;   // skip nostrils
+      if (vtx.y < headBox.min.y + hb.h * 0.35) continue;               // skip the mouth
+      if (vtx.y > headBox.max.y - hb.h * 0.10) continue;               // skip the ears
+      const ring = nbr.get(i);
+      if (!ring || ring.size < 3) continue;
+      acc.set(0, 0, 0);
+      for (const j of ring) acc.add(nvec.fromBufferAttribute(pos, j));
+      acc.divideScalar(ring.size).sub(vtx);
+      cand.push({ d: acc.dot(nvec.fromBufferAttribute(nor, i)), p: vtx.clone() });
+    }
+    cand.sort((a, b) => b.d - a.d);
+    const top = cand.slice(0, 5);                 // average the dish, not one vertex
+    const c = new THREE.Vector3();
+    for (const t of top) c.add(t.p);
+    return top.length ? c.divideScalar(top.length) : null;
+  };
+
   const eyes = [];
   const EYE_R = Math.min(hb.w, hb.h) * 0.072;
   // deliberately NOT mat.eye: that is roughness 0.25, which at this size puts a
@@ -201,10 +241,11 @@ function buildRiggedCapybara(){
   // cartoon. Matte and nearly flush with the socket instead.
   const eyeMat = new THREE.MeshStandardMaterial({ color: 0x1b110b, roughness: 0.85, metalness: 0 });
   for (const sx of [-1, 1]){
-    const target = new THREE.Vector3(
+    // fall back to a bounding-box guess only if the sculpt has no dish at all
+    const target = socketOf(sx) || new THREE.Vector3(
       sx * hb.w * 0.5,
-      headBox.min.y + hb.h * 0.60,
-      headBox.min.z + hb.d * 0.72);
+      headBox.min.y + hb.h * 0.68,
+      headBox.min.z + hb.d * 0.20);
     const { p, n } = onHead(target, 0.001);
     const e = new THREE.Mesh(new THREE.SphereGeometry(EYE_R, 16, 12), eyeMat);
     e.scale.set(1, 1, 0.34);
@@ -224,7 +265,6 @@ function buildRiggedCapybara(){
      not a centroid: the ears are the tallest thing on the head and would drag
      the anchor sideways, and averaging drags it forward into the muzzle, which
      leaves hats hovering off the brow. */
-  const midX = (headBox.min.x + headBox.max.x) * 0.5;
   const crown = new THREE.Vector3(midX, -Infinity, 0);
   for (const i of headVerts){
     v.fromBufferAttribute(pos, i);

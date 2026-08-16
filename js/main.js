@@ -137,8 +137,10 @@ function animate(){
     capy.root.position.set(capyState.x, 0, capyState.z);
   }
 
-  // fold the animation proxies onto the model's bones (no-op without it)
-  syncCapyRig();
+  // fold the animation proxies onto the model's bones. Guarded for the same
+  // reason as buildCapybara: a stale cached index.html without capyrig.js must
+  // fall back to the procedural capybara, not throw once per frame.
+  if (typeof syncCapyRig === 'function') syncCapyRig();
 
   updateParticles(dt);
 
