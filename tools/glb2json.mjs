@@ -197,20 +197,26 @@ function offsetAttrY(a, dy){
    noise hides both the seam and the stretch. Anything structured would not
    survive this projection.
 
-   Colours: taken from the skin weights rather than from position, so the mask
-   follows the rig exactly. A vertex weighted to an ankle or toe bone is a foot
-   and goes near-black; the shin bones fade it back to the body brown.
+   Colours: the foot mask is taken from HEIGHT, not from the skin weights.
+   Weights look like the principled choice and are not: this rig's ankle/toe
+   bones are wildly asymmetric front to back — the hind ankle sits at y = 0.168
+   but the front ankle at y = 0.018 — so weighting by them paints a boot half
+   way up the hind shins while catching only 5-9 vertices on each front foot,
+   which is invisible. Every foot is planted at y = 0 in the bind pose (the
+   converter grounds the model), so a height ramp gives all four the same sock.
+   Bone weights are still used, but only to answer "is this vertex on a leg at
+   all", so nothing on the body can darken.
    ------------------------------------------------------------------------- */
+const SOCK_TOP  = 0.115;   // fully body-coloured at and above this height
+const SOCK_FULL = 0.045;   // fully dark at and below it
+
 function paint(sk){
   const geo = sk.geometry;
   const pos = geo.attributes.position;
   const si = geo.attributes.skinIndex, sw = geo.attributes.skinWeight;
   const names = sk.skeleton.bones.map(b => b.name);
 
-  // how much each bone counts as "foot" (1) or "shin" (partial)
-  const darkness = names.map(n =>
-    /_(ankle|toe)$/.test(n) ? 1.0 :
-    /_bot0$/.test(n)        ? 0.55 : 0);
+  const onLeg = names.map(n => /^leg_/.test(n) ? 1 : 0);
 
   const p = new THREE.Vector3();
   const box = bboxOf(sk);
@@ -228,11 +234,12 @@ function paint(sk){
     uv[i*2]     = Math.atan2(p.x, p.y - midY) / (Math.PI * 2) + 0.5;
     uv[i*2 + 1] = (p.z - zMin) / zSpan;
 
-    let d = 0;
-    for (const k of ['x', 'y', 'z', 'w']){
-      d += darkness[si[`get${k.toUpperCase()}`](i)] * sw[`get${k.toUpperCase()}`](i);
+    let leg = 0;
+    for (const k of ['X', 'Y', 'Z', 'W']){
+      leg += onLeg[si['get' + k](i)] * sw['get' + k](i);
     }
-    d = THREE.MathUtils.clamp(d, 0, 1);
+    let d = leg < 0.25 ? 0
+          : THREE.MathUtils.clamp((SOCK_TOP - p.y) / (SOCK_TOP - SOCK_FULL), 0, 1);
     d = d * d * (3 - 2 * d);                       // smoothstep, softer ankle line
 
     // body -> leg -> foot, so the darkening ramps instead of banding

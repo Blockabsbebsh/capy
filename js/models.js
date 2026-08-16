@@ -186,7 +186,11 @@ function buildProceduralCapybara(){
    the fallback, so a missing or contract-breaking model degrades to a working
    animal instead of an empty scene. See js/capyrig.js. */
 function buildCapybara(){
-  return buildRiggedCapybara() || buildProceduralCapybara();
+  // The typeof guard matters during a deploy: a browser holding a cached
+  // index.html without the capyrig.js tag, next to a fresh models.js, would
+  // otherwise throw at boot and leave a blank screen instead of falling back.
+  const rigged = typeof buildRiggedCapybara === 'function' ? buildRiggedCapybara() : null;
+  return rigged || buildProceduralCapybara();
 }
 
 const capy = buildCapybara();
