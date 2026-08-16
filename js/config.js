@@ -11,6 +11,9 @@ const GRAV = -19;
 const AIR_CATCH_Y = 0.45;    // hop height that counts as "airborne" for the bonus
 const AIR_BONUS = 1.5;       // score multiplier for catching food mid-hop
 const SLIP_TIME = 2.0;       // seconds of soap-slick controls
+const STEP_RATE = 1.03;      // leg-cycle speed per unit of ground speed. Purely
+                             // cosmetic — the cycle is not matched to distance
+                             // travelled, so this is a look dial, not physics.
 const HEART_FALL = 3.1;      // hearts ignore fallSpeed and drift down at this rate
 
 const TYPES = {

@@ -34,7 +34,7 @@ const REQUIRED = ['head0', 'neck1',
   'leg_front_left_top0', 'leg_front_right_top0',
   'leg_hind_left_top0',  'leg_hind_right_top0'];
 
-const TARGET_HEIGHT = 1.50;        // game units, matched to the procedural build
+const TARGET_HEIGHT = 1.80;        // game units, floor to the top of the head
 
 // sRGB source colours; THREE.Color converts them to the linear working space,
 // which is what a vertex-colour attribute is sampled as
@@ -207,8 +207,10 @@ function offsetAttrY(a, dy){
    Bone weights are still used, but only to answer "is this vertex on a leg at
    all", so nothing on the body can darken.
    ------------------------------------------------------------------------- */
-const SOCK_TOP  = 0.115;   // fully body-coloured at and above this height
-const SOCK_FULL = 0.045;   // fully dark at and below it
+// Fractions of TARGET_HEIGHT, not absolute units: retargeting the model to a
+// different size must not quietly resize the socks along with it.
+const SOCK_TOP  = 0.077 * TARGET_HEIGHT;   // fully body-coloured at and above this
+const SOCK_FULL = 0.030 * TARGET_HEIGHT;   // fully dark at and below it
 
 function paint(sk){
   const geo = sk.geometry;

@@ -256,7 +256,7 @@ function updateCapybara(dt){
   capy.head.rotation.x = Math.sin(t * 1.7) * 0.05 + THREE.MathUtils.clamp(-capyState.hopV*0.012, -0.2, 0.2);
   capy.head.rotation.z = Math.sin(t * 1.1) * 0.03;
 
-  capyState.step += sp * dt * 3.1;
+  capyState.step += sp * dt * STEP_RATE;
   const grounded = capyState.hopY < 0.02;
   for (let i = 0; i < capy.legs.length; i++){
     const phase = capyState.step + (i % 2 ? Math.PI : 0) + (i > 1 ? Math.PI/2 : 0);
