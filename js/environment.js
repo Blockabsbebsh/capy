@@ -108,10 +108,15 @@ for (let i = 0; i < 22; i++){
 // --- drifting clouds ----------------------------------------------------
 const clouds = [];       // white/neutral pool — meadow, pond
 const pinkClouds = [];   // pink-tinted pool — bubblegum only
-function makeCloud(x, y, z, s, color = 0xffffff, pool = clouds){
+function makeCloud(x, y, z, s, color = null, pool = clouds){
   const g = new THREE.Group();
   const n = 4 + Math.floor(Math.random()*3);
-  const cloudMat = new THREE.MeshStandardMaterial({ color, roughness: 0.9 });
+  // The neutral pool renders with the shared mat.cloud, which updateThemeMix
+  // eases toward each theme's `cloud` colour. Building a private material here
+  // instead is what left that colour with nothing to drive, so the clouds
+  // stayed pure white in every biome. Pass an explicit colour to opt out and
+  // get a bespoke material — the pink Bubblegum pool below does exactly that.
+  const cloudMat = color === null ? mat.cloud : new THREE.MeshStandardMaterial({ color, roughness: 0.9 });
   for (let i = 0; i < n; i++){
     const m = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 1), cloudMat);
     m.position.set((i - n/2) * 1.25 + Math.random()*0.4, Math.random()*0.5, Math.random()*0.8);

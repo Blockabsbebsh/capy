@@ -38,11 +38,13 @@ function triggerEvent(){
   if (game.level >= 3) pool.push('sinkholes');
   if (game.level >= 5) pool.push('feast');
   if (game.level >= 6) pool.push('missiles', 'sinkholes');
-  // never run the same set-piece twice in a row
-  let kind = pool[(Math.random() * pool.length) | 0];
-  if (kind === evt.last && pool.length > 1){
-    kind = pool[(Math.random() * pool.length) | 0];
-  }
+  // never run the same set-piece twice in a row — drop the previous kind from
+  // the pool rather than rerolling once, since a single reroll draws from the
+  // same pool and can land on it again (at level 6+ that was roughly one
+  // repeat in nine). Duplicate entries stay in, so the weighting is unchanged.
+  const fresh = pool.filter(k => k !== evt.last);
+  const from = fresh.length ? fresh : pool;
+  const kind = from[(Math.random() * from.length) | 0];
   evt.last = kind;
 
   evt.active = kind; evt.t = 0; evt.queue.length = 0;
