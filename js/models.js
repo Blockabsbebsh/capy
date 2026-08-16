@@ -54,7 +54,7 @@ function sculptBlob(len, halfW, halfH, prof, seg = 48){
      - legs are distinctly darker than the body, and there is no pale
        belly patch at all.
    ======================================================================= */
-function buildCapybara(){
+function buildProceduralCapybara(){
   const root  = new THREE.Group();   // world position
   const bob   = new THREE.Group();   // hop / bounce offset
   const squash= new THREE.Group();   // squash & stretch scaling
@@ -180,6 +180,13 @@ function buildCapybara(){
 
   return { root, bob, squash, tilt, body, head, legs, eyes, torso,
            muzzle, mouth, skull, hatAnchor, stackAnchor, legRestY, stackBaseY };
+}
+
+/* The external model is the capybara now; the hand-built one above stays as
+   the fallback, so a missing or contract-breaking model degrades to a working
+   animal instead of an empty scene. See js/capyrig.js. */
+function buildCapybara(){
+  return buildRiggedCapybara() || buildProceduralCapybara();
 }
 
 const capy = buildCapybara();
