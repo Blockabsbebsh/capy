@@ -63,7 +63,11 @@ function updateThemeMix(k){
   sun.color.copy(themeFrom.sun).lerp(themeTo.sun, k);
   rim.color.copy(themeFrom.rim).lerp(themeTo.rim, k);
   mat.grass.color.copy(themeFrom.grass).lerp(themeTo.grass, k);
-  mat.grassDark.color.copy(themeFrom.grassDark).lerp(themeTo.grassDark, k);
+  // Meadow only. `patch` shares this exact material, and every other biome
+  // puts a map on it and sets the colour to white so the texture shows
+  // through untinted — lerping here would paint the theme's ground colour
+  // straight back over that white and stain the texture.
+  if (curTheme.arena === 'meadow') mat.grassDark.color.copy(themeFrom.grassDark).lerp(themeTo.grassDark, k);
   mat.water.color.copy(themeFrom.water).lerp(themeTo.water, k);
   mat.cloud.color.copy(themeFrom.cloud).lerp(themeTo.cloud, k);
   sunDisc.material.color.copy(themeFrom.disc).lerp(themeTo.disc, k);

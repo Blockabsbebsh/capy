@@ -489,6 +489,17 @@ const nightGroundTex = (() => {
   return tex;
 })();
 
+/* Ground materials for the biomes that replace the meadow's grass. Built once
+   and reused: refreshThemeEnvironment runs on every theme change AND on every
+   new game / return to menu, so allocating these inline leaked one material
+   per visit, each holding onto a compiled shader program. */
+const pondGroundMat = new THREE.MeshStandardMaterial({
+  color:0x4fb3d9, roughness:0.12, metalness:0.25, transparent:true, opacity:0.85,
+  bumpMap: waterRippleTex, bumpScale: 0.18,
+});
+const candyGroundMat = new THREE.MeshBasicMaterial({ map: candyBgTex });
+const lavaGroundMat = new THREE.MeshBasicMaterial({ map: lavaGroundTex });
+
 function refreshThemeEnvironment(th){
   clearThemeFX();
   const mode=th.arena;
@@ -534,10 +545,7 @@ function refreshThemeEnvironment(th){
     // dedicated material (not the shared mat.water, which the small
     // decorative Meadow pond also uses) so the ripple bump map only
     // shows up here — otherwise it'd leak onto Meadow's pond too
-    ground.material = new THREE.MeshStandardMaterial({
-      color:0x4fb3d9, roughness:0.12, metalness:0.25, transparent:true, opacity:0.85,
-      bumpMap: waterRippleTex, bumpScale: 0.18,
-    });
+    ground.material = pondGroundMat;
     ground.scale.setScalar(1.35);
     // same pattern as every other biome: texture the shared `patch` mesh,
     // sized to match ARENA exactly, same as every other theme — kept
@@ -576,7 +584,7 @@ function refreshThemeEnvironment(th){
     // background field beyond the arena gets its own tiled pastel pattern,
     // same approach as the lava ground — a plain recolored grass material
     // read as flat pink with nothing going on
-    ground.material = new THREE.MeshBasicMaterial({ map: candyBgTex });
+    ground.material = candyGroundMat;
     ground.scale.setScalar(1);
     patch.scale.set(ARENA.halfX + 2.4, ARENA.halfZ + 2.4, 1); patch.material.color.setHex(0xffffff);
     patch.material.map = candyGroundTex; patch.material.needsUpdate = true;
@@ -604,7 +612,7 @@ function refreshThemeEnvironment(th){
   } else if(mode==='hell'){
     // background beyond the arena: a genuinely bright, animated lava
     // field, not a near-black tint on the water material
-    ground.material = new THREE.MeshBasicMaterial({ map: lavaGroundTex });
+    ground.material = lavaGroundMat;
     ground.scale.setScalar(1);
     // arena surface: obsidian/basalt with lava fissures baked into the
     // texture, so they're physically part of the arena and can never
