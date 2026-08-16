@@ -23,7 +23,7 @@ const capyState = {
 
 // rest positions of the two pieces the chew animation drives — these track
 // where buildCapybara puts the muzzle and mouth, so they move together with it
-const MUZZLE_Y = -0.09, MOUTH_Y = -0.21;
+const MUZZLE_Y = -0.12, MOUTH_Y = -0.19;
 
 function resetCapy(){
   capyState.x = 0; capyState.z = 1.0; capyState.vx = 0; capyState.vz = 0;
