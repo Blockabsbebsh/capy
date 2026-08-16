@@ -7,9 +7,14 @@ const themeFxState = { points:null, pointsMat:null, fireflies:[], bubbles:[], st
 function clearThemeFX(){
   while (themeFX.children.length){
     const o = themeFX.children.pop();
+    // Anything flagged shared is owned by the module, not by this group, and
+    // is reused the next time the biome comes back (starting a new game or
+    // quitting to the menu re-runs this too, so "you never revisit a level"
+    // isn't protection). Disposing it here forced three.js to silently
+    // re-upload the geometry and recompile the shaders on the way back in.
     o.traverse?.(q => {
-      if (q.geometry) q.geometry.dispose();
-      if (q.material && q.material.dispose) q.material.dispose();
+      if (q.geometry && !q.geometry.userData.shared) q.geometry.dispose();
+      if (q.material && q.material.dispose && !q.material.userData.shared) q.material.dispose();
     });
   }
   themeFxState.points = null; themeFxState.pointsMat = null;
@@ -46,22 +51,73 @@ function makeLilyPad(x,z,s=1,rot=0){
 const lilyPadTex = (() => {
   const c = document.createElement('canvas'); c.width = 512; c.height = 512;
   const g = c.getContext('2d');
-  g.fillStyle = '#5fa869'; g.fillRect(0,0,512,512);
-  // radial veins fanning from just off-center, like a real lily pad
-  const cx = 256, cy = 256;
-  g.strokeStyle = 'rgba(62,118,81,0.55)'; g.lineWidth = 5;
-  for (let i = 0; i < 11; i++){
-    const a = (i/11) * Math.PI * 1.9 + 0.3;
-    g.beginPath(); g.moveTo(cx, cy);
-    g.lineTo(cx + Math.cos(a)*230, cy + Math.sin(a)*230);
-    g.stroke();
+  const cx = 256, cy = 256, R = 256;
+  // a domed base rather than a flat fill, so the pad reads as a surface
+  const base = g.createRadialGradient(cx, cy - 24, 60, cx, cy, R);
+  base.addColorStop(0, '#63ad6e');
+  base.addColorStop(0.6, '#5fa869');
+  base.addColorStop(1, '#4f9060');
+  g.fillStyle = base; g.fillRect(0,0,512,512);
+
+  /* Venation. Real lily-pad ribs fan out in gentle arcs that are thick at the
+     hub and taper to nothing at the margin, with finer forks filling the gaps
+     between them — and they sit LIGHTER than the pad, the way a raised rib
+     catches light. The old version drew eleven hard, dead-straight, uniformly
+     dark spokes, which read as a drawn asterisk rather than a leaf. */
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  const ribPath = (a0, len, curve, steps = 26) => {
+    const pts = [];
+    for (let i = 0; i <= steps; i++){
+      const t = i / steps;
+      const a = a0 + curve * t * t;          // bend grows along the rib
+      pts.push([cx + Math.cos(a) * len * t, cy + Math.sin(a) * len * t]);
+    }
+    return pts;
+  };
+  const taper = (pts, w0, rgb, alpha, dx = 0, dy = 0) => {
+    for (let i = 1; i < pts.length; i++){
+      const t = i / (pts.length - 1);
+      g.strokeStyle = `rgba(${rgb},${(alpha * (1 - t * 0.3)).toFixed(3)})`;
+      g.lineWidth = Math.max(0.7, w0 * Math.pow(1 - t, 0.55));
+      g.beginPath(); g.moveTo(pts[i-1][0] + dx, pts[i-1][1] + dy);
+      g.lineTo(pts[i][0] + dx, pts[i][1] + dy); g.stroke();
+    }
+  };
+  const ribs = [];
+  for (let i = 0; i < 13; i++){
+    const a0 = (i / 13) * Math.PI * 2 + 0.25;
+    const curve = (i % 2 ? 0.17 : -0.14) + (Math.random() - 0.5) * 0.1;
+    ribs.push(ribPath(a0, R * (0.84 + Math.random() * 0.08), curve));
   }
-  // mottled highlight patches for texture
+  ribs.forEach(p => taper(p, 7.5, '52,96,66', 0.42, 2.2, 2.2));   // relief shadow
+  ribs.forEach(p => taper(p, 7.0, '156,206,150', 0.70));          // lit rib
+  for (const p of ribs){                                          // finer forks
+    for (const at of [0.44, 0.64, 0.81]){
+      if (Math.random() > 0.75) continue;
+      const [bx, by] = p[Math.floor(at * (p.length - 1))];
+      const dir = Math.random() < 0.5 ? 1 : -1;
+      const from = Math.atan2(by - cy, bx - cx);
+      const len = R * (0.09 + Math.random() * 0.12);
+      const sub = [];
+      for (let k = 0; k <= 12; k++){
+        const t = k / 12, a = from + dir * (0.45 + 0.35 * t);
+        sub.push([bx + Math.cos(a) * len * t, by + Math.sin(a) * len * t]);
+      }
+      taper(sub, 3.0, '156,206,150', 0.5);
+    }
+  }
+  // mottled patches for texture — kept faint so they sit under the venation
+  // rather than competing with it
   for (let i = 0; i < 40; i++){
     const a = Math.random()*Math.PI*2, r = Math.random()*220;
-    g.fillStyle = Math.random() < 0.5 ? 'rgba(140,200,140,0.18)' : 'rgba(50,95,65,0.16)';
-    g.beginPath(); g.arc(cx+Math.cos(a)*r, cy+Math.sin(a)*r, 8+Math.random()*22, 0, Math.PI*2); g.fill();
+    g.fillStyle = Math.random() < 0.5 ? 'rgba(140,200,140,0.10)' : 'rgba(50,95,65,0.09)';
+    g.beginPath(); g.arc(cx+Math.cos(a)*r, cy+Math.sin(a)*r, 6+Math.random()*14, 0, Math.PI*2); g.fill();
   }
+  // slightly deeper margin so the pad has an edge instead of fading out
+  const margin = g.createRadialGradient(cx, cy, R * 0.8, cx, cy, R);
+  margin.addColorStop(0, 'rgba(48,92,62,0)');
+  margin.addColorStop(1, 'rgba(44,86,58,0.5)');
+  g.fillStyle = margin; g.fillRect(0,0,512,512);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
@@ -172,62 +228,97 @@ const obsidianTex = (() => {
     g.fillStyle = `rgba(${shade+8},${shade},${shade+4},${0.25+Math.random()*0.35})`;
     g.beginPath(); g.arc(x,y,r,0,Math.PI*2); g.fill();
   }
-  // angular basalt-column facets (polygon slivers)
-  g.strokeStyle = 'rgba(60,45,40,0.4)'; g.lineWidth = 2;
-  for (let i = 0; i < 26; i++){
-    g.beginPath();
-    const cx = Math.random()*512, cy = Math.random()*512, n = 5+((Math.random()*3)|0);
-    for (let k=0;k<n;k++){
-      const a = (k/n)*Math.PI*2, r = 16+Math.random()*14;
-      g[k===0?'moveTo':'lineTo'](cx+Math.cos(a)*r, cy+Math.sin(a)*r);
+  // Columnar-basalt plates: cell centres on a jittered grid, each outlined as
+  // an irregular polygon, so the rock reads as packed columns seen from above
+  // rather than a few loose polygon slivers floating on noise.
+  g.lineJoin = 'round';
+  for (let gx = -1; gx < 9; gx++) for (let gy = -1; gy < 9; gy++){
+    const px = gx*64 + 32 + (Math.random()-0.5)*34;
+    const py = gy*64 + 32 + (Math.random()-0.5)*34;
+    const n = 5 + ((Math.random()*3)|0);
+    const poly = [];
+    for (let k = 0; k < n; k++){
+      const a = (k/n)*Math.PI*2 + Math.random()*0.3, r = 24 + Math.random()*13;
+      poly.push([px + Math.cos(a)*r, py + Math.sin(a)*r]);
     }
-    g.closePath(); g.stroke();
+    const trace = (dx, dy) => {
+      g.beginPath();
+      poly.forEach(([x,y],i) => g[i===0?'moveTo':'lineTo'](x+dx, y+dy));
+      g.closePath(); g.stroke();
+    };
+    g.strokeStyle = 'rgba(9,6,6,0.55)';  g.lineWidth = 2.4; trace(0,0);      // seam
+    g.strokeStyle = 'rgba(96,78,70,0.30)'; g.lineWidth = 1.1; trace(-1,-1);  // lit lip
   }
-  // glowing lava fissures — a branching crack network with organic jitter
-  // and tapering width, instead of a few smooth, uniform-width polylines
-  // (which read as deliberate zig-zag shapes rather than real cracks).
-  // Confined entirely within the canvas (= entirely within the arena,
-  // guaranteed) since it's baked into this same texture.
-  function jitterPath(x0, y0, x1, y1, roughness, depth){
-    if (depth <= 0) return [[x0,y0],[x1,y1]];
-    const mx = (x0+x1)/2, my = (y0+y1)/2;
-    const dx = x1-x0, dy = y1-y0, len = Math.hypot(dx,dy) || 1;
-    // perpendicular offset, scaled down each recursion so cracks stay
-    // jagged up close but don't wander wildly over long spans
-    const off = (Math.random()-0.5) * roughness * len * 0.5;
-    const nx = -dy/len, ny = dx/len;
-    const px = mx + nx*off, py = my + ny*off;
-    const left = jitterPath(x0,y0,px,py, roughness, depth-1);
-    const right = jitterPath(px,py,x1,y1, roughness, depth-1);
-    return left.slice(0,-1).concat(right);
+
+  /* Lava fissures. A crack in cooled basalt is a GAP between plates: it runs
+     mostly straight, turns in sharp kinks where it meets a plate boundary
+     rather than wobbling smoothly, is widest mid-run and tapers to a hairline
+     at both ends, and glows from inside a dark recess. The old version drew
+     midpoint-displaced polylines at a constant width, which is why they read
+     as squiggles sitting on the rock instead of splits in it. Still baked
+     into this texture, so a crack can never extend past the arena. */
+  // A crack runs from one junction to another. Walking freely and steering
+  // away from the rim made every crack curve inward and meet in the middle,
+  // which read as a twig. Going node-to-node instead lets them close into
+  // cells, which is what actually makes a surface look plated.
+  function crackBetween(x0,y0,x1,y1,segs,wander){
+    const pts = [[x0,y0]];
+    const perp = Math.atan2(y1-y0, x1-x0) + Math.PI/2;
+    for (let i = 1; i <= segs; i++){
+      const t = i/segs;
+      // offset sideways off the straight run, pinned to 0 at both ends so the
+      // crack still lands exactly on its junctions
+      const off = i === segs ? 0 : (Math.random()-0.5) * wander * Math.sin(Math.PI*t);
+      pts.push([x0 + (x1-x0)*t + Math.cos(perp)*off,
+                y0 + (y1-y0)*t + Math.sin(perp)*off]);
+    }
+    return pts;
   }
-  function drawStroke(pts, w, color){
-    g.lineJoin='round'; g.lineCap='round';
-    g.strokeStyle = color; g.lineWidth = w;
-    g.beginPath(); pts.forEach(([x,y],i)=>g[i===0?'moveTo':'lineTo'](x,y)); g.stroke();
-  }
-  function fissure(x0,y0,x1,y1, w, branchChance){
-    const pts = jitterPath(x0,y0,x1,y1, 0.9, 4);
-    drawStroke(pts, w*3.2, 'rgba(255,110,35,0.3)');   // soft outer glow
-    drawStroke(pts, w*1.5, '#ff6a1f');                // bright core
-    drawStroke(pts, w*0.55, '#ffe08a');                // hot white-orange center line
-    // occasional side branches, thinner, spawned partway along the main crack
-    if (branchChance > 0){
-      const n = pts.length;
-      for (let i = 2; i < n-2; i += 3){
-        if (Math.random() < branchChance){
-          const [bx,by] = pts[i];
-          const a = Math.random()*Math.PI*2;
-          const blen = 30 + Math.random()*70;
-          fissure(bx, by, bx+Math.cos(a)*blen, by+Math.sin(a)*blen, w*0.55, 0);
-        }
+  function strokeCrack(pts, wMax){
+    const n = pts.length - 1;
+    // hairline at both ends, fattest around the middle of the run
+    const wAt = t => Math.max(0.35, wMax * Math.pow(Math.sin(Math.PI*t), 0.7));
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    const pass = (mul, rgb, alpha) => {
+      for (let i = 1; i <= n; i++){
+        const t = i/n;
+        g.strokeStyle = `rgba(${rgb},${alpha})`;
+        g.lineWidth = wAt(t)*mul;
+        g.beginPath(); g.moveTo(pts[i-1][0],pts[i-1][1]); g.lineTo(pts[i][0],pts[i][1]); g.stroke();
       }
-    }
+    };
+    pass(5.0, '255,96,20',   0.09);   // heat bloom washing the rock nearby
+    pass(2.9, '255,120,30',  0.16);
+    pass(1.9, '18,9,7',      0.95);   // the gap itself, in shadow
+    pass(1.1, '255,86,16',   1);      // lava down in the gap
+    pass(0.45,'255,226,150', 1);      // white-hot centre
   }
-  fissure(30,190, 460,150, 5.5, 0.3);
-  fissure(50,350, 470,340, 5, 0.3);
-  fissure(235,50, 225,480, 4.5, 0.28);
-  fissure(90,440, 360,380, 4, 0.25);
+  // Junctions: an inner ring of nodes plus nodes out at the rim. Linking the
+  // inner ones into a loop encloses a central plate; spurs out to the rim
+  // break the surrounding rock into further cells.
+  const node = (r, a) => [256 + Math.cos(a)*r, 256 + Math.sin(a)*r];
+  const inner = [], rim = [];
+  for (let i = 0; i < 5; i++){
+    const a = (i/5)*Math.PI*2 + 0.4;
+    inner.push(node(88 + Math.random()*46, a + (Math.random()-0.5)*0.35));
+  }
+  for (let i = 0; i < 7; i++){
+    const a = (i/7)*Math.PI*2 + 0.15;
+    rim.push(node(232 + Math.random()*22, a + (Math.random()-0.5)*0.3));
+  }
+  for (let i = 0; i < inner.length; i++){
+    const [ax,ay] = inner[i], [bx,by] = inner[(i+1)%inner.length];
+    strokeCrack(crackBetween(ax,ay,bx,by, 6, 40), 4.6);
+  }
+  for (const [rx,ry] of rim){
+    // run each rim node to whichever junction it actually sits nearest
+    let best = inner[0], bd = Infinity;
+    for (const n of inner){
+      const d = Math.hypot(n[0]-rx, n[1]-ry);
+      if (d < bd){ bd = d; best = n; }
+    }
+    strokeCrack(crackBetween(best[0],best[1], rx,ry, 7, 52), 5.4);
+  }
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
@@ -281,14 +372,19 @@ const candyBgTex = (() => {
       g.beginPath(); g.arc(x+dx,y+dy,r,0,Math.PI*2); g.fill();
     }
   }
-  // horizontal swirl strokes: drawn full-width edge-to-edge already, so
-  // they tile cleanly on X; duplicate vertically so they wrap on Y too
+  // Same periodic-sine bands as candyGroundTex, and for the same reason: the
+  // bezier this used to draw was full-width but not actually periodic, so its
+  // height jumped at every tile boundary. At repeat.set(6, 6) that scattered
+  // faint steps across the whole background field.
   g.strokeStyle = 'rgba(255,255,255,0.3)'; g.lineWidth = 6;
-  for (let i=-1;i<5;i++){
+  const bgBands = 4, bgGap = 256 / bgBands;
+  for (let i = 0; i < bgBands; i++){
+    const y0 = i * bgGap;
     g.beginPath();
-    const y0 = i*70 - 20;
-    g.moveTo(-20, y0);
-    g.bezierCurveTo(80, y0+40, 170, y0-40, 276, y0);
+    for (let x = 0; x <= 256; x += 4){
+      const y = y0 + Math.sin((x / 256) * Math.PI * 2) * 18;
+      if (x === 0) g.moveTo(x, y); else g.lineTo(x, y);
+    }
     g.stroke();
   }
   const tex = new THREE.CanvasTexture(c);
@@ -317,9 +413,13 @@ function makeLavaBubbles(){
 // meshes), which is wasted GPU program/state overhead for identical
 // flat-color materials. Reusing 4 shared materials + 1 shared geometry
 // across all instances is free visually and much cheaper to draw.
+// ...which in turn means clearThemeFX must not dispose them along with the
+// per-visit props it is clearing, hence the shared flag.
 const sprinkleMats = [0xf06b9a,0x6c8fe8,0xffc64a,0x74c98d].map(c =>
   new THREE.MeshStandardMaterial({color:c, roughness:0.6}));
 const sprinkleGeo = new THREE.CapsuleGeometry(0.045,0.14,3,6);
+sprinkleGeo.userData.shared = true;
+sprinkleMats.forEach(m => m.userData.shared = true);
 function makeSprinkles(){
   const group=new THREE.Group();
   for(let i=0;i<42;i++){
@@ -424,8 +524,13 @@ function makeHellMoon(){
 const candyGroundTex = (() => {
   const c = document.createElement('canvas'); c.width = 256; c.height = 256;
   const g = c.getContext('2d');
-  g.fillStyle = '#f2c4d9'; g.fillRect(0,0,256,256);
-  const dotColors = ['#ffe0ee','#e7a7ca','#ffd5a8','#c9e8f2'];
+  // Deliberately a good few shades deeper than candyBgTex (the pale field
+  // beyond the arena), so the play area reads as a distinct candy mat at a
+  // glance. This tint used to arrive by accident, as the theme's ground
+  // colour multiplying the whole texture; it is baked in properly now, which
+  // keeps the contrast without also crushing the pattern underneath it.
+  g.fillStyle = '#db80ac'; g.fillRect(0,0,256,256);
+  const dotColors = ['#e793bc','#d16da0','#e78b85','#b698c0'];
   // same wraparound trick as candyBgTex: draw each dot at all 4 tile
   // offsets so nothing gets sliced off at the repeat seam. Without this,
   // any dot straddling the edge of the 256x256 tile got hard-clipped —
@@ -440,17 +545,25 @@ const candyGroundTex = (() => {
       g.beginPath(); g.arc(x+dx, y+dy, r, 0, Math.PI*2); g.fill();
     }
   }
-  g.globalAlpha = 0.35; g.strokeStyle = '#ffffff'; g.lineWidth = 5;
-  // swirl strokes already run full tile-width edge-to-edge (clean on X);
-  // duplicate one tile-height above/below so they also wrap cleanly on Y
-  for (let i=-1;i<7;i++){
-    for (const yOff of [0, 256]){
-      g.beginPath();
-      const y0 = i*46 + yOff;
-      g.moveTo(-20, y0);
-      g.bezierCurveTo(70, y0+30, 180, y0-30, 276, y0);
-      g.stroke();
+  g.globalAlpha = 0.30; g.strokeStyle = '#ffd9ec'; g.lineWidth = 5;
+  /* Swirl bands as a sine whose period is exactly the tile width, spaced so a
+     whole number of them fits the tile height. Both axes are then genuinely
+     periodic and the bands run on unbroken across every repeat.
+     The old bezier ran edge to edge, which the comment here called "clean on
+     X", but nothing made its height and slope match at x=0 and x=256 — so
+     each tile boundary stepped the bands vertically. With repeat.set(2, 1.4)
+     that put a hard seam straight down the middle of the arena, and the 46px
+     spacing did not divide 256 either, so the Y duplication did not close it
+     up. Very visible now that the arena is a deeper colour. */
+  const bands = 6, gap = 256 / bands;
+  for (let i = 0; i < bands; i++){
+    const y0 = i * gap;
+    g.beginPath();
+    for (let x = 0; x <= 256; x += 4){
+      const y = y0 + Math.sin((x / 256) * Math.PI * 2) * 13;
+      if (x === 0) g.moveTo(x, y); else g.lineTo(x, y);
     }
+    g.stroke();
   }
   g.globalAlpha = 1;
   const tex = new THREE.CanvasTexture(c);
@@ -467,23 +580,50 @@ const candyGroundTex = (() => {
    the Hell obsidian fissures) rather than relying on ambient light to
    pick out a flat color. */
 const nightGroundTex = (() => {
-  const c = document.createElement('canvas'); c.width = 256; c.height = 256;
+  const c = document.createElement('canvas'); c.width = 512; c.height = 512;
   const g = c.getContext('2d');
-  g.fillStyle = '#1c3128'; g.fillRect(0,0,256,256);
-  // faint moss-glow speckle field
-  for (let i=0;i<70;i++){
-    const x=Math.random()*256, y=Math.random()*256, r=2+Math.random()*5;
-    g.fillStyle = `rgba(140,200,170,${0.15+Math.random()*0.25})`;
+  const cx = 256, cy = 256, R = 256;
+  g.fillStyle = '#16281f'; g.fillRect(0,0,512,512);
+
+  /* Damp mossy ground, lit unevenly. The concentric circles this used to draw
+     did define the arena, but they read as a target painted on the grass —
+     nothing about a moonlit clearing is that geometric. Anything radial has
+     the same problem: weighting the moss toward the rim just turns the
+     bullseye into a doughnut. So there is no radial structure here at all.
+     The arena still reads because the whole floor glows (this doubles as the
+     emissive map) against much darker surrounding ground. */
+  // one broad off-centre wash, like moonlight coming in from one side
+  const wash = g.createRadialGradient(cx - 70, cy - 90, 30, cx - 70, cy - 90, R * 1.25);
+  wash.addColorStop(0,   'rgba(126,196,172,0.20)');
+  wash.addColorStop(0.5, 'rgba(96,166,154,0.09)');
+  wash.addColorStop(1,   'rgba(30,60,60,0)');
+  g.fillStyle = wash; g.fillRect(0,0,512,512);
+
+  // moss clumps scattered evenly over the whole floor (sqrt keeps them
+  // area-uniform instead of bunching toward the middle), in a range of sizes
+  // so the field looks patchy rather than evenly stippled
+  for (let i=0;i<64;i++){
+    const a = Math.random()*Math.PI*2, r = R * Math.sqrt(Math.random()) * 0.98;
+    const px = cx + Math.cos(a)*r, py = cy + Math.sin(a)*r;
+    const spread = 10 + Math.random()*34;
+    const bright = 0.14 + Math.random()*0.3;
+    for (let k=0;k<3+((Math.random()*5)|0);k++){
+      const bx = px + (Math.random()-0.5)*spread, by = py + (Math.random()-0.5)*spread;
+      const br = 4 + Math.random()*14;
+      const blob = g.createRadialGradient(bx,by,0,bx,by,br);
+      blob.addColorStop(0, `rgba(168,236,200,${bright.toFixed(3)})`);
+      blob.addColorStop(1, 'rgba(120,200,170,0)');
+      g.fillStyle = blob;
+      g.beginPath(); g.arc(bx,by,br,0,Math.PI*2); g.fill();
+    }
+  }
+  // a scatter of brighter spores on top
+  for (let i=0;i<170;i++){
+    const x=Math.random()*512, y=Math.random()*512, r=1+Math.random()*2.6;
+    g.fillStyle = `rgba(158,224,192,${0.14+Math.random()*0.3})`;
     g.beginPath(); g.arc(x,y,r,0,Math.PI*2); g.fill();
   }
-  // subtle concentric glow rings radiating from center, like a soft
-  // clearing lit from within — gives the arena a clear visual center
-  const cx=128, cy=128;
-  for (let r=30; r<170; r+=32){
-    g.strokeStyle = `rgba(150,210,255,${0.14 - r*0.0004})`;
-    g.lineWidth = 6;
-    g.beginPath(); g.arc(cx,cy,r,0,Math.PI*2); g.stroke();
-  }
+
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
