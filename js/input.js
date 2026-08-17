@@ -91,7 +91,7 @@ window.addEventListener('keydown', e => {
   if (k === 'd' || k === 'arrowright') input.right = true;
   if (k === 'w' || k === 'arrowup')    input.up = true;
   if (k === 's' || k === 'arrowdown')  input.down = true;
-  if (k === ' ' && !e.repeat) tryJump();
+  if (k === ' ' && !e.repeat) tryDash();
   if (k === 'escape' || k === 'p'){
     if (game.state === 'playing') pauseGame();
     else if (game.state === 'paused') resumeGame();

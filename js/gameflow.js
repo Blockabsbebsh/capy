@@ -103,6 +103,6 @@ $('btnMenu').addEventListener('click', toMenu);
 $('btnResume').addEventListener('click', resumeGame);
 $('btnQuit').addEventListener('click', toMenu);
 $('btnPause').addEventListener('click', () => game.state === 'playing' ? pauseGame() : resumeGame());
-$('btnJump').addEventListener('pointerdown', e => { e.preventDefault(); tryJump(); });
+$('btnDash').addEventListener('pointerdown', e => { e.preventDefault(); tryDash(); });
 ui.btnMute.addEventListener('click', () => { Audio.init(); toggleMute(); });
 
