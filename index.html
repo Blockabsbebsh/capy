@@ -203,14 +203,16 @@
     82%{opacity:1; transform:scale(1);}
     100%{opacity:0; transform:scale(1.15) translateY(-16px);}
   }
-  #btnJump{
+  #btnDash{
     pointer-events:auto; margin:0 6px 4px 0; font-size:16px; letter-spacing:1.5px;
     width:96px; height:96px; border-radius:50%; display:flex; align-items:center; justify-content:center;
     background:linear-gradient(180deg,#9fe07a,#5eb845);
     color:#1e3a14; box-shadow:0 6px 0 #3d7a2c, 0 12px 22px rgba(0,0,0,.32);
     touch-action:none;
   }
-  #btnJump:active{transform:translateY(5px); box-shadow:0 1px 0 #3d7a2c;}
+  #btnDash:active{transform:translateY(5px); box-shadow:0 1px 0 #3d7a2c;}
+  /* the dash is on a cooldown, so the button has to say when it is spent */
+  #btnDash.cooling{filter:grayscale(.65) brightness(.82); opacity:.5;}
   #flash{position:fixed; inset:0; pointer-events:none; z-index:15; opacity:0; background:#ff2d40; mix-blend-mode:screen;}
   #vignette{position:fixed; inset:0; pointer-events:none; z-index:5;
     background:radial-gradient(ellipse at 50% 50%, transparent 45%, rgba(0,0,0,.42) 100%);}
@@ -274,7 +276,7 @@
     box-shadow:0 4px 12px rgba(0,0,0,.45), inset 0 2px 0 rgba(255,255,255,.35);
     pointer-events:none;
   }
-  #btnJump{position:relative; z-index:11;}
+  #btnDash{position:relative; z-index:11;}
 
   /* ---------- narrow screens (phones in portrait) ----------
      Keep the legend in 2 columns even here — stacking it into one tall
@@ -301,7 +303,7 @@
     .newbest{animation:none;}
     #comboBar.urgent{animation:none;}
     #levelBadge.bump{animation:none;}
-    button:active, #btnMute:active, #btnPause:active, #btnJump:active, .upcard:active{transform:none;}
+    button:active, #btnMute:active, #btnPause:active, #btnDash:active, .upcard:active{transform:none;}
   }
 </style>
 </head>
@@ -355,8 +357,8 @@
 
   <div class="bottom-row">
     <div></div>
-    <div class="hint desktop-only">WASD / ARROWS / DRAG &nbsp;&bull;&nbsp; SPACE = HOP &nbsp;&bull;&nbsp; ESC = PAUSE</div>
-    <button id="btnJump" class="touch-only">HOP</button>
+    <div class="hint desktop-only">WASD / ARROWS / DRAG &nbsp;&bull;&nbsp; SPACE = DASH &nbsp;&bull;&nbsp; ESC = PAUSE</div>
+    <button id="btnDash" class="touch-only">DASH</button>
   </div>
 </div>
 

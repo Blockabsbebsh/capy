@@ -9,7 +9,7 @@ const ui = {
   upgradePanel: $('upgradePanel'), levelBadge: $('levelBadge'), themeName: $('themeName'),
   finalScore: $('finalScore'), finalBest: $('finalBest'), finalCombo: $('finalCombo'),
   newBest: $('newBest'), flash: $('flash'), overSub: $('overSub'), overTitle: $('overTitle'),
-  btnMute: $('btnMute'), banner: $('banner'),
+  btnMute: $('btnMute'), banner: $('banner'), btnDash: $('btnDash'),
   powerWrap: $('powerWrap'), powerName: $('powerName'), powerBar: $('powerBar'),
   hatPicker: $('hatPicker'),
   testLevelPanel: $('testLevelPanel'), testLevelButtons: $('testLevelButtons'),
@@ -48,6 +48,8 @@ function refreshHUD(){
   } else {
     ui.comboWrap.classList.remove('on');
   }
+
+  ui.btnDash.classList.toggle('cooling', capyState.dashCD > 0);
 
   if (game.power){
     const P = POWERS[game.power.type];
