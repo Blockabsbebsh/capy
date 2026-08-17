@@ -35,7 +35,7 @@ timer. That is the main skill expression.
 | Mobile | Floating thumbstick, bottom-left; a DASH button bottom-right |
 | Dash | Space, or the button |
 
-The title card shows these as two boxes, Mobile and PC, since the two setups
+The title card lists these as two lines, Mobile and PC, since the two setups
 share nothing but the dash.
 
 Movement is a **velocity-target** model: input says what velocity you want, and
