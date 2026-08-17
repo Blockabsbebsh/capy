@@ -31,21 +31,15 @@ timer. That is the main skill expression.
 
 | | |
 |---|---|
-| Keys | WASD / arrows, always available |
+| PC | WASD or the arrow keys; or hold and drag, and the capybara walks to the cursor |
+| Mobile | Floating thumbstick, bottom-left; a DASH button bottom-right |
 | Dash | Space, or the button |
 
-Pointer steering has **two schemes**, picked on the title screen and remembered:
+The title card shows these as two boxes, Mobile and PC, since the two setups
+share nothing but the dash.
 
-- **Follow** — the original. On desktop, hold and drag and the capybara walks to
-  the cursor; on touch, a floating thumbstick in the bottom-left.
-- **Drag** — *input-offset*. Press anywhere and the offset from that press point
-  is the stick: a ring appears where you pressed, a knob shows the current
-  offset, and the capybara moves in that direction at a speed proportional to
-  how far you have pulled. Works the same on desktop and touch, and it keeps
-  your hand off the arena you are trying to read.
-
-Either way movement is a **velocity-target** model: input says what velocity you
-want, and the capybara eases toward it. It stops quickly and does not coast.
+Movement is a **velocity-target** model: input says what velocity you want, and
+the capybara eases toward it. It stops quickly and does not coast.
 
 **Dash** is a committed burst of about 5 units in 0.22s on a ~0.8s cooldown.
 It carries you over an open sinkhole, doubles the score of anything caught

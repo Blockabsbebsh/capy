@@ -200,33 +200,3 @@ reduceMotionQuery.addEventListener?.('change', e => { REDUCED = e.matches; });
 /* thumbstick + DASH button on touch devices, keyboard hint on everything else */
 const TOUCH = window.matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
 if (TOUCH) document.body.classList.add('touch');
-
-/* --- pointer control schemes ---------------------------------------------
-   'follow' is the original: the capybara walks to wherever the pointer is,
-   which is direct but pins your hand (or thumb, over the arena) to the thing
-   you are trying to watch.
-
-   'offset' is a relative drag. Press anywhere, and the OFFSET from that press
-   point is the stick — so the gesture is a small wrist movement wherever you
-   happened to grab, the indicator sits where your hand already is, and the
-   whole arena stays visible. It replaces the fixed thumbstick on touch as
-   well: same idea, but no hunting for a knob.
-
-   offsetRadius() is the offset, in CSS pixels, that asks for full speed. It is
-   derived from the viewport so the gesture is the same size in thumb-widths on
-   a phone as it is in mouse travel on a desktop. */
-const OFF_DEAD  = 8;         // px of slop before anything moves
-const OFF_CURVE = 1.7;       // as with the stick, spend most of the travel on
-                             // the slow end — that band is your parking precision
-const offsetRadius = () =>
-  THREE.MathUtils.clamp(Math.min(window.innerWidth, window.innerHeight) * 0.17, 64, 120);
-
-let CTRL = 'follow';
-try { CTRL = localStorage.getItem('capyCtrl') === 'offset' ? 'offset' : 'follow'; } catch(e){}
-function setControlScheme(mode){
-  CTRL = mode === 'offset' ? 'offset' : 'follow';
-  document.body.classList.toggle('ctrl-offset', CTRL === 'offset');
-  try { localStorage.setItem('capyCtrl', CTRL); } catch(e){}
-}
-document.body.classList.toggle('ctrl-offset', CTRL === 'offset');
-

@@ -59,7 +59,7 @@ Load order, which is also roughly the dependency order:
 | `hud.js` | `$`, `ui`, HUD rendering, `popup`, `showBanner`, `flash` |
 | `player.js` | `capyState`, `updateCapybara` physics, `tryDash`, `popUp` |
 | `perks.js` | Perk mechanics: dash shockwave, ghosts, reach aura, sweep, hazard wipe |
-| `input.js` | Keyboard, both pointer schemes (`CTRL`), virtual thumbstick |
+| `input.js` | Keyboard, pointer drag, virtual thumbstick |
 | `events.js` | Set-piece director (missiles / feast / sinkholes) |
 | `upgrades.js` | The every-10-levels perk draft, ordinary + one-per-run |
 | `gameflow.js` | `startGame`, pause/menu/`endGame`, button wiring |
@@ -100,15 +100,18 @@ directly at a fixed `1/60` step instead of waiting on real time.
 ## Gameplay rules
 
 - **Movement is a velocity-target model, not an accelerator.** Every input path
-  (keys, follow-drag, thumbstick, offset-drag) answers one question — what
-  velocity does the player want — and `updateCapybara` eases toward it with
-  separate time constants for opening up, braking and turning (`MOVE_T_*`). Do
-  not reintroduce a friction multiplier or a top-speed clamp; the easing cannot
-  overshoot, and the only thing above `SPEED` is the dash.
-- **A new pointer scheme is a new answer to that question, nothing more.** The
-  offset drag feeds `capyState.stickX/stickZ`, the thumbstick's channel, so
-  `updateCapybara` and `tryDash` know nothing about it. `CTRL` is checked inside
-  the handlers, never at registration — it changes at runtime from the menu.
+  (keys, pointer drag, thumbstick) answers one question — what velocity does the
+  player want — and `updateCapybara` eases toward it with separate time constants
+  for opening up, braking and turning (`MOVE_T_*`). Do not reintroduce a friction
+  multiplier or a top-speed clamp; the easing cannot overshoot, and the only thing
+  above `SPEED` is the dash.
+- **There is one pointer scheme per device, deliberately.** An input-offset
+  (relative drag) alternative was built, shipped behind a title-screen toggle,
+  and removed again: play-tested against drag-to-follow it measured the same, so
+  it was a second code path and a second thing to explain for nothing. A new
+  scheme needs evidence it beats the existing one, not just that it works. If one
+  is ever added back, it feeds `capyState.stickX/stickZ` like the thumbstick —
+  `updateCapybara` and `tryDash` should never learn about input devices.
 - **`game.up.speed` is the only thing that scales movement.** Sticky Feet halves
   it, and `fmtSpeed` reads the same field, which is what keeps routes walkable at
   half speed. Anything that changes how fast the capybara moves goes here, or
