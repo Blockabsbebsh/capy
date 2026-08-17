@@ -1,6 +1,15 @@
 /* =======================================================================
-   UPGRADE DRAFT — every 5 levels the run pauses and you pick a perk
+   UPGRADE DRAFT — every 10 levels the run pauses and you pick a perk
    ======================================================================= */
+const shuffled = arr => {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--){
+    const j = (Math.random() * (i + 1)) | 0;
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+};
+
 /* Offer a draft for `level`, the level that's about to start. The game
    pauses right here on the OLD level/theme; game.level itself doesn't
    move and the new theme doesn't apply until a pick is made (see
@@ -8,15 +17,19 @@
    actually begins instead of firing a beat early. */
 function offerUpgrades(level){
   const pool = UPGRADES.filter(u => (game.taken[u.id] || 0) < u.max);
-  if (!pool.length) return false;
+  /* Half of all drafts put ONE run perk on the table, in the third slot,
+     against two ordinary perks. Half, not always: a run perk reshapes the run,
+     and a guaranteed one every draft would make the ordinary perks the
+     sideshow. Once taken it is gone from the pool for good — that is what
+     "one per run" means, and it is why these cards are gold. */
+  const runPool = RUN_PERKS.filter(u => !game.run[u.id]);
+  const gold = runPool.length && Math.random() < 0.5
+             ? shuffled(runPool)[0] : null;
+  if (!pool.length && !gold) return false;
 
-  // shuffle a copy and take up to three
-  const picks = pool.slice();
-  for (let i = picks.length - 1; i > 0; i--){
-    const j = (Math.random() * (i + 1)) | 0;
-    [picks[i], picks[j]] = [picks[j], picks[i]];
-  }
-  picks.length = Math.min(3, picks.length);
+  const picks = shuffled(pool);
+  picks.length = Math.min(gold ? 2 : 3, picks.length);
+  if (gold) picks.push(gold);
 
   game.pendingLevel = level;
   game.state = 'upgrade';
@@ -31,9 +44,10 @@ function offerUpgrades(level){
   for (const u of picks){
     const have = game.taken[u.id] || 0;
     const b = document.createElement('button');
-    b.className = 'upcard';
+    b.className = 'upcard' + (u.gold ? ' gold' : '');
     b.innerHTML = `<i>${u.icon}</i><span style="flex:1"><b>${u.name}</b><span>${u.desc}</span>` +
-                  (have ? `<u>OWNED ${have}/${u.max}</u>` : '') + `</span>`;
+                  (u.gold ? `<u>ONE PER RUN</u>`
+                          : have ? `<u>OWNED ${have}/${u.max}</u>` : '') + `</span>`;
     b.addEventListener('click', () => takeUpgrade(u));
     box.appendChild(b);
   }
@@ -42,13 +56,31 @@ function offerUpgrades(level){
 }
 
 function takeUpgrade(u){
-  u.apply(game.up);
+  u.apply(u.gold ? game.run : game.up);
   game.taken[u.id] = (game.taken[u.id] || 0) + 1;
 
+  /* Side effects that are not just a field on game.up. Everything else in the
+     draft is read live by the system that cares; these three change state that
+     already exists. */
   if (u.id === 'life'){
-    game.maxLives++;
-    game.lives = game.maxLives;         // "refilled now"
+    // +1 max and ONE heart back, not a full refill: a free top-up from one life
+    // to four was worth more than the rest of the draft put together, and it
+    // arrived precisely when a run was in trouble.
+    game.maxLives = Math.min(LIVES_MAX, game.maxLives + 1);
+    game.lives = Math.min(game.maxLives, game.lives + 1);
+    renderLives(game.lives - 1);
+  }
+  if (u.id === 'phantom'){
+    // the ghost is paid for up front, out of the life bar
+    game.maxLives = Math.max(1, game.maxLives - 1);
+    game.lives = Math.min(game.lives, game.maxLives);
     renderLives();
+  }
+  if (u.id === 'sticky'){
+    // game.up.speed is the one place movement is scaled, and formations.js
+    // times its gaps against it — so halving it here keeps every route
+    // walkable at the new speed instead of quietly making them unclearable
+    game.up.speed = 0.5;
   }
 
   // the level this draft was for hasn't actually started yet — kick it
@@ -68,7 +100,7 @@ function takeUpgrade(u){
     ui.levelBadge.classList.add('bump');
   }
 
-  applyDifficulty();                    // comboMax reads game.up.decay
+  applyDifficulty();
   Audio.powerUp();
   showPanel(null);
   Audio.duck(0.55);

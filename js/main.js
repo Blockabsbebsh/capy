@@ -80,7 +80,8 @@ function animate(){
       // the run should pause for a draft, even if a big catch pushed
       // newLevel further past it in a single frame. Whatever's left over
       // gets picked up again next frame once we resume.
-      const themeStart = (Math.floor((game.level - 1) / 5) + 1) * 5 + 1;
+      const themeStart =
+        (Math.floor((game.level - 1) / THEME_EVERY) + 1) * THEME_EVERY + 1;
       if (newLevel >= themeStart){
         if (!offerUpgrades(themeStart)){
           // no perks left to offer — just advance straight into the theme
@@ -128,6 +129,7 @@ function animate(){
     updateHoles(dt);
     updateCapybara(dt);
     updateItems(dt * game.timeScale);
+    updatePerks(dt);              // dash shockwaves, ghosts, the reach aura
     updateDebris(dt);
     refreshHUD();
   } else if (game.state === 'menu'){
@@ -195,6 +197,7 @@ try { savedHat = localStorage.getItem('capyHat') || 'none'; } catch(e){}
 const savedDef = HATS.find(h => h.id === savedHat);
 setHat(savedDef && hatUnlocked(savedDef) ? savedHat : 'none');
 renderHatPicker();
+renderControlPicker();
 renderLives();
 refreshHUD();
 document.getElementById('loading').remove();

@@ -30,8 +30,8 @@ const BROWSER  = flag('browser', process.env.CHROMIUM_PATH
                   || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome');
 const [W, H]   = String(flag('size', '760x520')).split('x').map(Number);
 
-// level -> biome, matching THEMES order in config.js (a new theme every 5 levels)
-const BIOMES = { meadow: 1, pond: 6, candy: 11, night: 16, hell: 21 };
+// level -> biome, matching THEMES order in config.js (a new theme every 10 levels)
+const BIOMES = { meadow: 1, pond: 11, candy: 21, night: 31, hell: 41 };
 
 let chromium;
 try {
@@ -118,6 +118,139 @@ const fail = [];
     }
   }
 
+  /* Autopilot sweep over every formation shape and every feast route.
+   *
+   * CLAUDE.md: a new shape is only "provably clearable" once something has
+   * actually walked it. Headless frame timing is meaningless (~5fps under
+   * swiftshader), so this drives updateFormations/updateCapybara/updateItems
+   * directly at a fixed 1/60 instead of waiting on real time, and the
+   * autopilot dashes ONLY when walking cannot cover the step — otherwise a
+   * failure would say more about a bad player than about the shape.
+   */
+  if (flag('fmt')) {
+    console.log('formations (autopilot):');
+    await page.click('#btnStart').catch(() => {});
+    await page.waitForTimeout(600);
+
+    const runs = await page.evaluate(() => {
+      const out = [];
+
+      /* The autopilot plays the way the game is meant to be read: off the
+         RIBBON. A live route publishes its landing spots (rec.pts) the moment
+         it appears, so the target is the next unresolved good beat, hazard
+         beats skipped — not "whichever item happens to have spawned". Waiting
+         for spawns caps your lead time at one fall (~1.1s) and fails shapes
+         whose steps are legitimately given more than that. When nothing is
+         routed (a feast), it falls back to chasing landing rings. */
+      const autopilot = () => {
+        // timing half of the read: when does the next thing actually arrive
+        let soonest = 1e9, ring = null;
+        for (const it of items) {
+          if (it.dead || !it.def.good) continue;
+          const t = (it.mesh.position.y - CATCH_Y) / Math.max(0.5, -it.vy);
+          if (t < soonest) { soonest = t; ring = it.ring.position; }
+        }
+
+        let target = null, wantsDash = false;
+        const rec = fmt.live.values().next().value;
+        if (rec && rec.pts) {
+          const done = rec.total - rec.pending;         // beats land in order
+          for (let i = Math.max(0, done); i < rec.pts.length; i++) {
+            if (!rec.pts[i].bad) { target = rec.pts[i]; wantsDash = !!rec.pts[i].dash; break; }
+          }
+        }
+        if (!target) target = ring;
+        if (!target) { capyState.stickX = capyState.stickZ = 0; return; }
+
+        const dx = target.x - capyState.x, dz = target.z - capyState.z;
+        const d = Math.hypot(dx, dz);
+        if (d > 0.04) { capyState.stickX = dx / d; capyState.stickZ = dz / d; }
+        else { capyState.stickX = capyState.stickZ = 0; }
+
+        /* Dash ONLY when walking cannot cover the step: either the beat is
+           dash-timed by construction, or the thing already in the air will land
+           before a flat-out walk arrives. The distance and time floors matter —
+           without them this fires on a beat that is already underfoot with a
+           hundredth of a second to run, flinging the autopilot five units away
+           and leaving it on cooldown, which measures a bad player rather than a
+           hard shape. */
+        const sp = (12.2 + game.level * 0.16) * game.up.speed;
+        const cantWalk = soonest > 0.12 && d > sp * soonest * 0.92;
+        if (d > 2.5 && (cantWalk || (wantsDash && d > sp * DASH_TIME * 2))) tryDash();
+      };
+
+      const setup = (level, sticky) => {
+        game.state = 'playing'; game.devLock = true; game.level = level;
+        resetUpgrades();
+        game.run.sticky = !!sticky;
+        game.up.speed = sticky ? 0.5 : 1;            // see takeUpgrade
+        applyDifficulty();
+        clearItems(); clearHoles(); resetFormations(); resetEvents(); resetCapy();
+        game.maxLives = game.lives = 99; game.combo = 0; game.shield = false;
+        game.power = null; game.timeScale = 1;
+        fmt.strayTimer = 1e9;                        // strays would distract it
+      };
+
+      const realPick = pickShape, realComplete = completeFormation;
+      const realCatch = onCatch, realMiss = onMiss;
+
+      /* Each shape at its unlock level, again at 24 where fmtReach has hit its
+         0.78 ceiling (the tightest any step ever gets), and once more at 24
+         under Sticky Feet — half speed and no dash, the one perk that can make
+         a shape unwalkable rather than merely slower. */
+      const passes = [{ sticky: false }, { level: 24 }, { level: 24, sticky: true }];
+      for (const shape of FMT_SHAPES) {
+        for (const pass of passes) {
+          const level = pass.level || Math.max(shape.min, 1);
+          let rec = null;
+          pickShape = () => shape;
+          completeFormation = r => { rec = { caught: r.caught, goods: r.goods, spoiled: r.spoiled }; realComplete(r); };
+          setup(level, pass.sticky);
+          emitFormation();
+          for (let i = 0; i < 60 * 40 && !rec; i++) {
+            autopilot();
+            updateFormations(1 / 60);
+            updateCapybara(1 / 60);
+            updateItems(1 / 60);
+          }
+          pickShape = realPick; completeFormation = realComplete;
+          out.push({ kind: pass.sticky ? 'shape/sticky' : 'shape', id: shape.id, level,
+                     ...(rec || { caught: -1, goods: -1 }) });
+        }
+      }
+
+      // feast routes: no formation record, so count the melons directly
+      for (const route of FEAST_ROUTES) {
+        let caught = 0, goods = 0;
+        onCatch = it => { if (it.type === 'watermelon') caught++; realCatch(it); };
+        onMiss  = it => { if (it.type === 'watermelon') goods++; realMiss(it); };
+        setup(12);
+        const queue = [];
+        const total = startFeastRoute(queue, route.id);
+        let clock = 0;
+        for (let i = 0; i < 60 * 60 && (queue.length || items.length); i++) {
+          clock += 1 / 60;
+          while (queue.length && clock >= queue[0].at) queue.shift().fn();
+          autopilot();
+          updateCapybara(1 / 60);
+          updateItems(1 / 60);
+        }
+        onCatch = realCatch; onMiss = realMiss;
+        out.push({ kind: 'feast', id: route.id, level: 12, caught, goods: caught + goods,
+                   secs: Math.round(total * 10) / 10 });
+      }
+      disposeFeastPath();
+      return out;
+    });
+
+    for (const r of runs) {
+      const all = r.caught === r.goods && r.goods > 0 && !r.spoiled;
+      console.log(`  ${all ? 'ok  ' : 'FAIL'} ${r.kind} ${r.id} (L${r.level}) ` +
+                  `${r.caught}/${r.goods}${r.spoiled ? ' SPOILED' : ''}${r.secs ? ' ' + r.secs + 's' : ''}`);
+      if (!all) fail.push(`${r.kind} ${r.id}: ${r.caught}/${r.goods}`);
+    }
+  }
+
   if (flag('check')) {
     console.log('checks:');
     const ok = (label, cond, detail = '') => {
@@ -179,6 +312,52 @@ const fail = [];
     });
     const repeats = seq.filter((k, i) => i && k === seq[i - 1]).length;
     ok('no back-to-back set-pieces', repeats === 0, `${repeats} in ${seq.length}`);
+
+    // --- balance and perk wiring ----------------------------------------
+    const bal = await page.evaluate(() => {
+      const themes = [1, 10, 11, 20, 21, 40, 41].map(l => themeFor(l).name);
+      // a draft is 3 cards, and a gold one-per-run perk turns up on some but
+      // not all of them; taking one must retire it for the rest of the run
+      let withGold = 0;
+      for (let i = 0; i < 400; i++) {
+        game.run = { phantom: false, sticky: false, puzzler: false };
+        game.taken = {};
+        offerUpgrades(11);
+        const cards = document.querySelectorAll('#upgradeCards .upcard');
+        if (cards.length !== 3) return { cardCount: cards.length };
+        if (document.querySelectorAll('#upgradeCards .upcard.gold').length) withGold++;
+      }
+      game.run.puzzler = game.run.sticky = game.run.phantom = true;
+      offerUpgrades(11);
+      const goldAfterTaken = document.querySelectorAll('#upgradeCards .upcard.gold').length;
+
+      game.state = 'playing';
+      resetUpgrades();
+      game.maxLives = 7; game.lives = 7; renderLives();
+      const row = document.getElementById('lives');
+      const life7 = row.querySelectorAll('.heart').length + '+' +
+                    (row.querySelector('.lifeplus') || {}).textContent;
+      game.maxLives = 3; game.lives = 3; renderLives();
+      const life3 = row.querySelectorAll('.heart').length + '/' +
+                    (row.querySelector('.lifeplus') ? 'plus' : 'noplus');
+      showPanel(null);                              // leave the page playable
+      return { themes, withGold, goldAfterTaken, life7, life3,
+               hole: HOLE_LIFE, magnet: POWERS.magnet.dur, shapes: FMT_SHAPES.length,
+               feasts: FEAST_ROUTES.length, cardCount: 3 };
+    });
+    ok('sinkholes close after 7s', bal.hole === 7, String(bal.hole));
+    ok('magnet halved to 3.75s', Math.abs(bal.magnet - 3.75) < 1e-6, String(bal.magnet));
+    ok('a biome every 10 levels',
+       String(bal.themes) === 'Meadow,Meadow,Lily Pad Ponds,Lily Pad Ponds,Bubblegum,Night,Hell',
+       String(bal.themes));
+    ok('19 formation shapes and 5 feast routes', bal.shapes === 19 && bal.feasts === 5,
+       `${bal.shapes} shapes, ${bal.feasts} routes`);
+    ok('draft is always 3 cards', bal.cardCount === 3, String(bal.cardCount));
+    ok('gold perks appear on roughly half of drafts',
+       bal.withGold > 150 && bal.withGold < 250, `${bal.withGold}/400`);
+    ok('gold perks retire once taken', bal.goldAfterTaken === 0, String(bal.goldAfterTaken));
+    ok('life row tallies past five', bal.life7 === '5++2' && bal.life3 === '3/noplus',
+       `${bal.life7} / ${bal.life3}`);
 
     ok('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
   }

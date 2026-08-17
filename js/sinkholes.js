@@ -4,7 +4,11 @@
    HOLE_LIFE seconds before it grows back. Walk in and you lose a life.
    ======================================================================= */
 const holes = [];
-const HOLE_LIFE = 15;      // seconds a hole stays open
+/* 7s, down from 15. A hole outlived the set-piece that opened it by a wide
+   margin — two or three of them were still sitting in the arena while the next
+   several routes ran through the space, so the sinkhole stopped being an event
+   and became terrain. */
+const HOLE_LIFE = 7;       // seconds a hole stays open
 const HOLE_WARN = 1.4;     // telegraph time before it opens
 
 function spawnHole(x, z, r){

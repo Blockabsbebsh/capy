@@ -69,6 +69,66 @@ const FMT_SHAPES = [
   { id:'comb', min:11, span:0.9, weight:2, beats:[
     {x:-1,z:-0.8}, {x:-0.7,z:0.7}, {x:-0.35,z:-0.8,bad:true}, {x:0,z:0.7},
     {x:0.35,z:-0.8}, {x:0.7,z:0.7}, {x:1,z:-0.8} ] },
+
+  /* ---- the second wave of shapes ------------------------------------------
+     Ten more, added because nine shapes — with the plain sweep thinned out past
+     level 8 — is a small enough deck that a long run started recognising hands
+     rather than reading routes. Nothing here is harder than what was already in: the gaps
+     still come out of stepTime, so variety is free — these are new PATHS, not
+     new demands. Each one has a distinct idea, since two shapes that walk the
+     same way are one shape as far as the player is concerned. */
+
+  // a plain V: in and out on the diagonal, the simplest depth-change there is
+  { id:'chevron', min:2, span:0.85, weight:2, beats:[
+    {x:-1,z:-0.85}, {x:-0.5,z:0.1}, {x:0,z:0.9}, {x:0.5,z:0.1}, {x:1,z:-0.85} ] },
+
+  // a smooth bow — the wave's curve without the reversals, so it walks as one
+  // continuous arc instead of five decisions
+  { id:'arc', min:3, span:0.9, weight:2, beats:[
+    {x:-1,z:0.55}, {x:-0.55,z:-0.35}, {x:0,z:-0.85}, {x:0.55,z:-0.35}, {x:1,z:0.55} ] },
+
+  // four beats, full depth each time: fewer, longer strides than the wave
+  { id:'ladder', min:4, span:0.8, weight:2, beats:[
+    {x:-0.95,z:0.85}, {x:-0.3,z:-0.85}, {x:0.3,z:0.85}, {x:0.95,z:-0.85} ] },
+
+  // runs out one way and returns, so the second half is walked backwards
+  // through ground you have already covered
+  { id:'boomerang', min:5, span:0.95, weight:2, beats:[
+    {x:-1,z:0.5}, {x:-0.2,z:-0.55}, {x:0.7,z:0.35}, {x:0,z:0.85}, {x:-0.75,z:-0.2} ] },
+
+  // alternates between the two far ends before collapsing to the middle: the
+  // pendulum's idea, but closing in rather than staying wide
+  { id:'pincer', min:6, span:1.0, weight:2, beats:[
+    {x:-1,z:0.3}, {x:1,z:0.25}, {x:-0.5,z:-0.55}, {x:0.5,z:-0.5}, {x:0,z:0.15} ] },
+
+  // decoys strictly off the line, as ever: the food is a straight run along
+  // the near edge and the hazards hang above it
+  { id:'slalom', min:7, span:0.9, weight:3, beats:[
+    {x:-1,z:-0.55}, {x:-0.6,z:0.6,bad:true}, {x:-0.3,z:-0.6}, {x:0.1,z:0.6,bad:true},
+    {x:0.4,z:-0.6}, {x:0.85,z:-0.5} ] },
+
+  // a spiral inward — every step turns the same way, which reads very
+  // differently from anything that zig-zags
+  { id:'coil', min:8, span:0.95, weight:2, beats:[
+    {x:1,z:0.1}, {x:0.35,z:0.8}, {x:-0.55,z:0.5}, {x:-0.9,z:-0.4},
+    {x:0.05,z:-0.85}, {x:0.5,z:-0.25} ] },
+
+  // the second dash shape: one long committed hop across, then a short
+  // recovery back — the leap without the second dash in a row
+  { id:'hook', min:9, span:1.0, weight:2, beats:[
+    {x:-1,z:-0.6}, {x:-0.4,z:0.5}, {x:0.85,z:0.6,dash:true}, {x:0.5,z:-0.7} ] },
+
+  // peaks of uneven height off a shared baseline, so the rhythm is irregular
+  // where the wave's is metronomic
+  { id:'crown', min:10, span:0.92, weight:2, beats:[
+    {x:-1,z:-0.2}, {x:-0.6,z:0.85}, {x:-0.2,z:-0.2}, {x:0.15,z:0.55},
+    {x:0.5,z:-0.2}, {x:1,z:-0.2} ] },
+
+  // the long one: seven beats weaving the full width, no decoys — the length
+  // is the challenge and a hazard on a weave has no line to sit off of
+  { id:'serpent', min:12, span:1.0, weight:2, beats:[
+    {x:-1,z:0.2}, {x:-0.62,z:-0.7}, {x:-0.25,z:0.55}, {x:0.1,z:-0.75},
+    {x:0.42,z:0.6}, {x:0.72,z:-0.5}, {x:1,z:0.35} ] },
 ];
 
 /* A landing route drawn on the ground the moment the formation is emitted.
@@ -85,6 +145,7 @@ function resetFormations(){
   fmt.strayTimer = 2.5;
   for (const rec of fmt.live.values()) disposePath(rec);
   fmt.live.clear();
+  disposeFeastPath();
 }
 
 function disposePath(rec){
@@ -94,12 +155,12 @@ function disposePath(rec){
   rec.path = null;
 }
 
-function buildPath(pts, colour){
+function buildPath(pts, colour, opacity = 0.42){
   const g = new THREE.Group();
   // wide and bright enough to read on a phone, where the whole arena is a
   // couple of hundred pixels across and a hairline simply disappears
   const mat = new THREE.MeshBasicMaterial({
-    color: colour, transparent:true, opacity:0.42, depthWrite:false });
+    color: colour, transparent:true, opacity, depthWrite:false });
   for (let i = 1; i < pts.length; i++){
     const a = pts[i-1], b = pts[i];
     const dx = b.x - a.x, dz = b.z - a.z;
@@ -178,8 +239,14 @@ function emitFormation(){
 
   const fid = ++fmt.nextId;
   const goods = pts.filter(p => !p.bad).length;
+  /* `pts` is kept on the record because the ribbon is public information: it is
+     what the player reads to plan the whole route. The autopilot sweep in
+     tools/shoot.js reads it for the same reason — an autopilot that waits for
+     each beat to spawn is not testing the shape, it is testing a player with no
+     lead time, and it fails shapes that are comfortably walkable off the
+     ribbon. */
   const rec = { fid, total: pts.length, pending: pts.length, goods, caught: 0,
-                spoiled: false, name: shape.id, path: buildPath(pts, 0xffd77a) };
+                spoiled: false, name: shape.id, pts, path: buildPath(pts, 0xffd77a) };
   fmt.live.set(fid, rec);
 
   // Each gap gets exactly the time needed to walk it, floored so a tight
@@ -189,13 +256,25 @@ function emitFormation(){
     const p = pts[i];
     if (i > 0){
       const q = pts[i-1];
-      t += stepTime(Math.hypot(p.x - q.x, p.z - q.z), speed, reach, p.dash);
+      /* A `dash` beat is timed against a dash-assisted run, which is SHORTER
+         than the walk — so it has to fall back to walking time for a player who
+         has no dash. Sticky Feet trades the dash away, and without this the
+         leap and hook shapes would be the one thing in the game that perk makes
+         literally unclearable rather than merely slower. */
+      t += stepTime(Math.hypot(p.x - q.x, p.z - q.z), speed, reach,
+                    p.dash && !game.run.sticky);
     }
     const type = p.bad ? (Math.random() < 0.55 ? 'chili' : 'soap')
                        : (Math.random() < 0.24 ? 'watermelon' : 'burger');
     fmt.queue.push({ at: fmt.clock + t, fn: () =>
       spawnItem(type, { targeted:false, x:p.x, z:p.z, fid }) });
   }
+  /* Deadline for the safety valve in updateFormations, measured rather than
+     assumed: the last beat is emitted at `t` and then still has to fall, and
+     Puzzler halves that fall speed. A flat 14s would have quietly binned long
+     Puzzler routes — dropping the record, the ribbon and the route clear with
+     it — instead of waiting for them. */
+  rec.limit = t + SPAWN_Y / Math.max(1, game.fallSpeed * routeFallMul()) + 6;
   return t;
 }
 
@@ -219,6 +298,8 @@ function formationItemResolved(it, caught){
 
 function completeFormation(rec){
   const perfect = !rec.spoiled && rec.caught === rec.goods && rec.goods >= 3;
+  // Puzzler pays out on every route, either way — see puzzlerReward
+  puzzlerReward(perfect);
   if (perfect){
     // The point of the whole system: clearing a route pays more than the
     // same number of unrelated catches, and refills the combo timer so a
@@ -234,6 +315,7 @@ function completeFormation(rec){
     Audio.levelUp();
     burst(new THREE.Vector3(capyState.x, 1.0, capyState.z), 18, PAL.burger,
           { spread:5.0, up:4.6, size:0.12, life:0.8 });
+    if (game.up.sweep) sweepArena();     // Clean Sweep collects the leftovers
     refreshHUD();
   }
   disposePath(rec);
@@ -267,7 +349,7 @@ function updateFormations(dt){
      and the game would simply stop dropping food. */
   for (const rec of fmt.live.values()){
     rec.age = (rec.age || 0) + dt;
-    if (rec.age > 14){ disposePath(rec); fmt.live.delete(rec.fid); }
+    if (rec.age > (rec.limit || 14)){ disposePath(rec); fmt.live.delete(rec.fid); }
   }
   if (fmt.queue.length || fmt.live.size) return;
 
@@ -278,4 +360,97 @@ function updateFormations(dt){
     const rush = game.power && game.power.type === 'slowmo' ? 0.4 : 1;
     fmt.gap = game.fmtGap * rush * (0.8 + Math.random() * 0.45);
   }
+}
+
+/* =======================================================================
+   FEAST ROUTES
+
+   The watermelon feast used to be a shower: sixteen melons at random x, which
+   at a 40-point melon meant the reward beat was also the least interesting
+   twenty seconds in the game — you stood roughly in the middle and let it
+   happen, and the ones that fell out of reach were nobody's fault.
+
+   Now it is one long continuous path, chosen from five, with every melon on
+   it. Same reward, but you run it: the ribbon shows the whole line the moment
+   the banner lands, and following it is the entire ask.
+
+   These are parametric rather than hand-placed beats — a feast route is
+   sixteen-plus points long, and a curve you can read as one expression is much
+   easier to keep continuous than a list. `at(u)` returns normalised -1..1
+   coordinates for u in 0..1, the same footprint convention as FMT_SHAPES.
+   ======================================================================= */
+const tri = u => 1 - 4 * Math.abs(((u + 0.25) % 1) - 0.5);   // triangle wave, -1..1
+
+const FEAST_ROUTES = [
+  // one long S down the arena and back up
+  { id:'ess',    n:17, at: u => ({ x: -1 + 2*u, z: Math.sin(u * Math.PI * 2) * 0.9 }) },
+  // a full circuit of the arena, closing where it started
+  { id:'loop',   n:19, at: u => ({ x: -Math.cos(u * Math.PI * 2),
+                                   z: Math.sin(u * Math.PI * 2) * 0.92 }) },
+  // figure of eight: crosses its own middle, so the centre is walked twice
+  { id:'eight',  n:20, at: u => ({ x: Math.sin(u * Math.PI * 2),
+                                   z: Math.sin(u * Math.PI * 4) * 0.85 }) },
+  // straight run with a hard triangular weave, the most demanding of the five
+  { id:'weave',  n:18, at: u => ({ x: -1 + 2*u, z: tri(u * 3) * 0.85 }) },
+  // spiral inward from the rim to the middle
+  { id:'spiral', n:20, at: u => ({ x: Math.cos(u * Math.PI * 3.4) * (1 - u * 0.8),
+                                   z: Math.sin(u * Math.PI * 3.4) * (1 - u * 0.8) * 0.92 }) },
+];
+
+const feast = { path:null, route:null };
+
+/* Queue a whole feast onto evt.queue and draw its ribbon. Returns the seconds
+   of melons queued; events.js adds the tail for the last one to land.
+   `forceId` exists for the autopilot sweep in tools/shoot.js, which has to walk
+   each route in turn rather than whichever one the dice picked. */
+function startFeastRoute(queue, forceId){
+  const route = FEAST_ROUTES.find(r => r.id === forceId)
+             || FEAST_ROUTES[(Math.random() * FEAST_ROUTES.length) | 0];
+  feast.route = route.id;
+
+  const spanX = ARENA.halfX * 0.92, spanZ = ARENA.halfZ * 0.66;
+  const flipZ = Math.random() < 0.5 ? 1 : -1;
+  const pts = [];
+  for (let i = 0; i < route.n; i++){
+    const p = route.at(route.n > 1 ? i / (route.n - 1) : 0);
+    pts.push({
+      x: THREE.MathUtils.clamp(p.x * spanX, -ARENA.halfX, ARENA.halfX),
+      z: THREE.MathUtils.clamp(p.z * spanZ * flipZ, -ARENA.halfZ, ARENA.halfZ),
+    });
+  }
+
+  /* A feast is a REWARD, so its steps get far more slack than a formation's:
+     FEAST_REACH is well under the 0.5 a level-1 route starts at, which means
+     every hop along the path is walkable at about a third of top speed. The
+     path is dense, so this mostly resolves to the stepTime floor anyway. */
+  const FEAST_REACH = 0.34;
+  const speed = fmtSpeed();
+  let t = 0.6;
+  for (let i = 0; i < pts.length; i++){
+    const p = pts[i];
+    if (i > 0){
+      const q = pts[i-1];
+      t += stepTime(Math.hypot(p.x - q.x, p.z - q.z), speed, FEAST_REACH, false);
+    }
+    // `straight` keeps a melon over the ribbon: its usual lateral wander would
+    // land it a couple of units off the promised line
+    queue.push({ at: t, fn: () =>
+      spawnItem('watermelon', { targeted:false, straight:true, x:p.x, z:p.z }) });
+  }
+
+  /* Brighter and more saturated than a formation's ribbon: this one is a
+     twenty-melon trail rather than five landing spots, it is the only thing on
+     the ground for the length of the set-piece, and at the formation ribbon's
+     0.42 the pale melon pink washed out to grey against grass. */
+  disposeFeastPath();
+  feast.path = buildPath(pts, 0xff5d73, 0.6);
+  return t;
+}
+
+function disposeFeastPath(){
+  if (!feast.path) return;
+  scene.remove(feast.path);
+  feast.path.children.forEach(m => m.material.dispose());
+  feast.path = null;
+  feast.route = null;
 }

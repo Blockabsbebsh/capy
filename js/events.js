@@ -6,6 +6,7 @@ const evt = { active:null, last:null, t:0, dur:0, timer:20, queue:[] };
 function resetEvents(){
   evt.active = null; evt.last = null; evt.t = 0; evt.dur = 0; evt.queue.length = 0;
   evt.timer = 20;
+  disposeFeastPath();
 }
 
 /* power-ups arrive on their own timer, never during a missile volley */
@@ -50,16 +51,16 @@ function triggerEvent(){
   evt.active = kind; evt.t = 0; evt.queue.length = 0;
 
   if (kind === 'feast'){
-    // a pure reward beat: nothing but watermelons, raining down
-    showBanner('🍉 WATERMELON FEAST!', '#ffe14d');
+    /* A reward beat, but a routed one: every melon lands on one long path
+       drawn on the ground the moment the banner does (see startFeastRoute).
+       The old version dropped them at random x, which paid the same for
+       standing still — and quietly wasted the ones that fell out of reach. */
+    showBanner('🍉 WATERMELON FEAST — FOLLOW THE TRAIL!', '#ffe14d');
     Audio.feast();
     game.fovKick = 2.4;
-    const n = 16 + game.level;
-    for (let i = 0; i < n; i++){
-      evt.queue.push({ at: 0.5 + i * 0.19, fn: () =>
-        spawnItem('watermelon', { targeted:false }) });
-    }
-    evt.dur = 0.5 + n * 0.19 + 2.2;
+    // + the last melon's fall, + a beat before normal service resumes
+    evt.dur = startFeastRoute(evt.queue)
+            + SPAWN_Y / Math.max(1, game.fallSpeed) + 1.6;
     return;
   }
 
@@ -87,6 +88,7 @@ function updateEvents(dt){
     evt.t += dt;
     while (evt.queue.length && evt.t >= evt.queue[0].at) evt.queue.shift().fn();
     if (!evt.queue.length && evt.t >= evt.dur){
+      if (evt.active === 'feast') disposeFeastPath();
       evt.active = null;
       evt.timer = 17 + Math.random() * 11;
     }

@@ -62,7 +62,7 @@ function spawnItem(type, opts = {}){
     // same lazy drift, so a rescue is never something you can't get to
     items.push({
       type, def, mesh, ring, dead:false, bounces:0, missile:false,
-      homing:0, maxLat:0, trail:0, sparkle:0,
+      homing:0, maxLat:0, trail:0, sparkle:0, sweep:0,   // hearts can be swept
       vy: -HEART_FALL, vx:(Math.random()-0.5)*0.5, vz:0,
       spin: new THREE.Vector3(0, 1.1, 0),
       wobble: Math.random() * Math.PI * 2,
@@ -81,6 +81,13 @@ function spawnItem(type, opts = {}){
     });
     return;
   }
+  /* A routed item — a formation beat, or a melon on a feast path — falls
+     straight down and at the shared speed: the ribbon promises where it lands
+     and when, and a melon's usual lateral wander (up to 3.2 u/s) would make
+     that promise a lie. Puzzler halves that speed for formation beats, which
+     is the whole perk: the same shape, twice as long to read. */
+  const straight = !!opts.fid || !!opts.straight;
+  const routeMul = opts.fid ? routeFallMul() : 1;
   items.push({
     type, def, mesh, ring, dead:false, bounces:0, missile,
     fid: opts.fid || 0,             // formation this beat belongs to, 0 = stray
@@ -88,13 +95,12 @@ function spawnItem(type, opts = {}){
     homing: missile ? 3.1 : (targeted ? 1.05 : 0),
     maxLat: missile ? 6.4 : Math.min(4.6, 2.4 + game.level * 0.14),
     trail: 0,
-    // A formation beat falls straight down and at the shared speed: the path
-    // ribbon promises where it lands and when, and a melon's usual lateral
-    // wander (up to 3.2 u/s) would make that promise a lie.
-    vy: -(game.fallSpeed * (opts.fid ? 1 : isMelon ? 0.86 : missile ? 1.18 : 1)
-          * (opts.fid ? 1 : 0.92 + Math.random()*0.2)),
-    vx: opts.fid ? 0 : isMelon ? (Math.random()-0.5) * 3.2 : (Math.random()-0.5) * 0.5,
-    vz: opts.fid ? 0 : isMelon ? (Math.random()-0.5) * 1.2 : 0,
+    sweep: 0,                       // Clean Sweep: seconds of pull left
+    vy: -(game.fallSpeed * routeMul
+          * (straight ? 1 : isMelon ? 0.86 : missile ? 1.18 : 1)
+          * (straight ? 1 : 0.92 + Math.random()*0.2)),
+    vx: straight ? 0 : isMelon ? (Math.random()-0.5) * 3.2 : (Math.random()-0.5) * 0.5,
+    vz: straight ? 0 : isMelon ? (Math.random()-0.5) * 1.2 : 0,
     // melons tumble mostly around Z so the cut face keeps facing the player
     spin: new THREE.Vector3(
       (Math.random()-0.5) * (isMelon ? 1.1 : 2.2),
@@ -106,6 +112,7 @@ function spawnItem(type, opts = {}){
 }
 
 function removeItem(it){
+  it.gone = true;               // see the snapshot loop in updateItems
   scene.remove(it.mesh);
   scene.remove(it.ring);
   it.ring.material.dispose();
@@ -126,9 +133,7 @@ function onCatch(it){
   // --- heart: a life back, or points if you're already topped up ---------
   if (def.heal){
     if (game.combo > 0) game.comboTime = game.comboMax;
-    if (game.lives < game.maxLives){
-      game.lives++;
-      renderLives(game.lives - 1);
+    if (gainLife(false)){
       popup(p, '+1 ♥', '#ff8fae');
       showBanner('💖 EXTRA LIFE', '#ff8fae');
     } else {
@@ -149,6 +154,8 @@ function onCatch(it){
   // --- power-ups ---------------------------------------------------------
   if (def.power){
     activatePower(def.power, p);
+    // Overcharged: the pickup itself is the bomb — every hazard in play goes
+    if (game.up.over) overchargeWipe(p);
     if (game.combo > 0) game.comboTime = game.comboMax;   // catching one keeps the combo alive
     squashPose(1.2, 0.78, 1.16);
     popUp(6.4);
@@ -277,12 +284,21 @@ function pickType(){
 
 function updateItems(dt){
   const capPos = new THREE.Vector3(capyState.x, 0, capyState.z);
-  for (let i = items.length - 1; i >= 0; i--){
-    const it = items[i];
+  /* Iterated over a SNAPSHOT, skipping anything already removed. A resolution
+     inside this pass can now take more than one item off the list — catching a
+     power-up with Overcharged clears every hazard in the air — and a live
+     reverse index over a shrinking array reads past its end the moment
+     something below the cursor disappears. */
+  for (const it of [...items]){
+    if (it.gone) continue;
     const m = it.mesh;
 
-    const magnetised = !!game.power && game.power.type === 'magnet'
-                       && it.def.good && !it.def.power && !it.dead && !capyState.falling;
+    if (it.sweep > 0) it.sweep = Math.max(0, it.sweep - dt);
+    /* Clean Sweep rides the magnet's pursuit rather than adding a second homing
+       model — it is the same job, and the note below is the reason there is
+       only one implementation of it in the game. */
+    const magnetised = it.def.good && !it.def.power && !it.dead && !capyState.falling
+                       && ((!!game.power && game.power.type === 'magnet') || it.sweep > 0);
 
     if (magnetised){
       /* Pure pursuit, aimed at the capybara's MOUTH and driving velocity
@@ -407,16 +423,23 @@ function updateItems(dt){
     it.ring.material.opacity = it.dead ? 0 : alpha;
     it.ring.scale.setScalar(1 + (1 - lead) * 1.5);
 
-    // catch test (hazards phase through you right after a respawn)
-    const canHit = it.def.good || (capyState.invuln <= 0 && !capyState.falling);
-    if (!it.dead && canHit && m.position.y <= CATCH_Y && m.position.y > -0.3){
-      const dx = m.position.x - capPos.x;
-      const dz = m.position.z - capPos.z;
-      const reach = catchReach() + it.def.radius + (capyState.dashT > 0 ? DASH_REACH : 0);
-      if (dx*dx + dz*dz < reach*reach){
-        onCatch(it);
-        continue;
+    // catch test (hazards phase through you right after a respawn, and soap
+    // phases through Sticky Feet entirely — that perk is bought with mobility,
+    // so the slip has to be gone rather than merely survivable)
+    const canHit = it.def.good ||
+      (capyState.invuln <= 0 && !capyState.falling && !(game.run.sticky && it.def.slip));
+    if (!it.dead && m.position.y <= CATCH_Y && m.position.y > -0.3){
+      if (canHit){
+        const dx = m.position.x - capPos.x;
+        const dz = m.position.z - capPos.z;
+        const reach = catchReach() + it.def.radius + (capyState.dashT > 0 ? DASH_REACH : 0);
+        if (dx*dx + dz*dz < reach*reach){
+          onCatch(it);
+          continue;
+        }
       }
+      // whatever the capybara did not take, a Phantombara ghost might
+      if (ghostItemTest(it)) continue;
     }
 
     // ground contact
