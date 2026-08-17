@@ -197,7 +197,7 @@ const reduceMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
 let REDUCED = reduceMotionQuery.matches;
 reduceMotionQuery.addEventListener?.('change', e => { REDUCED = e.matches; });
 
-/* thumbstick + HOP button on touch devices, keyboard hint on everything else */
+/* thumbstick + DASH button on touch devices, keyboard hint on everything else */
 const TOUCH = window.matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
 if (TOUCH) document.body.classList.add('touch');
 
