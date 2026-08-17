@@ -287,11 +287,15 @@ function emitFormation(){
      each beat to spawn is not testing the shape, it is testing a player with no
      lead time, and it fails shapes that are comfortably walkable off the
      ribbon. */
+  /* Chain Sweeper: this route's score multiple, fixed the moment it is emitted
+     so the ribbon, the items and the payout cannot disagree. */
+  const gold = chainMul();
   const rec = { fid, total: pts.length, pending: pts.length, goods, caught: 0,
-                spoiled: false, name: shape.id, pts,
+                spoiled: false, blocked: false, gold, name: shape.id, pts,
                 // dots on a formation, not on a feast: five landing spots are
                 // information, twenty are wallpaper over the trail itself
-                path: buildPath(pts, 0xffd77a, 0.55, true) };
+                path: buildPath(pts, gold > 1 ? 0xffe14d : 0xffd77a,
+                                gold > 1 ? 0.75 : 0.55, true) };
   fmt.live.set(fid, rec);
 
   // Each gap gets exactly the time needed to walk it, floored so a tight
@@ -312,7 +316,7 @@ function emitFormation(){
     const type = p.bad ? (Math.random() < 0.55 ? 'chili' : 'soap')
                        : (Math.random() < 0.24 ? 'watermelon' : 'burger');
     fmt.queue.push({ at: fmt.clock + t, fn: () =>
-      spawnItem(type, { targeted:false, x:p.x, z:p.z, fid }) });
+      spawnItem(type, { targeted:false, x:p.x, z:p.z, fid, gold }) });
   }
   /* Deadline for the safety valve in updateFormations, measured rather than
      assumed: the last beat is emitted at `t` and then still has to fall, and
@@ -328,6 +332,16 @@ function formationItemResolved(it, caught){
   const rec = fmt.live.get(it.fid);
   if (!rec) return;
   rec.pending--;
+  /* Did this beat land somewhere the player could not stand? A set-piece can
+     open a sinkhole on top of a live route, and under Puzzler that turned the
+     game's own doing into a lost life. Recorded per beat, at the moment it is
+     missed, because a hole can open after the route was emitted. */
+  if (!caught && it.def.good && !it.def.neutral){
+    const p = it.mesh.position;
+    for (const h of holes){
+      if (Math.hypot(p.x - h.x, p.z - h.z) < h.r + it.def.radius){ rec.blocked = true; break; }
+    }
+  }
   if (it.def.good && !it.def.neutral){
     if (caught) rec.caught++; else rec.spoiled = true;
   } else if (!it.def.good && caught){
@@ -348,12 +362,13 @@ function formationItemResolved(it, caught){
 function completeFormation(rec){
   const perfect = !rec.spoiled && rec.caught === rec.goods && rec.goods >= 3;
   // Puzzler pays out on every route, either way — see puzzlerReward
-  puzzlerReward(perfect);
+  puzzlerReward(perfect, rec.blocked);
+  if (perfect) chainCleared(); else chainBroken();
   if (perfect){
     // The point of the whole system: clearing a route pays more than the
     // same number of unrelated catches, and refills the combo timer so a
     // clean run can actually be chained.
-    const bonus = Math.round(28 * rec.goods * Math.min(multiplier(), 5));
+    const bonus = Math.round(28 * rec.goods * Math.min(multiplier(), 5) * (rec.gold || 1));
     game.score += bonus;
     game.combo++;
     game.bestCombo = Math.max(game.bestCombo, game.combo);
@@ -364,7 +379,6 @@ function completeFormation(rec){
     Audio.levelUp();
     burst(new THREE.Vector3(capyState.x, 1.0, capyState.z), 18, PAL.burger,
           { spread:5.0, up:4.6, size:0.12, life:0.8 });
-    if (game.up.sweep) sweepArena();     // Clean Sweep collects the leftovers
     refreshHUD();
   }
   disposePath(rec);

@@ -55,10 +55,10 @@ Load order, which is also roughly the dependency order:
 | `stack.js` | Hat mounting, the head food-stack, debris |
 | `state.js` | The `game` object, difficulty curve, hat unlocks, combo |
 | `formations.js` | The spawn director: shapes, the route ribbon, route-clear scoring |
-| `powers.js` | Shield bubble, magnet/slowmo/shield activation |
+| `powers.js` | Shield bubble, `shieldUp`/`absorbHit`, Auto-Shield, power activation |
 | `hud.js` | `$`, `ui`, HUD rendering, `popup`, `showBanner`, `flash` |
 | `player.js` | `capyState`, `updateCapybara` physics, `tryDash`, `popUp` |
-| `perks.js` | Perk mechanics: dash shockwave, ghosts, reach aura, sweep, hazard wipe |
+| `perks.js` | Perk mechanics: dash shockwave, ghosts, reach aura, golden routes, Puzzler |
 | `input.js` | Keyboard, pointer drag, virtual thumbstick |
 | `events.js` | Set-piece director (missiles / feast / sinkholes) |
 | `upgrades.js` | The every-10-levels perk draft, ordinary + one-per-run |
@@ -176,6 +176,25 @@ directly at a fixed `1/60` step instead of waiting on real time.
   that crosses it more than once draws several near-parallel streaks in the same
   band: a new shape that traverses repeatedly must step in **z** as it goes (see
   `pendulum`, `pincer`) or it is unreadable however it is drawn.
+- **`shieldUp()` and `absorbHit()` are the only protection test.** Two things can
+  be protecting the player (the power-up bubble and Auto-Shield) and they end
+  differently — the power-up is spent by a hit, Auto-Shield holds its two seconds
+  — so nothing should test `game.shield` directly any more.
+- **Overtime difficulty is spent on density, never on speed.** Every curve caps
+  by about level 24; `overtime()` keeps climbing past it and goes to hazard rate,
+  set-piece size and cadence, and hazard steering. Fall speed still caps at
+  `FALL_CAP` and `fmtReach` still caps at 0.78 — a route that cannot be read, or
+  cannot be walked, is not difficulty.
+- **A perk made pointless by this run is never offered.** `dead(game)` on an
+  upgrade keeps it out of the pool (Quick Paws with no dash), and the card is
+  struck through if it is ever shown. Offering a dead perk wastes one of three
+  slots, which is worse than offering nothing.
+- **A route's golden multiple is fixed when it is emitted.** `rec.gold` is read
+  once into the record, the ribbon and every item in it, so the payout cannot
+  disagree with what the player was shown mid-route.
+- **The perk rail rebuilds only when the SET of perks changes.** It renders from
+  `refreshHUD`, i.e. every frame; the Auto-Shield countdown is written in place
+  because that is the only part that changes per frame.
 - **One run perk per run, total.** The gold slot closes as soon as any `RUN_PERK`
   is taken (`hasRunPerk`), not just the one that was taken — they are balanced as
   a single trade, and stacking all three cost one life for the lot.

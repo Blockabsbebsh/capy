@@ -88,6 +88,15 @@ so a big score spike can't skip levels. What actually gets harder:
 - more hazards, and hazards inside formations
 - the combo timer shortens
 
+**More hearts means more hazards.** Every heart past the starting three raises
+the hazard rate by 20%, so banking lives with Second Wind or Puzzler buys risk
+along with the safety net.
+
+**It never stops getting harder.** Every curve bottoms out by about level 24 —
+fall speed long before that — so past there one scalar keeps climbing and is
+spent purely on density: more hazards, set-pieces closer together and larger,
+hazards that steer a little harder. Fall speed and route slack stay capped.
+
 **Fall speed deliberately stops rising early.** Late difficulty is density and
 route complexity, not less time to read. Every formation is provably clearable:
 the gap between consecutive landing spots is computed from the distance and the
@@ -104,7 +113,7 @@ Every ~20s a set-piece interrupts the normal flow:
   the trail and you get all twenty. The steps are far slacker than a formation's
   — it is still a reward beat, not a test.
 - **Sinkholes** — telegraphed by a pulsing red ring, then the ground opens for
-  7s. Walk in and you lose a life; dash over them freely.
+  5s. Walk in and you lose a life; dash over them freely.
 
 ## Structure
 
@@ -119,12 +128,17 @@ Ordinary perks stack:
 | Perk | Effect | Max |
 |---|---|---|
 | Long Snout | +0.22 catch radius, drawn as an aura around you | 4 |
-| Quick Paws | dash cooldown −25%, and the dash ends in a shockwave that catches food in a widening radius | 3 |
+| Quick Paws | dash cooldown −25%, and the dash ends in a shockwave that catches food out to 3× your reach (then 4×, 5×) | 3 |
 | Melon Lover | watermelons pay +60% | 3 |
 | Second Wind | +1 max life, and one heart back | 3 |
-| Lucky Heart | hearts drop twice as often | 2 |
-| Overcharged | grabbing a power-up wipes every hazard on the field | 1 |
-| Clean Sweep | a route clear drags the remaining food to you | 1 |
+| Lucky Heart | a heart falls right away, and hearts drop twice as often | 2 |
+
+**Silver** perks are one-per-run each, permanent, and cost nothing:
+
+| Perk | Effect |
+|---|---|
+| Auto-Shield | A bubble throws itself up when a hazard closes in, holds two seconds absorbing anything hostile, then rests a minute (the countdown sits on the perk rail) |
+| Chain Sweeper | Clear a route and the next one turns **golden**: every item in it glows and pays ×2, then ×3, ×4… for as long as the streak holds |
 
 **One-per-run perks** are gold and appear on about half of all drafts alongside
 the ordinary ones. You get **one for the entire run**: taking any of the three
@@ -132,13 +146,21 @@ closes the gold slot for good, so it is a choice between them, not a collection.
 Each is a trade, not a buff:
 
 - **Phantombara** — −1 max life. Every dash leaves a see-through copy of the
-  capybara standing where it started for 3s; the ghost catches anything good on
+  capybara standing where it started for 5s; the ghost catches anything good on
   your radius — food, hearts, power-ups — and a hazard pops it.
 - **Sticky Feet** — immune to sinkholes and soap, at half movement speed and
   with no dash. Routes re-time themselves to the slower walk, dash-gated beats
-  included, so nothing becomes unclearable.
+  included, so nothing becomes unclearable — a five-beat route that takes 1.8s
+  normally takes 3.5s here. Items fall at exactly the same speed; it is the
+  *route* that unfolds at half pace, which is why the whole biome feels calmer.
 - **Puzzler** — routes fall half as fast. Clear one and you gain a life; drop one
-  and it costs a life. The life row shows five hearts and then a tally (`♥♥♥♥♥
-  +3`), because a good Puzzler run banks more than the HUD can draw.
+  and it costs a life — unless a sinkhole opened on top of it, in which case
+  dropping it is free (clearing it anyway still pays). The life row shows five
+  hearts and then a tally (`♥♥♥♥♥ +3`), because a good Puzzler run banks more
+  than the HUD can draw.
+
+Every perk you hold shows as a small tinted icon down the left edge — plain,
+silver or gold — with `n/max` on anything that stacks and the Auto-Shield's
+countdown on its own.
 
 Hats unlock at score thresholds and are cosmetic.
