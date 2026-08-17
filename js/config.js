@@ -8,9 +8,36 @@ const CATCH_R = 1.25;                           // horizontal catch radius
 const START_LIVES = 3;
 const GRAV = -19;
 
-const AIR_CATCH_Y = 0.45;    // hop height that counts as "airborne" for the bonus
-const AIR_BONUS = 1.5;       // score multiplier for catching food mid-hop
 const SLIP_TIME = 2.0;       // seconds of soap-slick controls
+
+/* --- movement feel -------------------------------------------------------
+   Every input path — keys, pointer drag, thumbstick — resolves to a DESIRED
+   velocity, and updateCapybara eases the real velocity toward it. These are
+   the times, in seconds, to close 90% of that gap; smaller is snappier.
+
+   Having three of them is the whole point. The previous model accelerated at
+   a fixed 92 u/s² and then let friction do the stopping, which measured out
+   at 0.18s to reach full speed but 0.77s and 3.2 units of glide to stop —
+   more than twice the catch radius, so you could never park on a landing
+   ring, only drift over it. */
+const MOVE_T_ACCEL = 0.10;   // opening up, or holding a line
+const MOVE_T_BRAKE = 0.07;   // input released: stop, don't coast
+const MOVE_T_TURN  = 0.07;   // reversing into the opposite direction
+const MOVE_T_SLIP  = 0.55;   // soap turns all of the above to mush
+const DRAG_GAIN    = 11;     // pointer drag: desired speed per unit of offset
+const DRAG_DEAD    = 0.05;   // pointer offset below which we simply stop
+
+/* --- dash ----------------------------------------------------------------
+   The player's action button, in place of the old hop. It is a repositioning
+   tool first: a burst well above top speed that carries you over a sinkhole,
+   and pays double on anything you catch during it. The hop itself is still
+   here — catches, respawns and shield bounces all pop the capybara up — it
+   just isn't something you can ask for any more. */
+const DASH_SPEED = 34;       // u/s at the start of the burst
+const DASH_TIME  = 0.22;     // seconds of burst
+const DASH_CD    = 0.55;     // cooldown, counted from the end of the burst
+const DASH_BONUS = 2.0;      // score multiplier for catching mid-dash
+const DASH_REACH = 0.2;      // extra catch radius while dashing
 const STEP_RATE = 1.03;      // leg-cycle speed per unit of ground speed. Purely
                              // cosmetic — the cycle is not matched to distance
                              // travelled, so this is a look dial, not physics.
