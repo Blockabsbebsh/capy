@@ -109,7 +109,9 @@ Every ~20s a set-piece interrupts the normal flow:
 ## Structure
 
 Three lives. Every **10** levels the biome changes — Meadow, Lily Pad Ponds,
-Bubblegum, Night, Hell — each with its own lighting, ground, sky and music, and
+Bubblegum, Night, Hell — each with its own lighting, ground, sky and **its own
+piece of music** (a marimba stroll, a kalimba drift over water drips, a chiptune
+sugar rush, a music-box waltz in 3/4, and a harmonic-minor circus), and
 each theme change pauses the run for a draft of three perks.
 
 Ordinary perks stack:
