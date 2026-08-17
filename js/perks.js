@@ -275,8 +275,9 @@ function routeFallMul(){ return game.run.puzzler ? 0.5 : 1; }
    player could not stand. Clearing it anyway still pays — sometimes the geometry
    works out, and that deserves the heart — but failing it costs nothing, because
    the game asked for something it had already made impossible. */
-function puzzlerReward(cleared, blocked){
+function puzzlerReward(cleared, blocked, failed){
   if (!game.run.puzzler) return;
+  if (!cleared && !failed) return;      // nothing was actually dropped
   if (cleared){
     if (gainLife(true)){
       popup(new THREE.Vector3(capyState.x, 2.6, capyState.z), '🧩 +1 ♥', '#ff8fae');

@@ -55,7 +55,7 @@ soap-slipped, and it ends early if you hit a wall.
 | Chilli | Costs a life if caught |
 | Soap | No damage — makes you skid with almost no grip for 2s, and blocks the dash |
 | Heart | Restores a life, or 250 points at full health. Drifts slowly, only appears when hurt |
-| Magnet / Shield / Slow-mo | Power-ups, drift down slowly |
+| Magnet / Shield / Slow-mo | Power-ups, drift down slowly. The active one shows as an icon and a draining bar |
 
 Hazards **home in on you** while falling, capped so they stay dodgeable by
 moving. Inside a formation, hazards are decoys placed off the walking line —

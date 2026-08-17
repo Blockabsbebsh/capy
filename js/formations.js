@@ -361,9 +361,15 @@ function formationItemResolved(it, caught){
 
 function completeFormation(rec){
   const perfect = !rec.spoiled && rec.caught === rec.goods && rec.goods >= 3;
-  // Puzzler pays out on every route, either way — see puzzlerReward
-  puzzlerReward(perfect, rec.blocked);
-  if (perfect) chainCleared(); else chainBroken();
+  /* `spoiled` is the only real failure: a good item dropped, or a decoy eaten.
+     A route that is neither perfect NOR spoiled can only be one with fewer than
+     three good beats, and charging Puzzler a life — or breaking a Chain Sweeper
+     streak — for finishing one of those cleanly would be the game's fault, not
+     the player's. Every shape has three goods today; this keeps that from being
+     load-bearing for a future one. */
+  const failed = rec.spoiled;
+  puzzlerReward(perfect, rec.blocked, failed);
+  if (perfect) chainCleared(); else if (failed) chainBroken();
   if (perfect){
     // The point of the whole system: clearing a route pays more than the
     // same number of unrelated catches, and refills the combo timer so a

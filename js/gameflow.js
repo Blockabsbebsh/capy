@@ -21,7 +21,7 @@ function startGame(){
   game.state = 'playing';
   resetUpgrades();
   game.score = 0; game.lives = game.maxLives; game.combo = 0; game.bestCombo = 0;
-  game.level = 1; game.elapsed = 0; game.spawnTimer = 0.6; game.shake = 0;
+  game.level = 1; game.elapsed = 0; game.shake = 0;
   game.devLock = false;
   game.comboTime = 0; game.powerTimer = 14; game.heartTimer = 52; game.power = null;
   game.shield = false; game.timeScale = 1; game.fovKick = 0;

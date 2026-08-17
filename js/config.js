@@ -94,12 +94,15 @@ const FALL_CAP = 11.0;
    a couple of seconds and drop a fresh run straight into Hell. */
 const LEVEL_MIN_GAP = 4.5;
 
+/* `weight` used to live here and hasn't been read since pickType started
+   working off level-scaled chances — removed rather than left to imply a spawn
+   weighting that does not exist. */
 const TYPES = {
-  burger:     { good:true,  points:10,  radius:0.46, weight:1.0 },
-  watermelon: { good:true,  points:40,  radius:0.52, weight:0.30 },
-  chili:      { good:false, points:0,   radius:0.34, weight:0.42 },
+  burger:     { good:true,  points:10,  radius:0.46 },
+  watermelon: { good:true,  points:40,  radius:0.52 },
+  chili:      { good:false, points:0,   radius:0.34 },
   // soap no longer drains points — it makes you slippery, which you can feel
-  soap:       { good:false, points:0,   radius:0.40, weight:0.34, slip:true },
+  soap:       { good:false, points:0,   radius:0.40, slip:true },
   // power-ups: catching them is good, missing them costs nothing
   magnet:     { good:true, neutral:true, power:'magnet', points:0, radius:0.46 },
   shield:     { good:true, neutral:true, power:'shield', points:0, radius:0.46 },
@@ -116,13 +119,16 @@ const MAGNET_SPEED = 24;
    as an intermission: nothing could be dropped, nothing could hit you, and a
    feast landing under one banked levels on its own. */
 const POWERS = {
-  magnet: { name:'MAGNET',   dur:3.75, color:'#ff8494', blurb:'food comes to you' },
-  shield: { name:'SHIELD',   dur:12,   color:'#8fe9ff', blurb:'blocks one hit' },
-  slowmo: { name:'SLOW-MO',  dur:7,    color:'#bff4ff', blurb:'time crawls, food pours' },
+  magnet: { name:'MAGNET',   dur:3.75, color:'#ff8494', icon:'magnet' },
+  shield: { name:'SHIELD',   dur:12,   color:'#8fe9ff', icon:'shield' },
+  slowmo: { name:'SLOW-MO',  dur:7,    color:'#bff4ff', icon:'slowmo' },
 };
 
 /* Upgrades are drafted every 10 levels. Each one bumps a field on game.up,
    which the relevant system reads live — nothing here needs a re-apply pass.
+
+   `icon` names an entry in ICON_BODY (icons.js) — drawn, not an emoji, so the
+   same card looks the same on every platform.
 
    `tier` drives the card treatment and the icon on the owned-perk rail:
    undefined for the ordinary stacking perks, 'silver' for the two one-offs, and
@@ -133,28 +139,28 @@ const POWERS = {
 
    Descriptions are sentences: capital letter, no full stop. */
 const UPGRADES = [
-  { id:'reach',  icon:'👃', name:'Long Snout',
+  { id:'reach',  icon:'reach', name:'Long Snout',
     desc:'+0.22 catch radius, shown as an aura', max:4,
     apply:u => u.reach += 0.22 },
-  { id:'dash',   icon:'💨', name:'Quick Paws',
+  { id:'dash',   icon:'dash', name:'Quick Paws',
     desc:'Dash cools 25% faster, and lands a food-catching shockwave', max:3,
     apply:u => { u.dashCD *= 0.75; u.shock++; },
     dead:g => g.run.sticky },                    // no dash, nothing to cool
-  { id:'melon',  icon:'🍉', name:'Melon Lover',
+  { id:'melon',  icon:'melon', name:'Melon Lover',
     desc:'Watermelons pay +60%', max:3,
     apply:u => u.melon += 0.6 },
-  { id:'life',   icon:'❤️', name:'Second Wind',
+  { id:'life',   icon:'life', name:'Second Wind',
     desc:'+1 max life, and one heart back', max:3,
     apply:u => u.life += 1 },
-  { id:'hearts', icon:'💖', name:'Lucky Heart',
+  { id:'hearts', icon:'hearts', name:'Lucky Heart',
     desc:'A heart right now, and hearts drop twice as often', max:2,
     apply:u => u.heartRate += 1 },
   /* The two silver one-offs: bigger than a stacking perk, smaller than a gold
      trade, and neither of them costs you anything. */
-  { id:'autoShield', icon:'🛡', name:'Auto-Shield', tier:'silver', max:1,
+  { id:'autoShield', icon:'autoShield', name:'Auto-Shield', tier:'silver', max:1,
     desc:'A bubble that throws itself up when a hazard closes in, then rests a minute',
     apply:u => u.autoShield = true },
-  { id:'chain',  icon:'✨', name:'Chain Sweeper', tier:'silver', max:1,
+  { id:'chain',  icon:'chain', name:'Chain Sweeper', tier:'silver', max:1,
     desc:'Clear a route and the next one turns golden: ×2 on everything, then ×3, ×4…',
     apply:u => u.chain = true },
 ];
@@ -164,17 +170,17 @@ const UPGRADES = [
    number going up. Half the drafts offer one alongside the ordinary perks, and
    the gold slot closes for the whole run once any of them is taken. */
 const RUN_PERKS = [
-  { id:'phantom', icon:'👻', name:'Phantombara', tier:'gold', max:1,
+  { id:'phantom', icon:'phantom', name:'Phantombara', tier:'gold', max:1,
     desc:'−1 max life. Every dash leaves a ghost for 5s that catches food — a hazard pops it',
     apply:r => r.phantom = true,
     dead:g => g.run.sticky },
-  { id:'sticky',  icon:'🦶', name:'Sticky Feet', tier:'gold', max:1,
+  { id:'sticky',  icon:'sticky', name:'Sticky Feet', tier:'gold', max:1,
     // measured: a five-beat route takes 1.77s normally and 3.55s under this,
     // because formations are timed against game.up.speed. Items fall at exactly
     // the same rate — it is the route that unfolds at half pace.
     desc:'Immune to sinkholes and soap. Half speed and no dash, and routes arrive at half pace to match',
     apply:r => r.sticky = true },
-  { id:'puzzler', icon:'🧩', name:'Puzzler', tier:'gold', max:1,
+  { id:'puzzler', icon:'puzzler', name:'Puzzler', tier:'gold', max:1,
     desc:'Routes fall half as fast. Clear one for a life, drop one and it costs a life',
     apply:r => r.puzzler = true },
 ];
