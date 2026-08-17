@@ -169,7 +169,12 @@ const lilyRim = new THREE.Group();
   wall.position.y = h / 2;
   wall.castShadow = true; wall.receiveShadow = true;
   lilyRim.add(wall);
-  const lip = new THREE.Mesh(new THREE.TorusGeometry(1.05, 0.075, 10, 96), rimMat);
+  // The tube radius is in UNSCALED units, and the group below scales the rim
+  // by 11 on X and 6.6 on Z (and 1 on Y), so whatever goes here comes out an
+  // order of magnitude fatter across the pad than it looks in this line. Half
+  // the old 0.075 keeps the lip readable as a rolled edge without it reading
+  // as a wall in its own right.
+  const lip = new THREE.Mesh(new THREE.TorusGeometry(1.05, 0.0375, 10, 96), rimMat);
   lip.rotation.x = Math.PI / 2;
   lip.position.y = h;
   lip.castShadow = true;
@@ -177,6 +182,61 @@ const lilyRim = new THREE.Group();
   lilyRim.scale.set(ARENA.halfX + 2.4, 1, ARENA.halfZ + 2.4);   // matches `patch`
   lilyRim.visible = false;
   world.add(lilyRim);
+}
+
+/* The arena patch is the same ellipse in every biome (see the identical
+   patch.scale calls in refreshThemeEnvironment). Background dressing that
+   lands inside it grows out of the arena floor instead of out of the field
+   beyond, which the pond already had to guard against and which the raised
+   hell slab below now shows up too. */
+const PATCH_RX = ARENA.halfX + 2.4, PATCH_RZ = ARENA.halfZ + 2.4;
+function outsidePatch(x, z, margin = 0){
+  const rx = PATCH_RX + margin, rz = PATCH_RZ + margin;
+  return (x*x)/(rx*rx) + (z*z)/(rz*rz) > 1;
+}
+
+/* Hell's basalt slab sat exactly level with the lava field around it, so it
+   read as a pattern printed on the lava rather than a platform standing in
+   it. The slab is left alone — it is the shared `patch` mesh at the same size
+   and the same height as in every other biome, and nothing about where the
+   capybara stands, where food lands or where sinkholes open moves. What moves
+   is the field AROUND it: for 'hell' the big background disc drops by
+   HELL_LAVA_DROP, and this skirt fills the step, so the slab's side face
+   becomes visible and the eye reads it as raised out of the lava. Built once
+   and toggled by visibility, same as lilyRim above. */
+const HELL_LAVA_DROP = 0.4;
+const hellSkirt = new THREE.Group();
+{
+  const h = HELL_LAVA_DROP + patch.position.y;     // lava level up to the slab face
+  // Top radius 1.0 sits directly under the patch edge; the slightly narrower
+  // base undercuts the slab, so the side face turns away from the sun and
+  // reads as a shadowed cut rather than as more floor. The colour is a shade
+  // lighter than the slab's own basalt — matched, the side face and the top
+  // read as one continuous black mass and the step disappears again.
+  const wall = new THREE.Mesh(
+    new THREE.CylinderGeometry(1.0, 0.965, h, 96, 1, true),
+    new THREE.MeshStandardMaterial({ color:0x2a1e1b, roughness:0.95, metalness:0 })
+  );
+  wall.position.y = patch.position.y - h / 2;
+  wall.receiveShadow = true;
+  hellSkirt.add(wall);
+  /* Cooled crust pooled on the lava at the foot of the slab — a contact
+     shadow, which the lava cannot get any other way: its material is
+     MeshBasic, so it receives no real shadow at all. Two plain rings of
+     falling opacity rather than one with a per-vertex alpha ramp, which is
+     the tidier idea but leaves a hard circle if the vertex-alpha path is not
+     taken; stepped opacity always draws. */
+  for (const [r0, r1, a] of [[0.995, 1.06, 0.34], [1.06, 1.15, 0.16]]){
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(r0, r1, 96).rotateX(-Math.PI/2),
+      new THREE.MeshBasicMaterial({ color:0x1a0c07, transparent:true, opacity:a, depthWrite:false })
+    );
+    ring.position.y = -HELL_LAVA_DROP + 0.012;
+    hellSkirt.add(ring);
+  }
+  hellSkirt.scale.set(PATCH_RX, 1, PATCH_RZ);   // matches `patch`
+  hellSkirt.visible = false;
+  world.add(hellSkirt);
 }
 
 /* Water ripple texture for the pond biome's open water — a bump map
@@ -249,10 +309,12 @@ function makeCandyCane(x,z,s=1){
   themeFX.add(g); return g;
 }
 
-function makeObsidian(x,z,s=1){
+// y0 is the height of the surface the boulder is standing in — the hell field
+// sits HELL_LAVA_DROP below world zero, and a boulder left at zero floats.
+function makeObsidian(x,z,s=1,y0=0){
   const m=new THREE.Mesh(new THREE.DodecahedronGeometry(0.85,1),
     new THREE.MeshStandardMaterial({color:0x171316,roughness:0.55,metalness:0.35,emissive:0x230e08,emissiveIntensity:0.4}));
-  m.position.set(x,0.65*s,z); m.scale.set(0.85*s,1.45*s,0.8*s);
+  m.position.set(x,y0+0.65*s,z); m.scale.set(0.85*s,1.45*s,0.8*s);
   m.rotation.set(Math.random()*0.5,Math.random()*Math.PI,Math.random()*0.35);
   m.castShadow=true; themeFX.add(m); return m;
 }
@@ -435,11 +497,16 @@ function makeLavaBubbles(){
   for (let i = 0; i < 22; i++){
     const a = Math.random()*Math.PI*2, r = 12 + Math.random()*26;
     const x = Math.cos(a)*r, z = Math.sin(a)*r*0.75 - 3;
+    // the near arc of the smallest radius still reaches over the arena slab,
+    // where a bubble would rise straight up through the basalt
+    if (!outsidePatch(x, z, 0.8)) continue;
     const m = new THREE.Mesh(new THREE.SphereGeometry(0.18+Math.random()*0.22, 10, 8),
       new THREE.MeshBasicMaterial({ color: 0xffb347, transparent:true, opacity:0.85 }));
-    m.position.set(x, 0.05, z);
+    // they rise from the lava surface, which is HELL_LAVA_DROP below zero
+    const y0 = 0.05 - HELL_LAVA_DROP;
+    m.position.set(x, y0, z);
     themeFX.add(m);
-    themeFxState.bubbles2.push({ m, x0:x, z0:z, phase: Math.random()*6.28, speed: 0.6+Math.random()*0.8, life: 0 });
+    themeFxState.bubbles2.push({ m, x0:x, z0:z, y0, phase: Math.random()*6.28, speed: 0.6+Math.random()*0.8, life: 0 });
   }
 }
 
@@ -675,10 +742,14 @@ function refreshThemeEnvironment(th){
   patch.material.roughness = 1; patch.material.metalness = 0;   // hell overrides below, everything else uses this default
   patch.material.map = null; patch.material.needsUpdate = true; // candy/pond/hell re-add their own texture below
   patch.material.emissiveMap = null; patch.material.emissive.setHex(0x000000); patch.material.emissiveIntensity = 1; // hell re-adds its glow below
+  // Only hell drops its background field away from the arena slab (see
+  // hellSkirt); everywhere else the field is level with it, as before.
+  ground.position.y = mode==='hell' ? -HELL_LAVA_DROP : 0;
   border.visible = mode==='meadow';
   pond.visible = mode==='meadow';
   pondRim.visible = mode==='meadow';
   lilyRim.visible = mode==='pond';
+  hellSkirt.visible = mode==='hell';
   clouds.forEach(c=>c.visible = mode==='meadow' || mode==='pond');
   pinkClouds.forEach(c=>c.visible = mode==='candy');
   sceneryGroup.visible = mode==='meadow' || mode==='night';   // hidden for pond/candy/hell, which supply their own dressing
@@ -686,19 +757,21 @@ function refreshThemeEnvironment(th){
 
   // helper: true if (x,z) lands outside the *playable* arena, with a
   // margin — used so background decorations never spawn on top of you.
-  // 'pond' uses an elliptical arena (see updateCapybara), everything else
-  // uses the rectangular ARENA bounds.
+  // Every biome plays on the rectangular ARENA bounds (see updateCapybara);
+  // the two that need clearance from the visible arena floor as well test
+  // against the patch ellipse instead, which is the larger of the two.
   function outsideArena(x, z, margin = 1.4){
-    if (mode === 'pond'){
+    if (mode === 'pond' || mode === 'hell'){
       // match the ACTUAL visible patch size (ARENA.halfX/halfZ + 2.4, same
       // as every other biome now — see the uniform-scale fix), not the
       // older, smaller collision-only ellipse. Using the smaller ellipse
       // here let lily pads spawn in the gap between it and the larger
       // visible patch, where they'd land on/under the patch and never
       // actually show — which is why the background read as sparse
-      // despite plenty being spawned.
-      const rx = ARENA.halfX + 2.4 + margin, rz = ARENA.halfZ + 2.4 + margin;
-      return (x*x)/(rx*rx) + (z*z)/(rz*rz) > 1;
+      // despite plenty being spawned. Hell needs the same treatment for the
+      // opposite reason: its slab now stands proud of the lava, so a boulder
+      // planted at lava level inside the slab's footprint punches through it.
+      return outsidePatch(x, z, margin);
     }
     return Math.abs(x) > ARENA.halfX + margin || Math.abs(z) > ARENA.halfZ + margin;
   }
@@ -714,7 +787,12 @@ function refreshThemeEnvironment(th){
     // decorative Meadow pond also uses) so the ripple bump map only
     // shows up here — otherwise it'd leak onto Meadow's pond too
     ground.material = pondGroundMat;
-    ground.scale.setScalar(1.35);
+    // Same disc size as every other biome. At 1.35 the water reached ~94 units
+    // out, past the top of the frame, so the pond was the one level with no
+    // visible horizon at all — the sky only showed through the water's 0.85
+    // opacity, which put its apparent skyline in a completely different place
+    // to the other four.
+    ground.scale.setScalar(1);
     // same pattern as every other biome: texture the shared `patch` mesh,
     // sized to match ARENA exactly, same as every other theme — kept
     // uniform across all 5 biomes now instead of each one having its own
@@ -799,11 +877,12 @@ function refreshThemeEnvironment(th){
     patch.material.emissiveIntensity = 0.55;
     patch.material.needsUpdate = true;
     border.visible=false;
-    // obsidian boulders replace the meadow's trees in the background
-    treeSpots.forEach(([x,z,s]) => makeObsidian(x, z, s*0.9));
+    // obsidian boulders replace the meadow's trees in the background — planted
+    // in the lava field, which now sits below the arena slab
+    treeSpots.forEach(([x,z,s]) => makeObsidian(x, z, s*0.9, -HELL_LAVA_DROP));
     for(let i=0;i<8;i++){
       const [x,z] = randomOutside(16, 10, 1.2);
-      makeObsidian(x, z, 0.7+Math.random()*1.0);
+      makeObsidian(x, z, 0.7+Math.random()*1.0, -HELL_LAVA_DROP);
     }
     makeLavaBubbles();
     makeHellMoon();
@@ -852,7 +931,7 @@ function updateThemeFX(t){
       // 0-3: rise and swell, 3-4: pop and reset
       if (cycle < 3){
         const k = cycle / 3;
-        b.m.position.y = 0.05 + k*0.35;
+        b.m.position.y = b.y0 + k*0.35;
         b.m.scale.setScalar(0.6 + k*0.8);
         b.m.material.opacity = 0.85 * (1 - k*0.3);
       } else {

@@ -170,23 +170,15 @@ function updateCapybara(dt){
   capyState.x += capyState.vx * dt;
   capyState.z += capyState.vz * dt;
 
-  // Meadow stays a bounded field. Other themes get their own physical arena.
-  if (curTheme.arena === 'pond'){
-    // the giant lily pad is a hard wall, same as the meadow's rectangular
-    // bounds — real sinkholes (checked below) are what should drop you in,
-    // not simply walking to the edge of the pad
-    const rx=9.15, rz=4.65;
-    const q=(capyState.x*capyState.x)/(rx*rx)+(capyState.z*capyState.z)/(rz*rz);
-    if(q>1){
-      const k=1/Math.sqrt(q); capyState.x*=k; capyState.z*=k;
-      capyState.vx*=-0.25; capyState.vz*=-0.25;
-    }
-  } else {
-    if (capyState.x < -ARENA.halfX){ capyState.x = -ARENA.halfX; capyState.vx *= -0.25; }
-    if (capyState.x >  ARENA.halfX){ capyState.x =  ARENA.halfX; capyState.vx *= -0.25; }
-    if (capyState.z < -ARENA.halfZ){ capyState.z = -ARENA.halfZ; capyState.vz *= -0.25; }
-    if (capyState.z >  ARENA.halfZ){ capyState.z =  ARENA.halfZ; capyState.vz *= -0.25; }
-  }
+  // One arena shape for every biome: the rectangular ARENA bounds. The pond
+  // used to clamp to an ellipse of its own instead, which is what made it the
+  // only level where you slid along a curved wall and could not reach the
+  // corners — the lily rim is dressing on the same play field as everywhere
+  // else, not a different one.
+  if (capyState.x < -ARENA.halfX){ capyState.x = -ARENA.halfX; capyState.vx *= -0.25; }
+  if (capyState.x >  ARENA.halfX){ capyState.x =  ARENA.halfX; capyState.vx *= -0.25; }
+  if (capyState.z < -ARENA.halfZ){ capyState.z = -ARENA.halfZ; capyState.vz *= -0.25; }
+  if (capyState.z >  ARENA.halfZ){ capyState.z =  ARENA.halfZ; capyState.vz *= -0.25; }
 
   // hop physics
   const wasAirborne = capyState.hopY > 0.02;
