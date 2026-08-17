@@ -233,7 +233,11 @@ be verified any other way.
   Do not reintroduce a friction multiplier or a top-speed clamp: the easing
   cannot overshoot its target, and the only thing above `SPEED` is the dash.
   Driving the pointer path through *acceleration* instead is what made it a
-  near-undamped spring that rang eight times around the cursor.
+  near-undamped spring that rang eight times around the cursor. **Anything
+  that chases a moving target wants velocity, not acceleration** — the magnet
+  had the identical bug independently, and orbited food past the capybara
+  instead of delivering it. The homing hazards keep the acceleration model on
+  purpose: overshoot is what makes them dodgeable.
 - The **hop still exists but is not an input.** `tryDash` replaced `tryJump`;
   catches, respawns and shield bounces still set `hopV`, so all the pop and
   squash juice runs as before. Anything keyed off "airborne" for gameplay

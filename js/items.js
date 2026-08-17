@@ -270,18 +270,36 @@ function updateItems(dt){
     const it = items[i];
     const m = it.mesh;
 
-    // hazards steer toward the capybara — capped lateral speed keeps them
-    // dodgeable as long as the player keeps moving
-    const magnetised = game.power && game.power.type === 'magnet'
-                       && it.def.good && !it.def.power && !it.dead;
-    const steer = magnetised ? 4.2 : (it.dead || capyState.falling ? 0 : it.homing);
-    const cap   = magnetised ? 8.5 : it.maxLat;
-    if (steer > 0){
-      it.vx += (capyState.x - m.position.x) * steer * dt;
-      it.vz += (capyState.z - m.position.z) * steer * dt * 0.85;
+    const magnetised = !!game.power && game.power.type === 'magnet'
+                       && it.def.good && !it.def.power && !it.dead && !capyState.falling;
+
+    if (magnetised){
+      /* Pure pursuit, aimed at the capybara's MOUTH and driving velocity
+         directly. The magnet used to add acceleration toward the capybara's
+         feet with no damping and no vertical component, which is a spring:
+         items closed on you, shot straight through, and swung back out —
+         measured at 8.05 -> 0.60 -> 2.69 units while standing still — so they
+         orbited past and landed on the floor. Only 4 of 10 were ever caught.
+         Re-aiming velocity every frame converges instead of oscillating, and
+         including Y means the item arrives at catch height rather than
+         sailing over your head. */
+      const dx = capyState.x - m.position.x;
+      const dy = (CATCH_Y - 0.15) - m.position.y;
+      const dz = capyState.z - m.position.z;
+      const d = Math.hypot(dx, dy, dz) || 1;
+      const k = 1 - Math.pow(0.001, dt);        // ~0.33s to swing onto the line
+      it.vx += (dx / d * MAGNET_SPEED - it.vx) * k;
+      it.vy += (dy / d * MAGNET_SPEED - it.vy) * k;
+      it.vz += (dz / d * MAGNET_SPEED - it.vz) * k;
+    } else if (!it.dead && !capyState.falling && it.homing > 0){
+      // hazards steer toward the capybara — capped lateral speed keeps them
+      // dodgeable as long as the player keeps moving
+      it.vx += (capyState.x - m.position.x) * it.homing * dt;
+      it.vz += (capyState.z - m.position.z) * it.homing * dt * 0.85;
       const lat = Math.hypot(it.vx, it.vz);
-      if (lat > cap){ it.vx = it.vx / lat * cap; it.vz = it.vz / lat * cap; }
+      if (lat > it.maxLat){ it.vx = it.vx / lat * it.maxLat; it.vz = it.vz / lat * it.maxLat; }
     }
+    const steer = magnetised ? 0 : (it.dead || capyState.falling ? 0 : it.homing);
 
     if (it.missile && !it.dead){
       it.trail -= dt;
@@ -292,8 +310,10 @@ function updateItems(dt){
       m.children.forEach(c => { if (c.material === mat.missileGlow) c.scale.setScalar(1 + Math.sin(performance.now()*0.02)*0.12); });
     }
 
-    // hearts hold a constant speed; everything else picks up a little
-    if (!it.def.heal) it.vy += GRAV * 0.16 * dt;
+    // hearts hold a constant speed; everything else picks up a little.
+    // A magnetised item is flying under its own power — leaving gravity on
+    // would fight the vertical half of the pursuit for anything below you.
+    if (!it.def.heal && !magnetised) it.vy += GRAV * 0.16 * dt;
     m.position.y += it.vy * dt;
     m.position.x += it.vx * dt;
     m.position.z += it.vz * dt;
@@ -377,7 +397,11 @@ function updateItems(dt){
     const floor = it.def.radius + 0.02;
     if (m.position.y <= floor){
       m.position.y = floor;
-      if (!it.dead){
+      // A magnetised item cannot be dropped: the whole point of the power-up
+      // is that every good item reaches you, so one that gets low while you
+      // are sprinting or dashing away skims the floor and keeps coming
+      // instead of counting as a miss.
+      if (!it.dead && !magnetised){
         it.dead = true;
         onMiss(it);          // bursts into particles for every type, including watermelon
         removeItem(it);
