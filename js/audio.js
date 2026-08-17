@@ -53,139 +53,412 @@ const Audio = (() => {
     src.start(t); src.stop(t + dur + 0.02);
   }
 
-  /* ---------------- procedural music ----------------
-     A slow four-bar loop in A minor: pad, walking bass, marimba melody
-     drawn from a pentatonic scale, and a shaker that joins later on.   */
-  let musicGain = null, musicTimer = null, nextNote = 0, step = 0, tempo = 92, intensity = 1;
+  /* ---------------- MUSIC ----------------
+     Five written pieces, one per biome, rather than one loop reskinned five
+     ways. The old version drew every melody note at RANDOM from a pentatonic
+     pool, which is exactly why it "worked but didn't sound great": random
+     pitches never form a phrase, so there was nothing to remember, nothing to
+     hum, and no difference between biomes beyond timbre. Each theme here is an
+     actual composition — its own key, tempo, metre, groove, bass line and a
+     melody with a motif that repeats.
+
+       Meadow     G major, 104bpm, swung eighths, marimba stroll
+       Pond       D major 7ths, 84bpm, kalimba over water drips, lots of air
+       Bubblegum  A major, 124bpm, sixteenth-note square lead, four-on-the-floor
+       Night      A minor WALTZ (3/4), 72bpm, music box, almost no percussion
+       Hell       D harmonic minor, 126bpm, circus oompah organ and tambourine
+
+     The level never changes the piece, only how filled in it is: tempo creeps
+     up across the ten levels of a biome and the extra percussion joins halfway
+     through. A tune that mutated with difficulty would stop being a tune.  */
+  /* Two gain stages, on purpose: `musicBus` carries the per-theme trim (see
+     `mix` on each theme — the sparse pieces need a few dB to sit level with the
+     busy ones) and `musicGain` is what duck() pulls down for menus, so ducking
+     cannot quietly undo a theme's balance. */
+  let musicGain = null, musicBus = null, musicTimer = null;
+  let nextNote = 0, step = 0, tempo = 104, intensity = 1;
   const MIDI = m => 440 * Math.pow(2, (m - 69) / 12);
 
-  /* One progression per visual theme, so the meadow and the music turn over
-     together. `voice` picks the melody timbre; `tempoBase` sets the floor. */
-  const MUSIC_THEMES = [
-  { // Meadow — playful marimba, warm and open
-    prog:[{bass:45,pad:[57,60,64]},{bass:41,pad:[57,60,65]},{bass:48,pad:[55,60,64]},{bass:43,pad:[55,59,62]}],
-    pent:[69,72,74,76,79,81,84], tempoBase:90, voice:'marimba', style:'meadow' },
-  { // Lily Pad Ponds — suspended bells and watery fifths
-    prog:[{bass:42,pad:[54,57,61]},{bass:38,pad:[54,59,61]},{bass:45,pad:[53,57,62]},{bass:40,pad:[52,57,61]}],
-    pent:[66,69,73,76,78,81,85], tempoBase:78, voice:'bell', style:'pond' },
-  { // Bubblegum — springy plucks, bright harmony
-    prog:[{bass:48,pad:[60,64,67]},{bass:43,pad:[60,65,69]},{bass:45,pad:[59,64,67]},{bass:41,pad:[57,62,65]}],
-    pent:[72,74,76,79,81,84,88], tempoBase:108, voice:'pluck', style:'candy' },
-  { // Night — sparse music-box phrases with long air
-    prog:[{bass:45,pad:[57,60,64]},{bass:40,pad:[55,59,64]},{bass:41,pad:[57,60,65]},{bass:43,pad:[55,59,62]}],
-    pent:[81,84,86,88,91,93,96], tempoBase:64, voice:'bell', style:'night' },
-  { // Hell — low saw bass, ominous minor melody
-    prog:[{bass:33,pad:[45,48,52]},{bass:29,pad:[45,50,52]},{bass:36,pad:[44,48,51]},{bass:31,pad:[43,47,50]}],
-    pent:[57,60,62,64,67,69,72], tempoBase:96, voice:'pluck', style:'hell' },
-];
-  let mTheme = MUSIC_THEMES[0];
+  /* Parts are written one string per bar, one token per step:
+       74   start a note here (MIDI number)
+       -    hold the previous note one step longer
+       .    rest
+     `pat` checks every bar against the theme's step grid, because a miscounted
+     bar does not look wrong — it silently shifts the rest of the phrase off the
+     beat, which is the hardest kind of bug to hear and the easiest to make. */
+  function pat(bars, spb, label){
+    const out = [];
+    bars.forEach((bar, i) => {
+      const toks = bar.trim().split(/\s+/);
+      if (toks.length !== spb)
+        console.error(`[audio] ${label} bar ${i + 1}: ${toks.length} steps, expected ${spb}`);
+      out.push(...toks);
+    });
+    return out;
+  }
+  // token list -> per-step buckets of {n, len}, so a step costs one array lookup
+  function events(toks, label){
+    const at = toks.map(() => null);
+    let last = null;
+    toks.forEach((t, s) => {
+      if (t === '.'){ last = null; return; }
+      if (t === '-'){
+        if (!last) console.error(`[audio] ${label} step ${s}: hold with nothing to hold`);
+        else last.len++;
+        return;
+      }
+      last = { n: +t, len: 1 };
+      at[s] = last;
+    });
+    return at;
+  }
+  // drums are one bar that repeats: 'x' hits, anything else rests
+  const beats = (bar, spb, label) => pat([bar], spb, label).map(t => t === 'x');
 
-  // one lead voice, three flavours — partial ratio and gain shape the timbre
+  function part(bars, spb, label){ return events(pat(bars, spb, label), label); }
+
+  const THEMES_M = [
+  { /* ---- MEADOW: a stroll. I-vi-IV-V, the friendliest loop there is, with a
+         swung skip in the eighths so it ambles rather than marches. */
+    id:'meadow', tempo:104, tempoUp:8, stepsPerBar:8, stepBeats:0.5, swing:0.12, mix:1.00,
+    lead:'marimba', pad:'warm', bass:'round',
+    chords:[
+      { bass:43, pad:[59,62,67] },   // G
+      { bass:40, pad:[59,62,64] },   // Em7
+      { bass:48, pad:[60,64,67] },   // C
+      { bass:50, pad:[57,62,66] },   // D
+    ],
+    leadP:[
+      '.  71 74 76 -  74 .  .',
+      '.  71 74 76 79 -  76 .',
+      '79 -  76 79 81 -  79 .',
+      '78 -  74 .  81 -  79 78',     // F# turns the phrase back to G
+    ],
+    bassP:[
+      '43 .  .  .  50 .  .  55',
+      '40 .  .  .  47 .  .  52',
+      '48 .  .  .  55 .  .  48',
+      '50 .  .  .  57 .  .  42',     // F#2 walks up into the top of the loop
+    ],
+    drums:{ kick:'x . . . x . . .', shaker:'. x . x . x . x', 'tom+':'. . . . . . x .' },
+  },
+
+  { /* ---- POND: major sevenths, one phrase per bar, and a lot of silence. The
+         percussion is water: single drips, no kit at all. */
+    id:'pond', tempo:84, tempoUp:5, stepsPerBar:8, stepBeats:0.5, swing:0, mix:1.25,
+    lead:'kalimba', pad:'glass', bass:'round',
+    chords:[
+      { bass:38, pad:[61,66,69] },   // Dmaj7
+      { bass:43, pad:[59,62,66] },   // Gmaj7
+      { bass:35, pad:[57,62,66] },   // Bm7
+      { bass:45, pad:[61,64,69] },   // A
+    ],
+    leadP:[
+      '81 -  -  .  78 -  .  .',
+      '83 -  .  81 78 -  -  .',
+      '78 -  .  76 74 -  -  .',
+      '76 -  78 -  81 -  -  .',
+    ],
+    bassP:[
+      '38 -  -  .  50 -  .  .',
+      '43 -  -  .  55 -  .  .',
+      '35 -  -  .  47 -  .  .',
+      '45 -  -  .  57 -  .  .',
+    ],
+    drums:{ drip:'. . x . . . . x', 'drip+':'. x . . . x . .' },
+  },
+
+  { /* ---- BUBBLEGUM: the sugar rush. Sixteenth grid, square lead, I-V-vi-IV
+         and a four-on-the-floor kick. The only theme that is genuinely fast. */
+    id:'candy', tempo:124, tempoUp:6, stepsPerBar:16, stepBeats:0.25, swing:0, mix:0.95,
+    lead:'square', pad:'warm', bass:'round',
+    chords:[
+      { bass:45, pad:[61,64,69] },   // A
+      { bass:40, pad:[59,64,68] },   // E
+      { bass:42, pad:[61,66,69] },   // F#m
+      { bass:38, pad:[62,66,69] },   // D
+    ],
+    leadP:[
+      '81 . 81 . 76 . 78 . 81 -  -  .  78 .  76 .',
+      '80 . 78 . 76 . 78 . 80 -  -  .  76 .  73 .',
+      '78 . 78 . 73 . 76 . 78 -  -  .  81 .  78 .',
+      '76 . 74 . 76 . 78 . 81 -  -  -  78 76 74 .',
+    ],
+    bassP:[
+      '45 . 45 . 45 . 45 . 45 .  45 .  52 .  45 .',
+      '40 . 40 . 40 . 40 . 40 .  40 .  47 .  40 .',
+      '42 . 42 . 42 . 42 . 42 .  42 .  49 .  42 .',
+      '38 . 38 . 38 . 38 . 38 .  38 .  45 .  47 .',
+    ],
+    drums:{ kick:'x . . . x . . . x . . . x . . .',
+            clap:'. . . . x . . . . . . . x . . .',
+            hat: '. . x . . . x . . . x . . . x .',
+            'hat+':'. x . x . x . x . x . x . x . x' },
+  },
+
+  { /* ---- NIGHT: a waltz, and the only theme not in 4/4 — six eighths to the
+         bar, oom-pah-pah bass, music box on top. The metre is the identity;
+         nothing else in the game is in three. */
+    id:'night', tempo:72, tempoUp:4, stepsPerBar:6, stepBeats:0.5, swing:0, mix:1.20,
+    lead:'musicbox', pad:'glass', bass:'round',
+    chords:[
+      { bass:45, pad:[57,60,64] },   // Am
+      { bass:41, pad:[57,60,65] },   // F
+      { bass:48, pad:[55,60,64] },   // C
+      { bass:40, pad:[56,59,64] },   // E7 — the G# is the whole colour
+    ],
+    leadP:[
+      '81 . 79 . 76 .',
+      '77 . 76 . 72 .',
+      '76 . 79 . 84 -',
+      '83 . 80 . 76 -',
+    ],
+    bassP:[
+      '45 . 52 . 52 .',
+      '41 . 48 . 48 .',
+      '48 . 55 . 55 .',
+      '40 . 47 . 47 .',
+    ],
+    drums:{ 'tom+':'x . . . . .' },
+  },
+
+  { /* ---- HELL: a circus, not a dirge. D harmonic minor — the augmented second
+         between Bb and C# is both the spooky interval and the funny one — over
+         an oompah bass and a tambourine that never stops. Goofy menace. */
+    id:'hell', tempo:126, tempoUp:8, stepsPerBar:8, stepBeats:0.5, swing:0, mix:1.45,
+    lead:'organ', pad:'reed', bass:'growl',
+    chords:[
+      { bass:38, pad:[57,62,65] },   // Dm
+      { bass:45, pad:[55,61,64] },   // A7
+      { bass:43, pad:[58,62,67] },   // Gm
+      { bass:45, pad:[55,61,64] },   // A7
+    ],
+    leadP:[
+      '74 . 77 . 81 -  79 77',
+      '76 . 79 . 85 -  81 79',
+      '82 . 81 . 79 -  77 79',
+      '81 . 85 . 81 .  76 74',
+    ],
+    bassP:[
+      '38 . 45 . 38 .  45 .',
+      '45 . 52 . 45 .  52 .',
+      '43 . 50 . 43 .  50 .',
+      '45 . 52 . 45 .  52 45',
+    ],
+    drums:{ kick:'x . . . x . . .', snare:'. . . x . . . x',
+            tamb:'. x . x . x . x', 'tom+':'. . x . . . x .' },
+  },
+];
+
+  let mTheme = THEMES_M[0];
+
+  /* --- lead voices ------------------------------------------------------
+     Two oscillators each: a body and one inharmonic partial, which is what
+     makes a struck or plucked thing sound struck or plucked. `decay` scales the
+     written note length, so the same phrase can ring (music box) or stay dry
+     and staccato (organ). */
   const VOICE = {
-    marimba: { type:'triangle', ratio:2.01, partial:0.30, decay:1.0 },
-    pluck:   { type:'sawtooth', ratio:1.50, partial:0.16, decay:0.7 },
-    bell:    { type:'sine',     ratio:3.01, partial:0.42, decay:1.7 },
+    marimba: { type:'triangle', ratio:2.01, partial:0.30, decay:1.10, atk:0.006, gain:0.100 },
+    kalimba: { type:'sine',     ratio:3.01, partial:0.34, decay:1.70, atk:0.008, gain:0.088 },
+    square:  { type:'square',   ratio:2.00, partial:0.08, decay:0.85, atk:0.004, gain:0.058, vib:5.5 },
+    musicbox:{ type:'sine',     ratio:4.02, partial:0.20, decay:2.20, atk:0.004, gain:0.078 },
+    organ:   { type:'sawtooth', ratio:1.50, partial:0.26, decay:0.60, atk:0.005, gain:0.088, lp:2400 },
   };
-  function marimba(freq, time, dur, gain){
-    const V = VOICE[mTheme.voice] || VOICE.marimba;
-    dur *= V.decay;
+  const PAD = {
+    warm:  { type:'sine',     lp:1800, gain:0.045 },
+    glass: { type:'triangle', lp:2600, gain:0.038 },
+    /* Hell's pad is a sawtooth, so its harmonics run high; at a 900Hz cutoff the
+       third harmonic of the A7 chord's C#4 landed on 831Hz — a semitone under
+       the melody's A5 — and buzzed loudly enough to bury the tune it was
+       supposed to sit under. Cut it well below the lead's register instead. */
+    /* Triangle, not sawtooth. A saw pad's third harmonic is a third of its
+       fundamental, and Hell's Dm is voiced on A3 — putting a strong 660Hz tone a
+       semitone under the melody's F5, measured at 2.4x the melody's own level.
+       A triangle's third harmonic is a ninth, ~10dB down, and the filter takes
+       the rest: the reedy darkness comes from the cutoff, not from the buzz. */
+    reed:  { type:'triangle', lp:520,  gain:0.030 },
+  };
+  const BASS = {
+    // `pluck` is how far the filter opens on the attack. A triangle can take a
+    // wide one (it has almost nothing up there to expose); a sawtooth cannot —
+    // at 2.2x Hell's bass swept to ~700Hz, and the 6th harmonic of its A2 sat a
+    // semitone under the melody's F5, buzzing over the tune every oompah.
+    round: { type:'triangle', lp:420, pluck:2.2, gain:0.160 },
+    /* 220Hz, not 300: at 300 the sixth harmonic of Hell's A2 oompah (110Hz x 6
+       = 660Hz) came through loud enough to sit under the melody's F5 a semitone
+       down and buzz against it. An oompah bass at 126bpm wants weight, not
+       harmonics — this rolls them off nearly 20dB and the tune comes forward. */
+    growl: { type:'sawtooth', lp:220, pluck:1.4, gain:0.150 },
+  };
+
+  function leadNote(n, time, dur, gain){
+    const V = VOICE[mTheme.lead] || VOICE.marimba;
+    const freq = MIDI(n);
+    dur = Math.max(0.08, dur) * V.decay;
     const o1 = ctx.createOscillator(), o2 = ctx.createOscillator();
     const g = ctx.createGain(), g2 = ctx.createGain();
     o1.type = V.type; o1.frequency.value = freq;
-    o2.type = 'sine'; o2.frequency.value = freq * V.ratio;
+    o2.type = 'sine';  o2.frequency.value = freq * V.ratio;
     g2.gain.value = V.partial;
+    let out = g;
+    if (V.lp){                              // the organ needs its edge taken off
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass'; lp.frequency.value = V.lp;
+      g.connect(lp); out = lp;
+    }
+    if (V.vib){                             // chiptune wobble, small and fast
+      const lfo = ctx.createOscillator(), lg = ctx.createGain();
+      lfo.frequency.value = V.vib; lg.gain.value = freq * 0.006;
+      lfo.connect(lg); lg.connect(o1.frequency);
+      lfo.start(time); lfo.stop(time + dur + 0.05);
+    }
     g.gain.setValueAtTime(0.0001, time);
-    g.gain.exponentialRampToValueAtTime(gain, time + 0.01);
+    g.gain.exponentialRampToValueAtTime(gain * V.gain / 0.1, time + V.atk);
     g.gain.exponentialRampToValueAtTime(0.0001, time + dur);
-    o1.connect(g); o2.connect(g2); g2.connect(g); g.connect(musicGain);
+    o1.connect(g); o2.connect(g2); g2.connect(g);
+    out.connect(musicBus);
     o1.start(time); o2.start(time);
     o1.stop(time + dur + 0.03); o2.stop(time + dur + 0.03);
   }
-  function padChord(notes, time, dur){
-    for (const n of notes){
-      const o = ctx.createOscillator(), g = ctx.createGain();
-      o.type = 'sine'; o.frequency.value = MIDI(n);
-      o.detune.value = (Math.random() - 0.5) * 10;
-      g.gain.setValueAtTime(0.0001, time);
-      g.gain.linearRampToValueAtTime(0.045, time + dur * 0.4);
-      g.gain.linearRampToValueAtTime(0.0001, time + dur);
-      o.connect(g); g.connect(musicGain);
-      o.start(time); o.stop(time + dur + 0.05);
+
+  function padChord(ns, time, dur){
+    const P = PAD[mTheme.pad] || PAD.warm;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass'; lp.frequency.value = P.lp;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, time);
+    g.gain.linearRampToValueAtTime(P.gain, time + dur * 0.35);
+    g.gain.linearRampToValueAtTime(0.0001, time + dur);
+    lp.connect(g); g.connect(musicBus);
+    for (const n of ns){
+      // a detuned pair per note: one oscillator per chord tone is a test tone,
+      // two beating against each other is a chord
+      for (const cents of [-5, 5]){
+        const o = ctx.createOscillator();
+        o.type = P.type; o.frequency.value = MIDI(n); o.detune.value = cents;
+        o.connect(lp);
+        o.start(time); o.stop(time + dur + 0.05);
+      }
     }
   }
+
   function bassNote(n, time, dur){
+    const B = BASS[mTheme.bass] || BASS.round;
     const o = ctx.createOscillator(), g = ctx.createGain(), lp = ctx.createBiquadFilter();
-    lp.type = 'lowpass'; lp.frequency.value = 420;
-    o.type = 'triangle'; o.frequency.value = MIDI(n);
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(B.lp * B.pluck, time);  // a little pluck in the filter
+    lp.frequency.exponentialRampToValueAtTime(B.lp, time + 0.09);
+    o.type = B.type; o.frequency.value = MIDI(n);
     g.gain.setValueAtTime(0.0001, time);
-    g.gain.exponentialRampToValueAtTime(0.16, time + 0.02);
-    g.gain.exponentialRampToValueAtTime(0.0001, time + dur);
-    o.connect(lp); lp.connect(g); g.connect(musicGain);
-    o.start(time); o.stop(time + dur + 0.03);
+    g.gain.exponentialRampToValueAtTime(B.gain, time + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, time + Math.max(0.12, dur));
+    o.connect(lp); lp.connect(g); g.connect(musicBus);
+    o.start(time); o.stop(time + dur + 0.05);
   }
-  function shaker(time){
-    const len = Math.floor(ctx.sampleRate * 0.05);
+
+  /* --- kit -------------------------------------------------------------- */
+  function mNoise(time, dur, gain, type, freq, q = 1){
+    const len = Math.max(1, Math.floor(ctx.sampleRate * dur));
     const buf = ctx.createBuffer(1, len, ctx.sampleRate);
     const d = buf.getChannelData(0);
-    for (let i = 0; i < len; i++) d[i] = (Math.random()*2 - 1) * (1 - i/len);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
     const src = ctx.createBufferSource(); src.buffer = buf;
-    const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 5200;
-    const g = ctx.createGain(); g.gain.value = 0.05;
-    src.connect(hp); hp.connect(g); g.connect(musicGain);
-    src.start(time); src.stop(time + 0.07);
+    const f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(gain, time);
+    g.gain.exponentialRampToValueAtTime(0.0001, time + dur);
+    src.connect(f); f.connect(g); g.connect(musicBus);
+    src.start(time); src.stop(time + dur + 0.02);
+  }
+  function mTone(time, dur, gain, f1, f2, type = 'sine'){
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(f1, time);
+    if (f2) o.frequency.exponentialRampToValueAtTime(f2, time + dur);
+    g.gain.setValueAtTime(0.0001, time);
+    g.gain.exponentialRampToValueAtTime(gain, time + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, time + dur);
+    o.connect(g); g.connect(musicBus);
+    o.start(time); o.stop(time + dur + 0.02);
+  }
+  const KIT = {
+    kick:  t => { mTone(t, 0.16, 0.30, 118, 46); mNoise(t, 0.03, 0.06, 'lowpass', 400); },
+    snare: t => { mNoise(t, 0.13, 0.13, 'bandpass', 1900, 0.8); mTone(t, 0.07, 0.07, 190, 140, 'triangle'); },
+    hat:   t => mNoise(t, 0.03, 0.045, 'highpass', 7200),
+    clap:  t => { for (let i = 0; i < 3; i++) mNoise(t + i * 0.011, 0.06, 0.075, 'bandpass', 1500, 0.7); },
+    shaker:t => mNoise(t, 0.045, 0.042, 'highpass', 5400),
+    tamb:  t => { mNoise(t, 0.045, 0.024, 'highpass', 5200); mTone(t, 0.05, 0.010, 5200, 0, 'sine'); },
+    tom:   t => mTone(t, 0.22, 0.13, 165, 92, 'sine'),
+    drip:  t => { mTone(t, 0.09, 0.055, 1500, 880); mNoise(t, 0.02, 0.012, 'highpass', 4000); },
+  };
+
+  // compile the written parts once, at load
+  for (const T of THEMES_M){
+    const spb = T.stepsPerBar;
+    T.leadAt = part(T.leadP, spb, T.id + ' lead');
+    T.bassAt = part(T.bassP, spb, T.id + ' bass');
+    T.loop = T.chords.length * spb;
+    /* Resolved once, at load: an instrument name, whether it is a fill layer,
+       and its bar. A trailing '+' marks a layer that only joins in the second
+       half of a biome. The name is checked against the kit HERE, because it
+       used to be looked up per hit — and a pattern keyed 'extra', with no
+       instrument of that name, threw on every fill hit from level 6 onward and
+       took the whole music scheduler down with it. */
+    T.hits = Object.keys(T.drums).map(k => {
+      const fillOnly = k.endsWith('+');
+      const inst = fillOnly ? k.slice(0, -1) : k;
+      if (!KIT[inst]) console.error(`[audio] ${T.id}: no kit instrument '${inst}'`);
+      return { inst, fillOnly, on: beats(T.drums[k], spb, `${T.id} ${k}`) };
+    });
   }
 
+  /* How far into a biome we are, 0 at its first level and 1 at its last. The
+     piece is identical either way; this only adds fill and a few bpm. */
+  function ramp(){
+    const span = typeof THEME_EVERY === 'number' ? THEME_EVERY : 10;
+    return Math.min(1, Math.max(0, ((intensity - 1) % span) / (span - 1)));
+  }
+  function tempoFor(T){ return Math.round(T.tempo + ramp() * T.tempoUp); }
+  function stepDur(){ return (60 / tempo) * mTheme.stepBeats; }
+
   function scheduleStep(s, time){
-    const PROG = mTheme.prog, PENT = mTheme.pent;
-    const ch = PROG[Math.floor(s / 8) % 4];
-    const beat = s % 8;
-    const bar = Math.floor(s / 8);
+    const T = mTheme, spb = T.stepsPerBar;
+    const beat = s % spb;
+    const ch = T.chords[Math.floor(s / spb) % T.chords.length];
+    const sd = stepDur();
+    const fill = ramp() >= 0.5;
 
-    if (mTheme.style === 'night'){
-      // Deliberately leave holes in the arrangement: one chord per bar,
-      // occasional bell notes, no shaker.
-      if (beat === 0) padChord(ch.pad, time, (60 / tempo) * 4 * 0.98);
-      if (beat === 0 && bar % 2 === 0) bassNote(ch.bass, time, 0.75);
-      if (beat === 2 && bar % 2 === 1) bassNote(ch.bass + 12, time, 0.32);
-      if (beat === 3 && Math.random() < 0.55){
-        const n = PENT[(Math.random() * PENT.length) | 0];
-        marimba(MIDI(n), time, 0.95, 0.075);
-      }
-      return;
+    // swing: hold the odd eighths back a fraction of a step
+    if (T.swing && beat % 2 === 1) time += sd * T.swing;
+
+    if (beat === 0) padChord(ch.pad, time, sd * spb * 0.96);
+
+    const b = T.bassAt[s];
+    if (b) bassNote(b.n, time, sd * b.len * 0.92);
+
+    const l = T.leadAt[s];
+    if (l){
+      leadNote(l.n, time, sd * l.len, 0.1);
+      // the top octave joins for the last stretch of a biome, quietly — the
+      // phrase is unchanged, it just gains a sparkle
+      if (fill && ramp() >= 0.8) leadNote(l.n + 12, time + 0.012, sd * l.len * 0.6, 0.028);
     }
 
-    if (beat === 0) padChord(ch.pad, time, (60 / tempo) * 4 * 0.92);
-    if (beat === 0 || beat === 4) bassNote(ch.bass, time, mTheme.style === 'hell' ? 0.55 : 0.45);
-    if (beat === 6 && intensity >= 2) bassNote(ch.bass + (mTheme.style === 'hell' ? 1 : 7), time, 0.22);
-
-    let chance = 0.30 + Math.min(0.32, intensity * 0.05);
-    if (mTheme.style === 'pond') chance *= 0.68;
-    if (mTheme.style === 'candy') chance = Math.min(0.78, chance + 0.22);
-    if (mTheme.style === 'hell') chance = Math.min(0.64, chance + 0.12);
-
-    if (Math.random() < chance){
-      const n = PENT[(Math.random() * PENT.length) | 0];
-      const dur = mTheme.style === 'pond' ? 0.85 : (mTheme.style === 'candy' ? 0.34 : 0.55);
-      const gain = mTheme.style === 'hell' ? 0.085 : 0.10;
-      marimba(MIDI(n), time, dur, gain);
-      if (mTheme.style === 'candy' && Math.random() < 0.45)
-        marimba(MIDI(n + 12), time + 0.08, 0.24, 0.05);
-      if (mTheme.style === 'pond' && Math.random() < 0.35)
-        marimba(MIDI(n + 7), time + 0.16, 0.65, 0.035);
+    for (const h of T.hits){
+      if (h.fillOnly && !fill) continue;
+      if (h.on[beat]) KIT[h.inst](time);
     }
-    if (mTheme.style === 'hell' && intensity >= 2 && beat % 2 === 1) shaker(time);
-    if (mTheme.style !== 'pond' && mTheme.style !== 'hell' && intensity >= 3 && beat % 2 === 1) shaker(time);
   }
 
   function musicTick(){
     if (!ctx || !musicGain) return;
-    const eighth = 60 / tempo / 2;
+    const sd = stepDur();
     // if the tab was throttled, resync instead of dumping a burst of notes
     if (nextNote < ctx.currentTime - 0.4) nextNote = ctx.currentTime + 0.05;
     while (nextNote < ctx.currentTime + 0.15){
       if (!muted) scheduleStep(step, Math.max(nextNote, ctx.currentTime + 0.02));
-      nextNote += eighth;
-      step = (step + 1) % 32;
+      nextNote += sd;
+      step = (step + 1) % mTheme.loop;
     }
   }
 
@@ -196,21 +469,85 @@ const Audio = (() => {
     startMusic(){
       init(); if (!ctx) return;
       resume();
-      if (!musicGain){ musicGain = ctx.createGain(); musicGain.gain.value = 0.55; musicGain.connect(master); }
+      if (!musicGain){
+        musicGain = ctx.createGain(); musicGain.gain.value = 0.55; musicGain.connect(master);
+        musicBus = ctx.createGain(); musicBus.connect(musicGain);
+      }
+      musicBus.gain.value = mTheme.mix;
       if (musicTimer) return;
       nextNote = ctx.currentTime + 0.12; step = 0;
       musicTimer = setInterval(musicTick, 25);
     },
     stopMusic(){ if (musicTimer){ clearInterval(musicTimer); musicTimer = null; } },
-    setMusicLevel(l){ intensity = l; tempo = Math.min(124, mTheme.tempoBase + l * 1.5); },
+    setMusicLevel(l){ intensity = l; tempo = tempoFor(mTheme); },
     setMusicTheme(i){
-      const next = MUSIC_THEMES[Math.min(MUSIC_THEMES.length - 1, Math.max(0, i))];
+      const next = THEMES_M[Math.min(THEMES_M.length - 1, Math.max(0, i))];
       if (next === mTheme) return;
       mTheme = next;
-      step = 0;                       // restart the loop on the new progression
-      tempo = Math.min(124, mTheme.tempoBase + intensity * 1.5);
+      step = 0;                       // every piece starts from its own bar one
+      tempo = tempoFor(next);
+      if (musicBus) musicBus.gain.value = next.mix;
     },
     duck(v){ if (musicGain) musicGain.gain.value = v; },
+
+    /* The compiled themes, for tools/music.js: what note is written where, so a
+       checker can verify the music as WRITTEN (scale membership, whether a
+       melody note fights the chord under it) rather than trying to infer notes
+       back out of a rendered mix — where a square wave's seventh harmonic reads
+       as an out-of-key pitch and the kick's downward sweep reads as a bass
+       note. Measure the audio for level and timing; check the data for notes. */
+    musicData(){
+      return THEMES_M.map(T => ({
+        id:T.id, tempo:T.tempo, tempoUp:T.tempoUp, mix:T.mix,
+        stepsPerBar:T.stepsPerBar, stepBeats:T.stepBeats, swing:T.swing, loop:T.loop,
+        lead:T.lead, pad:T.pad, bass:T.bass,
+        // how long a lead note actually rings, as a multiple of its written
+        // length — the organ is staccato, the music box is not, and a checker
+        // measuring the pitch has to look while the note is still sounding
+        leadDecay:(VOICE[T.lead] || VOICE.marimba).decay,
+        chords:T.chords.map(c => ({ bass:c.bass, pad:c.pad.slice() })),
+        leadAt:T.leadAt.map(e => e && { n:e.n, len:e.len }),
+        bassAt:T.bassAt.map(e => e && { n:e.n, len:e.len }),
+        drums:T.hits.map(h => h.inst + (h.fillOnly ? '+' : '')),
+        kit:Object.keys(KIT),
+      }));
+    },
+
+    /* Offline render of one theme, for tools/music.js. Music is the one part of
+       this game that cannot be checked by looking at it, and it is written as
+       data — so this exists to render that data and measure it, and to hand a
+       WAV to a human, which is the only real test of whether a tune is any
+       good. Uses a private OfflineAudioContext; do not call it mid-run, since
+       it borrows the module's context while it renders. */
+    async renderTheme({ theme = 0, seconds = 24, level = 1, rate = 44100 } = {}){
+      const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+      if (!OAC) return null;
+      const save = { ctx, master, musicGain, musicBus, mTheme, tempo, intensity, step, muted };
+      const off = new OAC(1, Math.ceil(rate * seconds), rate);
+      ctx = off;
+      master = off.createGain(); master.gain.value = 0.32;
+      const comp = off.createDynamicsCompressor();
+      comp.threshold.value = -14; comp.ratio.value = 6; comp.attack.value = 0.003;
+      master.connect(comp); comp.connect(off.destination);
+      musicGain = off.createGain(); musicGain.gain.value = 0.55; musicGain.connect(master);
+      musicBus = off.createGain(); musicBus.connect(musicGain);
+      muted = false;
+      mTheme = THEMES_M[Math.min(THEMES_M.length - 1, Math.max(0, theme))];
+      musicBus.gain.value = mTheme.mix;
+      intensity = level; tempo = tempoFor(mTheme); step = 0;
+      // captured before the restore below: tempo rises with the level, and a
+      // caller told the resting tempo would analyse the render on the wrong grid
+      const used = tempo;
+      for (let t = 0.05; t < seconds; t += stepDur()){
+        scheduleStep(step, t);
+        step = (step + 1) % mTheme.loop;
+      }
+      const buf = await off.startRendering();
+      const pcm = Array.from(buf.getChannelData(0));
+      ({ ctx, master, musicGain, musicBus, mTheme, tempo, intensity, step, muted } = save);
+      return { pcm, rate, tempo: used, id: THEMES_M[theme].id,
+               loop: THEMES_M[theme].loop, stepsPerBar: THEMES_M[theme].stepsPerBar };
+    },
     toggleMute(){ muted = !muted; if (!muted) { resume(); tone({freq:660, dur:0.09, gain:0.3, type:'triangle'}); } return muted; },
 
     burger(combo){
