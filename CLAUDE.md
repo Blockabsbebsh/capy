@@ -40,7 +40,7 @@ Load order, which is also roughly the dependency order:
 | File | Holds |
 |---|---|
 | `config.js` | Tuning constants, `TYPES`, `POWERS`, `UPGRADES`, `THEMES`, `TOUCH`, `REDUCED` |
-| `audio.js` | The `Audio` IIFE — synth primitives, procedural music, every SFX |
+| `audio.js` | The `Audio` IIFE — synth primitives, the five written themes, every SFX |
 | `scene.js` | Renderer, scene, sky texture + `skyBand`/`refreshSky`, camera + `fitCamera`, lights |
 | `materials.js` | `M()` helper and the flat `mat` library |
 | `theme.js` | `curTheme`, the theme colour lerp (`applyTheme`/`updateThemeMix`) |
@@ -74,6 +74,7 @@ No test suite. Verify in a real browser — `tools/shoot.js` wraps it:
 npm i playwright-core          # not committed; chromium is preinstalled
 python3 -m http.server 8765 &
 node tools/shoot.js --check                  # assertions, non-zero on failure
+node tools/music.js --wav                    # check the five themes, write WAVs
 node tools/shoot.js --fmt                    # autopilot-walks every shape + feast route
 node tools/shoot.js --biome hell,night       # screenshot biomes
 node tools/shoot.js --capy                   # capybara turnaround
@@ -96,6 +97,30 @@ Headless rendering runs at ~5fps under swiftshader, and `animate()` clamps
 `dt`, so wall-clock timing tests are meaningless. For anything about rates,
 physics or balance, drive `updateCapybara`/`updateItems`/`updateFormations`
 directly at a fixed `1/60` step instead of waiting on real time.
+
+## Music
+
+- **Each biome is a written piece, not a reskin.** Parts are data — one string
+  per bar, one token per step (`74` a note, `-` a hold, `.` a rest) — and the
+  melody is a phrase that repeats. It used to pick notes at random from a
+  pentatonic pool every eighth, which is why it never sounded like a tune.
+- **Level fills a piece in; it never rewrites it.** Tempo creeps up over the ten
+  levels of a biome, and `+`-suffixed drum layers join at the halfway point.
+- **Verify music twice, each way for what it can tell you.** `tools/music.js`
+  checks the *data* symbolically (in key, in register, no sustained semitone
+  clash with the chord) and the *rendered audio* for clipping, per-theme loudness
+  and — via a Goertzel filter at the expected fundamental — that the written note
+  really sounds at the written time. Do not try to read pitches back out of a
+  mix: a square wave's 7th harmonic and the kick's downward sweep both read as
+  notes that were never written.
+- **A bright pad will bury the tune.** Every "wrong note" that harness has ever
+  flagged was a mix problem, not a data problem: a sawtooth pad's third harmonic
+  landing a semitone under the melody (Hell, measured at 2.4x the melody's own
+  level), and a saw bass whose filter opened to 700Hz. Pads and basses are dark
+  on purpose — the lead is the only thing allowed to be bright.
+- **Run `--level 6` or higher as well as the default.** The fill layers only
+  exist above the halfway ramp, and a drum pattern keyed to a name with no
+  instrument behind it threw on every fill hit — silently fine at level 1.
 
 ## Gameplay rules
 
