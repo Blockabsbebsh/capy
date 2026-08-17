@@ -117,7 +117,12 @@ function buildPath(pts, colour){
 
 /* How much of top speed a player is expected to need between beats. Low is
    generous — lots of slack in every step — and it tightens with level. */
-const fmtReach = () => Math.min(0.86, 0.5 + game.level * 0.018);
+/* Capped at 0.78, not 0.86. An autopilot clears 0.86 fine because it knows the
+   landing spot the instant the beat spawns and never second-guesses; a person
+   reads the ribbon, decides, and starts moving. Leaving at least a fifth of
+   every step as slack is what keeps a route clearable by someone reacting
+   rather than someone precomputing. */
+const fmtReach = () => Math.min(0.78, 0.5 + game.level * 0.018);
 const fmtSpeed = () => (12.2 + game.level * 0.16) * game.up.speed;
 
 /* Time to allow for a step of `d` units. Dividing by `reach` is the slack:
@@ -251,7 +256,21 @@ function updateFormations(dt){
     fmt.strayTimer = game.strayEvery * (0.7 + Math.random() * 0.7);
   }
 
-  if (fmt.queue.length) return;
+  /* One route at a time. Two overlapping shapes are not twice the challenge,
+     they are an unreadable mess — the whole point is that you can see the
+     route and plan it, and you cannot plan two at once. A formation stays
+     live until its last beat has been caught or hit the ground, so the pause
+     below starts from the moment the arena is actually clear.
+
+     The age check is a safety valve: `live` is what gates emission, so a
+     record that somehow never resolved would wedge the director permanently
+     and the game would simply stop dropping food. */
+  for (const rec of fmt.live.values()){
+    rec.age = (rec.age || 0) + dt;
+    if (rec.age > 14){ disposePath(rec); fmt.live.delete(rec.fid); }
+  }
+  if (fmt.queue.length || fmt.live.size) return;
+
   fmt.gap -= dt;
   if (fmt.gap <= 0){
     emitFormation();
