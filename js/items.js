@@ -139,7 +139,7 @@ function onCatch(it){
     burst(p, 30, PAL.heart, { spread:5.4, up:5.6, size:0.13, life:1.0 });
     flash('#ff8fae', 0.24);
     squashPose(1.24, 0.76, 1.2);
-    capyState.hopV = 7.0;
+    popUp(7.0);
     capyState.chew = 0.5;
     removeItem(it);
     refreshHUD();
@@ -151,7 +151,7 @@ function onCatch(it){
     activatePower(def.power, p);
     if (game.combo > 0) game.comboTime = game.comboMax;   // catching one keeps the combo alive
     squashPose(1.2, 0.78, 1.16);
-    capyState.hopV = 6.4;
+    popUp(6.4);
     capyState.chew = 0.4;
     removeItem(it);
     refreshHUD();
@@ -176,19 +176,19 @@ function onCatch(it){
       burst(p, 16, PAL.burger, { spread:4.2, up:4.4, size:0.11, life:0.7 });
       popup(p, '+' + gained, '#ffd77a');
       squashPose(1.28, 0.7, 1.22);
-      capyState.hopV = 5.6;
+      popUp(5.6);
     } else {
       Audio.melon(game.combo);
       burst(p, 30, PAL.watermelon, { spread:6.4, up:6.2, size:0.14, life:0.9 });
       popup(p, '+' + gained + '!', '#ff8098');
       squashPose(1.38, 0.62, 1.32);
-      capyState.hopV = 8.2;
+      popUp(8.2);
     }
     if (dashCatch){
       popup(p.clone().add(new THREE.Vector3(0, 0.85, 0)), 'DASH SNACK ×2', '#9fe07a');
       burst(p, 10, PAL.dust, { spread:3.4, up:1.6, size:0.08, life:0.45 });
       Audio.levelUp();
-      capyState.hopV = Math.max(capyState.hopV, 6.2);   // a little extra hang time
+      popUp(6.2);   // a little extra hang time
     }
     checkHatUnlocks();
     // shout only on the catch that actually stepped the multiplier up
@@ -210,7 +210,7 @@ function onCatch(it){
       burst(p, 26, PAL.chili, { spread:6, up:5.4, size:0.13, life:0.8 });
       popup(p, 'SPICY! -1 ♥', '#ff6b5a');
       squashPose(0.72, 1.42, 0.72);
-      capyState.hopV = 9.5;
+      popUp(9.5);
     } else {
       // soap doesn't quietly drain points any more — it makes you skid, which
       // you can actually feel (and which is far more dangerous near a sinkhole)
