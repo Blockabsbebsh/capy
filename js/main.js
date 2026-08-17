@@ -197,7 +197,6 @@ try { savedHat = localStorage.getItem('capyHat') || 'none'; } catch(e){}
 const savedDef = HATS.find(h => h.id === savedHat);
 setHat(savedDef && hatUnlocked(savedDef) ? savedHat : 'none');
 renderHatPicker();
-renderControlPicker();
 renderLives();
 refreshHUD();
 document.getElementById('loading').remove();
