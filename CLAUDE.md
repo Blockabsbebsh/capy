@@ -58,9 +58,10 @@ Load order, which is also roughly the dependency order:
 | `powers.js` | Shield bubble, magnet/slowmo/shield activation |
 | `hud.js` | `$`, `ui`, HUD rendering, `popup`, `showBanner`, `flash` |
 | `player.js` | `capyState`, `updateCapybara` physics, `tryDash`, `popUp` |
-| `input.js` | Keyboard, pointer drag, virtual thumbstick |
+| `perks.js` | Perk mechanics: dash shockwave, ghosts, reach aura, sweep, hazard wipe |
+| `input.js` | Keyboard, both pointer schemes (`CTRL`), virtual thumbstick |
 | `events.js` | Set-piece director (missiles / feast / sinkholes) |
-| `upgrades.js` | The every-5-levels perk draft |
+| `upgrades.js` | The every-10-levels perk draft, ordinary + one-per-run |
 | `gameflow.js` | `startGame`, pause/menu/`endGame`, button wiring |
 | `dev.js` | `?dev=1` level switcher. Deletable in one piece. |
 | `main.js` | `clock`, `animate()`, `onResize`, boot |
@@ -73,10 +74,20 @@ No test suite. Verify in a real browser — `tools/shoot.js` wraps it:
 npm i playwright-core          # not committed; chromium is preinstalled
 python3 -m http.server 8765 &
 node tools/shoot.js --check                  # assertions, non-zero on failure
+node tools/shoot.js --fmt                    # autopilot-walks every shape + feast route
 node tools/shoot.js --biome hell,night       # screenshot biomes
 node tools/shoot.js --capy                   # capybara turnaround
 node tools/shoot.js --play                   # menu + gameplay + hat fit
 ```
+
+`--fmt` is the clearability proof: every shape at its unlock level, at level 24
+(where `fmtReach` tops out) and again under Sticky Feet, plus every feast route.
+Run it after touching a shape, `stepTime`, movement, or anything that scales
+speed. Its autopilot reads `rec.pts` — the ribbon — not spawned items: a
+react-only autopilot has one fall of lead time and fails shapes that are
+legitimately given more, and it must dash only when walking cannot cover the
+step (with distance and time floors, or it dashes off a beat already underfoot
+and you are measuring a bad player).
 
 Screenshots land in `.shots/` (gitignored). **Read them back** — visual work
 cannot be verified any other way.
@@ -89,11 +100,19 @@ directly at a fixed `1/60` step instead of waiting on real time.
 ## Gameplay rules
 
 - **Movement is a velocity-target model, not an accelerator.** Every input path
-  (keys, drag, thumbstick) answers one question — what velocity does the player
-  want — and `updateCapybara` eases toward it with separate time constants for
-  opening up, braking and turning (`MOVE_T_*`). Do not reintroduce a friction
-  multiplier or a top-speed clamp; the easing cannot overshoot, and the only
-  thing above `SPEED` is the dash.
+  (keys, follow-drag, thumbstick, offset-drag) answers one question — what
+  velocity does the player want — and `updateCapybara` eases toward it with
+  separate time constants for opening up, braking and turning (`MOVE_T_*`). Do
+  not reintroduce a friction multiplier or a top-speed clamp; the easing cannot
+  overshoot, and the only thing above `SPEED` is the dash.
+- **A new pointer scheme is a new answer to that question, nothing more.** The
+  offset drag feeds `capyState.stickX/stickZ`, the thumbstick's channel, so
+  `updateCapybara` and `tryDash` know nothing about it. `CTRL` is checked inside
+  the handlers, never at registration — it changes at runtime from the menu.
+- **`game.up.speed` is the only thing that scales movement.** Sticky Feet halves
+  it, and `fmtSpeed` reads the same field, which is what keeps routes walkable at
+  half speed. Anything that changes how fast the capybara moves goes here, or
+  formations will be timed against a speed the player does not have.
 - **Anything chasing a moving target wants velocity, not acceleration.** As
   acceleration it is an undamped spring: the pointer path rang around the
   cursor, and the magnet orbited food past the capybara instead of delivering
@@ -109,9 +128,15 @@ directly at a fixed `1/60` step instead of waiting on real time.
 - **Every formation is provably clearable.** `stepTime()` computes each gap
   from the distance and the capybara's speed; gaps are never hand-authored.
   Difficulty raises `fmtReach` and shortens `fmtGap` — **not** fall speed,
-  which caps at `FALL_CAP`. Verify new shapes with an autopilot sweep, and have
-  it dash only when walking cannot cover the step, or you are testing a bad
-  player rather than a hard shape.
+  which caps at `FALL_CAP`. Verify new shapes with `--fmt` (above).
+- **A `dash` beat must fall back to walking time when the player has no dash.**
+  Dash timing is *shorter* than the walk, so a dash-gated beat is the one thing
+  Sticky Feet could make literally unclearable rather than merely slower — hence
+  the `!game.run.sticky` in `emitFormation`.
+- **`updateItems` iterates a snapshot and skips `it.gone`.** One resolution can
+  now remove several items — catching a power-up with Overcharged wipes every
+  hazard in the air — and a live reverse index over a shrinking array reads past
+  its end as soon as something below the cursor disappears.
 - **Only one route is live at a time.** `fmt.live.size` gates emission; two
   overlapping routes are unreadable, not twice the challenge. That gate means a
   record that never resolves would wedge the director and stop food entirely,
@@ -137,6 +162,11 @@ directly at a fixed `1/60` step instead of waiting on real time.
   `outsidePatch`.
 - `clearThemeFX` disposes everything it walks. Module-level shared geometry and
   materials must set `userData.shared = true`.
+- **Ghosts are clones of one template**, so they share its geometry and material:
+  removing one must not dispose anything it walks, and per-ghost fading is
+  impossible — the wind-down is scale. The ghost material is *shaded* and writes
+  depth on purpose; flat and depth-writeless, the capybara rendered as a cluster
+  of soap bubbles.
 - Tiled canvas textures must be genuinely periodic: a full-width curve is not,
   unless its height *and slope* match at both edges, and band spacing must
   divide the tile height exactly.

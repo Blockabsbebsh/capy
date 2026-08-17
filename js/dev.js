@@ -3,12 +3,13 @@
    Toggle with DEV_MODE below, or by adding ?dev=1 to the URL.
    ======================================================================= */
 const DEV_MODE = /[?&]dev=1\b/.test(location.search);
+// one biome every THEME_EVERY levels — see themeFor
 const DEV_LEVELS = [
   { level:1,  label:'1 · Meadow' },
-  { level:6,  label:'6 · Pond' },
-  { level:11, label:'11 · Candy' },
-  { level:16, label:'16 · Night' },
-  { level:21, label:'21 · Hell' },
+  { level:11, label:'11 · Pond' },
+  { level:21, label:'21 · Candy' },
+  { level:31, label:'31 · Night' },
+  { level:41, label:'41 · Hell' },
 ];
 function jumpToLevel(n){
   if (game.state === 'menu') startGame();

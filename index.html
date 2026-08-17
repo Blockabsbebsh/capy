@@ -41,6 +41,11 @@
     box-shadow:0 24px 60px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.12);
     padding:26px 28px 24px;
     text-align:center;
+    /* the start card carries a legend, two pickers and the key list — on a
+       short viewport (a laptop in a small window, a phone in landscape) that
+       is taller than the screen, and without this the START button is simply
+       off the bottom edge with no way to reach it */
+    max-height:92vh; overflow-y:auto;
   }
   h1{
     margin:0 0 2px; font-size:clamp(28px,6.4vw,46px); line-height:1.05;
@@ -106,6 +111,11 @@
   .heart{color:#ff6b7a; text-shadow:0 0 12px rgba(255,90,110,.6), 0 2px 3px rgba(0,0,0,.6); transition:transform .2s ease, opacity .3s ease;}
   .heart.lost{color:#4a3a33; opacity:.45; transform:scale(.75); text-shadow:none;}
   .heart.pop{animation:heartPop .45s ease;}
+  /* the "and n more" tally past five hearts — Puzzler can bank a lot of them */
+  .lifeplus{
+    align-self:center; font-size:clamp(13px,3vw,16px); font-weight:bold; color:#ff9fae;
+    letter-spacing:.5px; text-shadow:0 2px 3px rgba(0,0,0,.6);
+  }
   @keyframes heartPop{0%{transform:scale(1)}30%{transform:scale(1.6) rotate(-12deg)}100%{transform:scale(.75)}}
 
   #comboWrap{
@@ -250,6 +260,21 @@
   .upcard span{display:block; font-size:12px; opacity:.78; font-weight:normal; margin-top:2px; letter-spacing:.2px;}
   .upcard i{font-style:normal; font-size:26px; flex:0 0 auto; line-height:1;}
   .upcard u{display:block; font-size:10px; letter-spacing:1.5px; opacity:.6; text-decoration:none; margin-top:3px;}
+  /* one-per-run perks: gold, and lit, so a run-changing pick never reads as
+     one more +0.22 */
+  .upcard.gold{
+    border-color:#ffd15c;
+    background:linear-gradient(180deg, rgba(255,209,92,.26), rgba(184,124,26,.14));
+    box-shadow:0 3px 0 rgba(0,0,0,.3), 0 0 22px rgba(255,196,74,.35), inset 0 0 18px rgba(255,214,120,.16);
+    animation:goldGlow 2.2s ease-in-out infinite alternate;
+  }
+  .upcard.gold:hover{border-color:#fff0c0; background:linear-gradient(180deg, rgba(255,224,140,.34), rgba(200,140,30,.2));}
+  .upcard.gold b{color:#ffe9a8; text-shadow:0 0 14px rgba(255,200,90,.6);}
+  .upcard.gold u{opacity:.85; color:#ffd98a;}
+  @keyframes goldGlow{
+    from{box-shadow:0 3px 0 rgba(0,0,0,.3), 0 0 14px rgba(255,196,74,.25), inset 0 0 14px rgba(255,214,120,.12);}
+    to  {box-shadow:0 3px 0 rgba(0,0,0,.3), 0 0 30px rgba(255,196,74,.5),  inset 0 0 22px rgba(255,214,120,.22);}
+  }
 
   /* ---------- touch controls ---------- */
   .touch-only{display:none;}
@@ -276,6 +301,31 @@
   }
   #btnDash{position:relative; z-index:11;}
 
+  /* ---------- input-offset indicator ----------
+     Ring at the press point, knob at the current offset, and a dot marking the
+     origin so the gesture reads as "how far from there" rather than "where".
+     Not .touch-only: this scheme is available on desktop too. */
+  #dragPad{
+    position:fixed; z-index:11; left:0; top:0; width:200px; height:200px;
+    transform:translate(-50%,-50%); border-radius:50%;
+    background:radial-gradient(circle at 50% 50%, rgba(255,246,230,.07), rgba(0,0,0,.20));
+    border:2px dashed rgba(255,205,140,.34);
+    pointer-events:none; opacity:0; transition:opacity .14s ease;
+  }
+  #dragPad.on{opacity:1;}
+  #dragPad::after{
+    content:''; position:absolute; left:50%; top:50%; width:10px; height:10px;
+    margin:-5px 0 0 -5px; border-radius:50%; background:rgba(255,225,168,.55);
+  }
+  #dragKnob{
+    position:absolute; left:50%; top:50%; width:56px; height:56px; margin:-28px 0 0 -28px;
+    border-radius:50%; background:linear-gradient(180deg,#ffd07a,#ffab3d);
+    box-shadow:0 4px 12px rgba(0,0,0,.45), inset 0 2px 0 rgba(255,255,255,.35);
+  }
+  /* in the offset scheme the thumbstick zone must not swallow the press */
+  body.ctrl-offset #stickZone{pointer-events:none !important;}
+  body.ctrl-offset #stick{display:none;}
+
   /* ---------- narrow screens (phones in portrait) ----------
      Keep the legend in 2 columns even here — stacking it into one tall
      column was pushing the start button off-screen. Just shrink the type. */
@@ -301,6 +351,7 @@
     .newbest{animation:none;}
     #comboBar.urgent{animation:none;}
     #levelBadge.bump{animation:none;}
+    .upcard.gold{animation:none;}
     button:active, #btnMute:active, #btnPause:active, #btnDash:active, .upcard:active{transform:none;}
   }
 </style>
@@ -365,6 +416,11 @@
 <div id="stickZone" class="touch-only"></div>
 <div id="stick" class="touch-only"><div id="stickKnob"></div></div>
 
+<!-- input-offset indicator: a ring drawn at the point you pressed, with a knob
+     showing the current offset. Sized in JS (see offsetRadius) so the gesture
+     is the same physical size on a phone as on a desktop. -->
+<div id="dragPad"><div id="dragKnob"></div></div>
+
 <!-- ============ START ============ -->
 <div class="panel" id="startPanel">
   <div class="card">
@@ -383,6 +439,9 @@
     </p>
     <div class="label" style="margin-top:12px">Headwear</div>
     <div id="hatPicker"></div>
+    <!-- two pointer schemes: walk-to-cursor / thumbstick, or relative drag -->
+    <div class="label" style="margin-top:10px">Steering</div>
+    <div id="ctrlPicker"></div>
     <div class="keys">
       <span><kbd>A</kbd><kbd>D</kbd> / <kbd>&larr;</kbd><kbd>&rarr;</kbd> strafe</span>
       <span><kbd>W</kbd><kbd>S</kbd> depth</span>
@@ -452,6 +511,7 @@
 <script src="js/powers.js"></script>
 <script src="js/hud.js"></script>
 <script src="js/player.js"></script>
+<script src="js/perks.js"></script>
 <script src="js/input.js"></script>
 <script src="js/events.js"></script>
 <script src="js/formations.js"></script>
