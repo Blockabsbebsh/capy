@@ -33,6 +33,7 @@ function startGame(){
   clearItems();
   clearHoles();
   clearStack();
+  clearPerkFX();
   resetEvents();
   resetFormations();
   resetCapy();
@@ -66,12 +67,14 @@ function toMenu(){
   clearItems();
   clearHoles();
   clearStack();
+  clearPerkFX();
   resetEvents();
   resetFormations();
   resetCapy();
   game.power = null; game.shield = false; game.timeScale = 1;
   shieldBubble.visible = false;
   renderHatPicker();
+  renderControlPicker();
   ui.hud.classList.remove('on');
   showPanel(ui.startPanel);
 }
@@ -79,6 +82,7 @@ function endGame(reason){
   game.state = 'over';
   Audio.stopMusic();
   Audio.over();
+  clearPerkFX();          // the aura and any live ghosts are gameplay, not scenery
   checkHatUnlocks();
   const isBest = game.score > game.best;
   if (isBest){
@@ -93,6 +97,7 @@ function endGame(reason){
   ui.overSub.textContent =
     reason === 'spicy' ? 'Too many chili peppers. The capybara needs a soak.' :
     reason === 'hole'  ? 'Swallowed by a sinkhole. Look before you snack.' :
+    reason === 'route' ? 'One route too many left on the floor.' :
                          'The capybara is out of snack stamina.';
   showPanel(ui.overPanel);
   ui.hud.classList.remove('on');
