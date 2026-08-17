@@ -155,10 +155,10 @@ function onCatch(it){
     capyState.chew = 0.55;
     Audio.chew();
     const mult = multiplier();
-    // snagging it out of the air is the skill play, so it pays extra
-    const air = capyState.hopY > AIR_CATCH_Y;
+    // taking it on the dash is the skill play, so it pays double
+    const dashCatch = capyState.dashT > 0;
     const melonBonus = it.type === 'watermelon' ? game.up.melon : 1;
-    const gained = Math.round(def.points * mult * melonBonus * (air ? AIR_BONUS : 1));
+    const gained = Math.round(def.points * mult * melonBonus * (dashCatch ? DASH_BONUS : 1));
     game.score += gained;
 
     if (it.type === 'burger'){
@@ -174,9 +174,9 @@ function onCatch(it){
       squashPose(1.38, 0.62, 1.32);
       capyState.hopV = 8.2;
     }
-    if (air){
-      popup(p.clone().add(new THREE.Vector3(0, 0.85, 0)), 'AIR SNACK ×1.5', '#9fe07a');
-      burst(p, 8, PAL.dust, { spread:3.4, up:1.6, size:0.08, life:0.45 });
+    if (dashCatch){
+      popup(p.clone().add(new THREE.Vector3(0, 0.85, 0)), 'DASH SNACK ×2', '#9fe07a');
+      burst(p, 10, PAL.dust, { spread:3.4, up:1.6, size:0.08, life:0.45 });
       Audio.levelUp();
       capyState.hopV = Math.max(capyState.hopV, 6.2);   // a little extra hang time
     }
@@ -366,7 +366,7 @@ function updateItems(dt){
     if (!it.dead && canHit && m.position.y <= CATCH_Y && m.position.y > -0.3){
       const dx = m.position.x - capPos.x;
       const dz = m.position.z - capPos.z;
-      const reach = catchReach() + it.def.radius + (capyState.hopY > 0.3 ? 0.2 : 0);
+      const reach = catchReach() + it.def.radius + (capyState.dashT > 0 ? DASH_REACH : 0);
       if (dx*dx + dz*dz < reach*reach){
         onCatch(it);
         continue;

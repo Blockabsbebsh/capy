@@ -226,6 +226,20 @@ be verified any other way.
   weighting by them paints a boot half way up the hind shins while catching 5-9
   vertices per front foot, which is invisible. `paint()` masks by height
   instead; every foot is planted at y = 0 after grounding.
+- Movement is a **velocity-target** model, not an accelerator. Every input path
+  (keys, pointer drag, thumbstick) answers one question — what velocity does
+  the player want — and `updateCapybara` eases toward it with a different time
+  constant for opening up, braking and turning (`MOVE_T_*` in `config.js`).
+  Do not reintroduce a friction multiplier or a top-speed clamp: the easing
+  cannot overshoot its target, and the only thing above `SPEED` is the dash.
+  Driving the pointer path through *acceleration* instead is what made it a
+  near-undamped spring that rang eight times around the cursor.
+- The **hop still exists but is not an input.** `tryDash` replaced `tryJump`;
+  catches, respawns and shield bounces still set `hopV`, so all the pop and
+  squash juice runs as before. Anything keyed off "airborne" for gameplay
+  (the old `AIR_BONUS`, the catch-reach bonus, sinkhole immunity) is keyed off
+  `dashT` now — keying it off `hopY` again would hand out the bonus for free
+  on the arc of the previous catch.
 - Hell's arena slab is **not** raised — the lava field around it is lowered.
   `patch` sits at the same height in every biome; for `hell` the background
   `ground` disc drops by `HELL_LAVA_DROP` and `hellSkirt` fills the step, so

@@ -19,6 +19,9 @@ const capyState = {
   slipSpin: 0,
   stickX: 0, stickZ: 0, // analog thumbstick axes (touch)
   pvx: 0, pvz: 0,       // previous velocity, for stack-driving acceleration
+  dashT: 0, dashCD: 0,  // seconds of burst left, then seconds until the next one
+  dashDX: 0, dashDZ: 0, // unit direction the current dash is committed to
+  faceX: 0, faceZ: -1,  // last direction actually travelled, for a standing dash
 };
 
 // rest positions of the two pieces the chew animation drives — these track
@@ -34,19 +37,45 @@ function resetCapy(){
   capyState.dragX = null; capyState.dragZ = null; capyState.dragging = false;
   capyState.falling = false; capyState.fallT = 0; capyState.invuln = 0;
   capyState.slip = 0; capyState.slipSpin = 0;
+  capyState.dashT = 0; capyState.dashCD = 0;
+  capyState.faceX = 0; capyState.faceZ = -1;
   capy.root.position.set(0, 0, 1.0);
   capy.root.visible = true;
   blobShadow.visible = true;
 }
 
-function tryJump(){
+/* The action button. Commits to a direction for DASH_TIME and drives the
+   capybara along it well above top speed — see updateCapybara, which hands
+   steering back once the burst is spent. Soap takes the dash away along with
+   the grip: skidding helplessly past a sinkhole is the whole penalty, and an
+   escape hatch would refund it. */
+function tryDash(){
   if (game.state !== 'playing' || capyState.falling) return;
-  if (capyState.hopY > 0.06) return;
-  capyState.hopV = curTheme.arena === 'candy' ? 11.3 : (curTheme.arena === 'pond' ? 9.0 : 9.4);
-  squashPose(0.78, 1.32, 0.78);
-  Audio.jump();
-  burst(new THREE.Vector3(capyState.x, 0.12, capyState.z), 6, PAL.dust,
-        { spread:2.6, up:1.6, size:0.09, life:0.4 });
+  if (capyState.dashT > 0 || capyState.dashCD > 0) return;
+  if (capyState.slip > 0) return;
+
+  // dash where you are steering; failing that, where you are already going;
+  // failing that, the last way you actually faced
+  let dx = 0, dz = 0;
+  if (capyState.stickX !== 0 || capyState.stickZ !== 0){
+    dx = capyState.stickX; dz = capyState.stickZ;
+  } else if (input.left || input.right || input.up || input.down){
+    dx = (input.right ? 1 : 0) - (input.left ? 1 : 0);
+    dz = (input.down ? 1 : 0) - (input.up ? 1 : 0);
+  } else if (capyState.dragX !== null){
+    dx = capyState.dragX - capyState.x; dz = capyState.dragZ - capyState.z;
+  }
+  if (Math.hypot(dx, dz) < 1e-3){ dx = capyState.vx; dz = capyState.vz; }
+  if (Math.hypot(dx, dz) < 1e-3){ dx = capyState.faceX; dz = capyState.faceZ; }
+  const len = Math.hypot(dx, dz) || 1;
+  capyState.dashDX = dx / len; capyState.dashDZ = dz / len;
+
+  capyState.dashT = DASH_TIME;
+  capyState.dashCD = DASH_TIME + DASH_CD;
+  squashPose(1.3, 0.84, 0.86);          // lunge: long and low, whichever way it goes
+  Audio.dash();
+  burst(new THREE.Vector3(capyState.x, 0.12, capyState.z), 8, PAL.dust,
+        { spread:3.0, up:1.4, size:0.09, life:0.4 });
 }
 
 function fallInHole(h){
@@ -109,48 +138,63 @@ function updateCapybara(dt){
   if (slipping) capyState.slip = Math.max(0, capyState.slip - dt);
 
   const SPEED = (12.2 + game.level * 0.16) * game.up.speed;
-  const ACC = slipping ? 34 : 92;
 
-  let ax = 0, az = 0;
-  const keyActive = input.left || input.right || input.up || input.down;
-  const stickActive = capyState.stickX !== 0 || capyState.stickZ !== 0;
+  if (capyState.dashCD > 0) capyState.dashCD = Math.max(0, capyState.dashCD - dt);
 
-  if (stickActive && !slipping){
-    // touch stick: snap straight toward the target velocity instead of
-    // easing in — acceleration ramps read as "floaty" on a thumbstick,
-    // where people expect the character to move the instant they push.
-    const mag = Math.min(1, Math.hypot(capyState.stickX, capyState.stickZ));
-    const tvx = capyState.stickX * SPEED, tvz = capyState.stickZ * SPEED;
-    const snap = 1 - Math.pow(0.001, dt * (0.6 + mag));
-    capyState.vx += (tvx - capyState.vx) * snap;
-    capyState.vz += (tvz - capyState.vz) * snap;
-  } else if (keyActive){
-    if (input.left)  ax -= 1;
-    if (input.right) ax += 1;
-    if (input.up)    az -= 1;
-    if (input.down)  az += 1;
-    const len = Math.hypot(ax, az) || 1;
-    ax /= len; az /= len;
-    capyState.vx += ax * ACC * dt;
-    capyState.vz += az * ACC * dt;
-  } else if (capyState.dragX !== null){
-    const dx = capyState.dragX - capyState.x;
-    const dz = capyState.dragZ - capyState.z;
-    const pull = slipping ? 5 : 14;
-    capyState.vx += THREE.MathUtils.clamp(dx * 16, -SPEED, SPEED) * dt * pull;
-    capyState.vz += THREE.MathUtils.clamp(dz * 16, -SPEED, SPEED) * dt * pull;
-  }
+  if (capyState.dashT > 0){
+    // --- dashing: the burst owns velocity outright, no steering ----------
+    capyState.dashT = Math.max(0, capyState.dashT - dt);
+    // Ease from the burst speed down to ordinary top speed across the dash,
+    // so handing control back at the end is a taper and not a wall.
+    const k = capyState.dashT / DASH_TIME;
+    const sp = SPEED + (DASH_SPEED - SPEED) * k;
+    capyState.vx = capyState.dashDX * sp;
+    capyState.vz = capyState.dashDZ * sp;
+    if (Math.random() < dt * 40){
+      burst(new THREE.Vector3(capyState.x, 0.14, capyState.z), 2, PAL.dust,
+            { spread:1.8, up:0.9, size:0.08, life:0.3 });
+    }
+  } else {
+    /* --- one velocity-target model for all three input paths -------------
+       Each path answers a single question — what velocity does the player
+       want right now — and the easing below is shared. Previously keys fed
+       an accelerator, the pointer fed a spring and the thumbstick had its own
+       snap that had to opt out of the friction pass to avoid fighting it;
+       three different feels for one character. */
+    let dvx = 0, dvz = 0;
+    if (capyState.stickX !== 0 || capyState.stickZ !== 0){
+      dvx = capyState.stickX * SPEED; dvz = capyState.stickZ * SPEED;
+    } else if (input.left || input.right || input.up || input.down){
+      const ax = (input.right ? 1 : 0) - (input.left ? 1 : 0);
+      const az = (input.down ? 1 : 0) - (input.up ? 1 : 0);
+      const len = Math.hypot(ax, az) || 1;
+      dvx = ax / len * SPEED; dvz = az / len * SPEED;
+    } else if (capyState.dragX !== null){
+      // A proportional controller straight onto VELOCITY. Driving acceleration
+      // with the same gain made this a spring with almost no damping — it rang
+      // for eight visible oscillations around the cursor, ±0.5 units, which is
+      // most of a catch radius. On velocity it is first order and cannot
+      // overshoot at all. Magnitude is clamped as a vector, not per axis, or a
+      // diagonal drag would be worth SPEED * sqrt(2).
+      const ex = capyState.dragX - capyState.x, ez = capyState.dragZ - capyState.z;
+      const d = Math.hypot(ex, ez);
+      if (d > DRAG_DEAD){
+        const want = Math.min(d * DRAG_GAIN, SPEED);
+        dvx = ex / d * want; dvz = ez / d * want;
+      }
+    }
 
-  // friction — loose while steering, snappy stop when input is released,
-  // and near-frictionless ice while the soap is still on your paws
-  const steering = keyActive || stickActive || capyState.dragX !== null;
-  if (!stickActive || slipping){
-    // the stick branch above already snaps velocity toward its target
-    // (including toward zero once the stick returns to its dead zone),
-    // so skip the extra friction pass here to avoid fighting it.
-    const grip = slipping ? Math.pow(0.86, dt) : (steering ? Math.pow(0.5, dt*4) : Math.pow(0.02, dt));
-    capyState.vx *= grip;
-    capyState.vz *= grip;
+    // Braking, turning and opening up are three different times to close the
+    // gap, which is what stops the capybara sliding past everything it aims at.
+    const want = Math.hypot(dvx, dvz);
+    const cur  = Math.hypot(capyState.vx, capyState.vz);
+    const T = slipping ? MOVE_T_SLIP
+            : want < 0.01 ? MOVE_T_BRAKE
+            : (cur > 0.01 && capyState.vx * dvx + capyState.vz * dvz < 0) ? MOVE_T_TURN
+            : MOVE_T_ACCEL;
+    const k = 1 - Math.pow(0.1, dt / T);      // close 90% of the gap in T seconds
+    capyState.vx += (dvx - capyState.vx) * k;
+    capyState.vz += (dvz - capyState.vz) * k;
   }
 
   if (slipping){
@@ -164,8 +208,12 @@ function updateCapybara(dt){
     if (Math.abs(capyState.slipSpin) < 0.01) capyState.slipSpin = 0;
   }
 
+  // No top-speed clamp here any more: every steering path already asks for a
+  // velocity no larger than SPEED, and an exponential approach never exceeds
+  // its target, so the only thing a clamp could still catch is the dash — the
+  // one thing that is meant to be faster.
   const sp = Math.hypot(capyState.vx, capyState.vz);
-  if (sp > SPEED){ capyState.vx = capyState.vx / sp * SPEED; capyState.vz = capyState.vz / sp * SPEED; }
+  if (sp > 0.5){ capyState.faceX = capyState.vx / sp; capyState.faceZ = capyState.vz / sp; }
 
   capyState.x += capyState.vx * dt;
   capyState.z += capyState.vz * dt;
@@ -175,10 +223,15 @@ function updateCapybara(dt){
   // only level where you slid along a curved wall and could not reach the
   // corners — the lily rim is dressing on the same play field as everywhere
   // else, not a different one.
-  if (capyState.x < -ARENA.halfX){ capyState.x = -ARENA.halfX; capyState.vx *= -0.25; }
-  if (capyState.x >  ARENA.halfX){ capyState.x =  ARENA.halfX; capyState.vx *= -0.25; }
-  if (capyState.z < -ARENA.halfZ){ capyState.z = -ARENA.halfZ; capyState.vz *= -0.25; }
-  if (capyState.z >  ARENA.halfZ){ capyState.z =  ARENA.halfZ; capyState.vz *= -0.25; }
+  let hitWall = false;
+  if (capyState.x < -ARENA.halfX){ capyState.x = -ARENA.halfX; capyState.vx *= -0.25; hitWall = true; }
+  if (capyState.x >  ARENA.halfX){ capyState.x =  ARENA.halfX; capyState.vx *= -0.25; hitWall = true; }
+  if (capyState.z < -ARENA.halfZ){ capyState.z = -ARENA.halfZ; capyState.vz *= -0.25; hitWall = true; }
+  if (capyState.z >  ARENA.halfZ){ capyState.z =  ARENA.halfZ; capyState.vz *= -0.25; hitWall = true; }
+  // a dash into the wall ends there rather than grinding along it for the
+  // rest of its duration, which is what re-applying the burst every frame
+  // would otherwise do
+  if (hitWall && capyState.dashT > 0) capyState.dashT = 0;
 
   // hop physics
   const wasAirborne = capyState.hopY > 0.02;
@@ -197,8 +250,11 @@ function updateCapybara(dt){
     capyState.hopY = 0; capyState.hopV = 0;
   }
 
-  // sinkholes only catch you when your feet are down
-  if (game.state === 'playing' && capyState.hopY < 0.8 && capyState.invuln <= 0){
+  // Sinkholes only catch you when your feet are down — and a dash carries you
+  // clean over one. The check resumes the instant the burst ends, so a dash
+  // that stops short still drops you in: it has to actually clear the hole.
+  if (game.state === 'playing' && capyState.dashT <= 0 &&
+      capyState.hopY < 0.8 && capyState.invuln <= 0){
     const h = holeAt(capyState.x, capyState.z);
     if (h){
       if (game.shield){
@@ -276,8 +332,13 @@ function updateCapybara(dt){
   }
 
   // --- head stack wobble, driven by how hard we just accelerated --------
-  updateStack(dt, (capyState.vx - capyState.pvx) / Math.max(dt, 1e-4),
-                  (capyState.vz - capyState.pvz) / Math.max(dt, 1e-4));
+  // Clamped, because a dash sets velocity outright rather than ramping to it:
+  // taken literally that is a ~2000 u/s² spike in a single frame, which slams
+  // every piece of the stack straight to its rotation limit. A lurch is the
+  // right reaction to a dash; a slam is not.
+  const STACK_ACC_MAX = 300;
+  const jerk = a => THREE.MathUtils.clamp(a / Math.max(dt, 1e-4), -STACK_ACC_MAX, STACK_ACC_MAX);
+  updateStack(dt, jerk(capyState.vx - capyState.pvx), jerk(capyState.vz - capyState.pvz));
   capyState.pvx = capyState.vx; capyState.pvz = capyState.vz;
 
   // contact shadow follows and shrinks with hop height

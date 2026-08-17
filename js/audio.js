@@ -255,6 +255,12 @@ const Audio = (() => {
     jump(){
       tone({freq:300, freq2:620, type:'triangle', dur:0.13, gain:0.24});
     },
+    dash(){
+      // a whoosh, not a hop: noise sweeping down past a low body, so it reads
+      // as going somewhere rather than going up
+      noise({dur:0.2, gain:0.2, lp:4200, hp:520});
+      tone({freq:520, freq2:190, type:'triangle', dur:0.17, gain:0.19});
+    },
     land(){
       tone({freq:120, freq2:70, type:'sine', dur:0.1, gain:0.2});
       noise({dur:0.1, gain:0.1, hp:100, lp:700});
