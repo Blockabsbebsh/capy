@@ -43,6 +43,20 @@ const STEP_RATE = 1.03;      // leg-cycle speed per unit of ground speed. Purely
                              // travelled, so this is a look dial, not physics.
 const HEART_FALL = 3.1;      // hearts ignore fallSpeed and drift down at this rate
 
+/* Fall speed keeps its old ramp — the early levels are unchanged — but stops
+   climbing far sooner. Past this the difficulty is carried by the spawn
+   director's shapes getting longer and tighter (see formations.js), not by
+   giving the player less time to read anything. At the old 15.5 ceiling an
+   item fell from spawn to catch height in 0.82s, of which roughly 0.3s had a
+   legible landing ring; at 11 that fall is 1.08s. */
+const FALL_CAP = 11.0;
+
+/* Minimum seconds between level-ups, however much score arrives. The curve is
+   1 + score/220 + elapsed/34, and a watermelon at a x6 multiplier is worth
+   240 — so a feast, or a magnet over a feast, used to bank a dozen levels in
+   a couple of seconds and drop a fresh run straight into Hell. */
+const LEVEL_MIN_GAP = 4.5;
+
 const TYPES = {
   burger:     { good:true,  points:10,  radius:0.46, weight:1.0 },
   watermelon: { good:true,  points:40,  radius:0.52, weight:0.30 },

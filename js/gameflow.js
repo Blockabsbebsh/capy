@@ -29,6 +29,7 @@ function startGame(){
   clearHoles();
   clearStack();
   resetEvents();
+  resetFormations();
   resetCapy();
   renderLives();
   refreshHUD();
@@ -61,6 +62,7 @@ function toMenu(){
   clearHoles();
   clearStack();
   resetEvents();
+  resetFormations();
   resetCapy();
   game.power = null; game.shield = false; game.timeScale = 1;
   shieldBubble.visible = false;

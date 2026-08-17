@@ -65,8 +65,17 @@ function animate(){
   if (game.state === 'playing'){
     game.elapsed += dt;
 
-    const newLevel = game.devLock ? game.level : difficultyFrom(game.score, game.elapsed);
+    /* Level-ups are rate limited. The curve reads score, and score is
+       multiplied — a watermelon at x6 is 240, more than a whole level — so a
+       feast, or worse a magnet running over a feast, banked a dozen levels in
+       a couple of seconds and dropped a fresh run straight into Hell. Score
+       still drives the pace; it just cannot skip the levels in between. */
+    game.levelHold = Math.max(0, game.levelHold - dt);
+    const want = game.devLock ? game.level : difficultyFrom(game.score, game.elapsed);
+    const newLevel = game.devLock || game.levelHold > 0
+                   ? game.level : Math.min(want, game.level + 1);
     if (newLevel !== game.level && newLevel > game.level){
+      game.levelHold = LEVEL_MIN_GAP;
       // find the first level that would start a new theme — that's where
       // the run should pause for a draft, even if a big catch pushed
       // newLevel further past it in a single frame. Whatever's left over
@@ -109,16 +118,9 @@ function animate(){
       if (game.comboTime <= 0) breakCombo();
     }
 
-    // during a missile volley we hold back the normal drip of hazards;
-    // during a feast the event queue is doing the spawning for us
-    game.spawnTimer -= dt;
-    if (game.spawnTimer <= 0 && evt.active !== 'feast'){
-      spawnItem(evt.active === 'missiles' ? (Math.random() < 0.75 ? 'burger' : 'watermelon') : pickType());
-      // slow-mo doubles the downpour
-      const rate = game.power && game.power.type === 'slowmo' ? 0.45 : 1;
-      game.spawnTimer = game.spawnInterval * rate * (0.78 + Math.random() * 0.5);
-      if (game.level >= 6 && Math.random() < 0.16) spawnItem(pickType());
-    }
+    // food arrives as formations plus a thinner drip of strays; see
+    // formations.js, which also stands down while a set-piece owns the sky
+    updateFormations(dt);
 
     updatePowerSpawns(dt);
     updateHeartSpawns(dt);
