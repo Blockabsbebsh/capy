@@ -133,10 +133,24 @@ directly at a fixed `1/60` step instead of waiting on real time.
   Dash timing is *shorter* than the walk, so a dash-gated beat is the one thing
   Sticky Feet could make literally unclearable rather than merely slower — hence
   the `!game.run.sticky` in `emitFormation`.
+- **A countdown that goes NaN never expires.** `activatePower` multiplied `P.dur`
+  by a `game.up` field that a perk rewrite had deleted, so every duration was
+  NaN, `t <= 0` was never true, and slow-mo, shield and magnet ran for the whole
+  run. Deleting a field from `game.up` means auditing its readers; `--check`
+  asserts each power expires on its own clock.
 - **`updateItems` iterates a snapshot and skips `it.gone`.** One resolution can
   now remove several items — catching a power-up with Overcharged wipes every
   hazard in the air — and a live reverse index over a shrinking array reads past
   its end as soon as something below the cursor disappears.
+- **A route is read off dots, not lines.** `buildPath` marks every landing spot,
+  largest and brightest first, tapers the segments along the route and hides them
+  as their beats land. The arena is twice as wide as it is deep, so any shape
+  that crosses it more than once draws several near-parallel streaks in the same
+  band: a new shape that traverses repeatedly must step in **z** as it goes (see
+  `pendulum`, `pincer`) or it is unreadable however it is drawn.
+- **One run perk per run, total.** The gold slot closes as soon as any `RUN_PERK`
+  is taken (`hasRunPerk`), not just the one that was taken — they are balanced as
+  a single trade, and stacking all three cost one life for the lot.
 - **Only one route is live at a time.** `fmt.live.size` gates emission; two
   overlapping routes are unreadable, not twice the challenge. That gate means a
   record that never resolves would wedge the director and stop food entirely,
@@ -167,6 +181,12 @@ directly at a fixed `1/60` step instead of waiting on real time.
   impossible — the wind-down is scale. The ghost material is *shaded* and writes
   depth on purpose; flat and depth-writeless, the capybara rendered as a cluster
   of soap bubbles.
+- **The ghost template is the model's own geometry in a plain `Mesh`** — the .glb
+  in its bind pose, which is the same rest pose the retarget composes onto, and
+  placed by the live mesh's transform relative to `capy.root` rather than by hand.
+  No cloned skeleton, so an afterimage cannot animate along with the capybara
+  that left it. It falls back to the procedural build for the same reason
+  `buildCapybara` does.
 - Tiled canvas textures must be genuinely periodic: a full-width curve is not,
   unless its height *and slope* match at both edges, and band spacing must
   divide the tile height exactly.

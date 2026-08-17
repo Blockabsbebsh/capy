@@ -327,9 +327,17 @@ const fail = [];
         if (cards.length !== 3) return { cardCount: cards.length };
         if (document.querySelectorAll('#upgradeCards .upcard.gold').length) withGold++;
       }
-      game.run.puzzler = game.run.sticky = game.run.phantom = true;
-      offerUpgrades(11);
-      const goldAfterTaken = document.querySelectorAll('#upgradeCards .upcard.gold').length;
+      /* ONE run perk for the whole run: taking any of the three has to close the
+         gold slot, not just remove that one perk from it. Filtering per-perk let
+         a single run stack all three. */
+      let goldAfterTaken = 0;
+      game.run = { phantom: false, sticky: false, puzzler: false };
+      game.run.sticky = true;                       // just one taken
+      for (let i = 0; i < 200; i++) {
+        game.taken = {};
+        offerUpgrades(11);
+        goldAfterTaken += document.querySelectorAll('#upgradeCards .upcard.gold').length;
+      }
 
       game.state = 'playing';
       resetUpgrades();
@@ -355,9 +363,75 @@ const fail = [];
     ok('draft is always 3 cards', bal.cardCount === 3, String(bal.cardCount));
     ok('gold perks appear on roughly half of drafts',
        bal.withGold > 150 && bal.withGold < 250, `${bal.withGold}/400`);
-    ok('gold perks retire once taken', bal.goldAfterTaken === 0, String(bal.goldAfterTaken));
+    ok('one run perk per run: the gold slot closes after any pick',
+       bal.goldAfterTaken === 0, `${bal.goldAfterTaken} gold cards in 200 later drafts`);
     ok('life row tallies past five', bal.life7 === '5++2' && bal.life3 === '3/noplus',
        `${bal.life7} / ${bal.life3}`);
+
+    /* Power-ups must actually run out. activatePower multiplied P.dur by a
+       game.up field that no longer existed, which made every duration NaN — and
+       NaN <= 0 is false, so slow-mo, shield and magnet each ran until the run
+       ended. Durations are asserted as finite AND as expiring on the clock. */
+    const pow = await page.evaluate(() => {
+      const out = {};
+      game.state = 'playing';
+      resetUpgrades();
+      for (const type of ['magnet', 'shield', 'slowmo']) {
+        game.power = null; game.shield = false; shieldBubble.visible = false;
+        activatePower(type, new THREE.Vector3(0, 1, 0));
+        const dur = game.power.dur;
+        let t = 0;
+        for (let i = 0; i < 60 * 40 && game.power; i++) { updatePower(1 / 60); t += 1 / 60; }
+        out[type] = { dur, ok: Number.isFinite(dur) && !game.power && Math.abs(t - dur) < 0.2,
+                      secs: Math.round(t * 10) / 10, shield: game.shield };
+      }
+      return out;
+    });
+    for (const [type, r] of Object.entries(pow)) {
+      ok(`${type} expires on its own clock`, r.ok && !r.shield,
+         `dur=${r.dur} ended at ${r.secs}s`);
+    }
+
+    /* A Phantombara ghost has to take hearts and power-ups as well as food. It
+       used to test only plain food, so a heart falling on a ghost was silently
+       dropped — the worst possible item to lose to a bug. */
+    const gh = await page.evaluate(() => {
+      const out = {};
+      const setup = () => {
+        game.state = 'playing'; game.devLock = true; game.level = 5;
+        resetUpgrades(); applyDifficulty();
+        clearItems(); clearHoles(); clearPerkFX(); resetFormations(); resetEvents();
+        game.run.phantom = true;
+        game.maxLives = 3; game.lives = 1; game.power = null; game.shield = false;
+        resetCapy();
+        capyState.x = 0; capyState.z = 0;
+        spawnGhost(0, 0);
+        capyState.x = -7.5; capyState.z = -3.5;      // stand well clear
+      };
+      const drop = type => {
+        spawnItem(type, { targeted: false, x: 0, z: 0 });
+        for (let i = 0; i < 60 * 12 && items.length; i++) updateItems(1 / 60);
+      };
+      setup(); drop('heart');
+      out.heart = `lives=${game.lives} ghosts=${ghosts.length} left=${items.length}`;
+      setup(); drop('shield');
+      out.power = `power=${game.power && game.power.type} ghosts=${ghosts.length} left=${items.length}`;
+      clearPerkFX(); clearItems(); game.power = null; game.shield = false;
+      shieldBubble.visible = false;
+      return out;
+    });
+    ok('a ghost picks up hearts', gh.heart === 'lives=2 ghosts=1 left=0', gh.heart);
+    ok('a ghost picks up power-ups', gh.power === 'power=shield ghosts=1 left=0', gh.power);
+
+    // the ghost is the real model, not the procedural fallback
+    const ghostModel = await page.evaluate(() => ({
+      one: ghostTemplate.children.length === 1,
+      shared: ghostTemplate.children[0].geometry === capy.torso.geometry,
+      scale: GHOST_SCALE,
+    }));
+    ok('ghost uses the .glb geometry',
+       ghostModel.one && ghostModel.shared && ghostModel.scale === 1,
+       JSON.stringify(ghostModel));
 
     ok('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
   }
