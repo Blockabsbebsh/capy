@@ -20,7 +20,17 @@ function pointerToGround(clientX, clientY){
 const stickZone = $('stickZone'), stickEl = $('stick'), knobEl = $('stickKnob');
 if (TOUCH && stickZone && stickEl){
   const R = 58;                        // knob travel in px
-  const DEAD = 14;                     // dead zone in px, generous for thumbs
+  const DEAD = 11;                     // dead zone in px, generous for thumbs
+  /* Response curve. Since the stick's magnitude IS the target speed, how much
+     thumb travel the slow end gets is exactly how precisely you can park under
+     falling food — and it used to get almost none. Saturating at 60% of the
+     radius left 21px between the dead zone and full speed to express every
+     speed the capybara has, of which the parking crawl (~2 u/s) occupied about
+     three. Ramping across the full radius doubles that band to 47px, and the
+     exponent spends most of it on the slow end: the same crawl is now roughly
+     16px of travel, and full speed still sits exactly at the rim where your
+     thumb can feel it. */
+  const CURVE = 1.8;
   let stickId = null, originX = 0, originY = 0;
 
   const setStick = (dx, dz) => {
@@ -28,9 +38,8 @@ if (TOUCH && stickZone && stickEl){
     const clamped = Math.min(d, R);
     const nx = d > 0 ? dx / d : 0, nz = d > 0 ? dz / d : 0;
     knobEl.style.transform = `translate(${nx * clamped}px, ${nz * clamped}px)`;
-    // dead zone first, then analog magnitude ramps to full by ~60% travel
-    // so you don't need to drag all the way to the edge to hit top speed
-    const mag = d < DEAD ? 0 : Math.min(1, (d - DEAD) / (R * 0.6 - DEAD));
+    const t = d < DEAD ? 0 : Math.min(1, (d - DEAD) / (R - DEAD));
+    const mag = Math.pow(t, CURVE);
     capyState.stickX = nx * mag;
     capyState.stickZ = nz * mag;
   };
