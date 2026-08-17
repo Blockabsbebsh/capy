@@ -11,7 +11,7 @@ const ui = {
   newBest: $('newBest'), flash: $('flash'), overSub: $('overSub'), overTitle: $('overTitle'),
   btnMute: $('btnMute'), banner: $('banner'), btnDash: $('btnDash'),
   powerWrap: $('powerWrap'), powerName: $('powerName'), powerBar: $('powerBar'),
-  hatPicker: $('hatPicker'), ctrlPicker: $('ctrlPicker'),
+  hatPicker: $('hatPicker'),
   testLevelPanel: $('testLevelPanel'), testLevelButtons: $('testLevelButtons'),
 };
 
@@ -87,37 +87,6 @@ function renderHatPicker(){
     if (open){
       b.addEventListener('click', () => { setHat(h.id); renderHatPicker(); Audio.jump(); });
     }
-    box.appendChild(b);
-  }
-}
-
-/* ---------------------------- control scheme ---------------------------
-   Two pointer schemes, picked on the title screen and remembered. The buttons
-   reuse the hat picker's look because they are the same kind of choice: a
-   preference, set before the run, not a HUD control. */
-const CTRL_MODES = [
-  { id:'follow', name:'Follow', hint:TOUCH ? 'thumbstick' : 'walk to cursor' },
-  { id:'offset', name:'Drag',   hint:'relative drag' },
-];
-function renderControlPicker(){
-  const box = ui.ctrlPicker;
-  if (!box) return;
-  box.innerHTML = '';
-  for (const m of CTRL_MODES){
-    const b = document.createElement('button');
-    b.className = 'hatbtn' + (CTRL === m.id ? ' sel' : '');
-    b.innerHTML = m.name + '<i>' + m.hint + '</i>';
-    b.addEventListener('click', () => {
-      setControlScheme(m.id);
-      // drop whatever the old scheme was holding, so switching mid-menu can't
-      // leave a stale velocity target or a visible indicator behind
-      capyState.stickX = capyState.stickZ = 0;
-      capyState.dragX = capyState.dragZ = null;
-      capyState.dragging = false;
-      endOffsetDrag();
-      renderControlPicker();
-      Audio.jump();
-    });
     box.appendChild(b);
   }
 }

@@ -12,13 +12,11 @@ function pointerToGround(clientX, clientY){
   return null;
 }
 
-/* ---- virtual thumbstick (touch, 'follow' scheme only) -----------------
+/* ---- virtual thumbstick (touch only) ----------------------------------
    Drag-to-follow puts your thumb on top of the thing you're trying to see,
    so on touch devices we hand movement to a floating stick instead: touch
    down anywhere in the bottom-left zone and the ring appears right under
-   your thumb, so you never have to hunt for a small fixed target.
-
-   The 'offset' scheme replaces this entirely — see below. */
+   your thumb, so you never have to hunt for a small fixed target. */
 const stickZone = $('stickZone'), stickEl = $('stick'), knobEl = $('stickKnob');
 if (TOUCH && stickZone && stickEl){
   const R = 58;                        // knob travel in px
@@ -52,7 +50,7 @@ if (TOUCH && stickZone && stickEl){
     stickEl.classList.remove('on');
   };
   stickZone.addEventListener('pointerdown', e => {
-    if (game.state !== 'playing' || CTRL !== 'follow') return;
+    if (game.state !== 'playing') return;
     e.preventDefault();
     stickId = e.pointerId;
     stickZone.setPointerCapture?.(e.pointerId);
@@ -77,76 +75,24 @@ if (TOUCH && stickZone && stickEl){
     stickZone.addEventListener(ev, e => { if (e.pointerId === stickId) release(); }));
 }
 
-/* ---- input-offset drag ('offset' scheme, both touch and desktop) -------
-   Press anywhere and the OFFSET from that press point is the stick. There is
-   no fixed knob to find and nothing anchored to a corner of the screen: the
-   control appears where your hand already is, which is the whole reason this
-   exists as an alternative to drag-to-follow — in that scheme your hand sits
-   on top of the arena you are trying to read.
-
-   It feeds capyState.stickX/stickZ, the same channel as the thumbstick, so
-   updateCapybara and tryDash need to know nothing about any of this: it is
-   one more answer to "what velocity does the player want".
-
-   Screen down is +z, matching both the thumbstick and the camera. */
-const padEl = $('dragPad'), padKnobEl = $('dragKnob');
-let offId = null, offX = 0, offY = 0, offR = 100;
-
-function setOffset(dx, dy){
-  const d = Math.hypot(dx, dy);
-  const nx = d > 0 ? dx / d : 0, ny = d > 0 ? dy / d : 0;
-  padKnobEl.style.transform = `translate(${nx * Math.min(d, offR)}px, ${ny * Math.min(d, offR)}px)`;
-  const t = d < OFF_DEAD ? 0 : Math.min(1, (d - OFF_DEAD) / (offR - OFF_DEAD));
-  const mag = Math.pow(t, OFF_CURVE);
-  capyState.stickX = nx * mag;
-  capyState.stickZ = ny * mag;
-}
-
-function endOffsetDrag(){
-  offId = null;
-  capyState.stickX = capyState.stickZ = 0;
-  padKnobEl.style.transform = 'translate(0,0)';
-  padEl.classList.remove('on');
-}
-
+/* ---- drag to follow (desktop) ------------------------------------------
+   Hold anywhere and the capybara walks to the cursor. Touch never gets this —
+   your thumb would sit on top of the arena you are trying to read — which is
+   what the thumbstick above is for. */
 const canvas = renderer.domElement;
 canvas.addEventListener('pointerdown', e => {
-  if (game.state !== 'playing') return;
-  if (CTRL === 'offset'){
-    e.preventDefault();
-    canvas.setPointerCapture?.(e.pointerId);
-    offId = e.pointerId;
-    // Re-measured per press, not cached: the gesture is sized off the viewport
-    // and a phone can be rotated between one press and the next.
-    offR = offsetRadius();
-    offX = e.clientX; offY = e.clientY;
-    padEl.style.left = offX + 'px';
-    padEl.style.top  = offY + 'px';
-    padEl.style.width = padEl.style.height = (offR * 2) + 'px';
-    padEl.classList.add('on');
-    setOffset(0, 0);
-    return;
-  }
-  if (TOUCH) return;                               // touch steers with the stick
+  if (game.state !== 'playing' || TOUCH) return;   // touch steers with the stick
   canvas.setPointerCapture?.(e.pointerId);
   capyState.dragging = true;
   const h = pointerToGround(e.clientX, e.clientY);
   if (h){ capyState.dragX = h.x; capyState.dragZ = h.z; }
 });
 canvas.addEventListener('pointermove', e => {
-  if (game.state !== 'playing') return;
-  if (offId !== null){
-    if (e.pointerId !== offId) return;
-    e.preventDefault();
-    setOffset(e.clientX - offX, e.clientY - offY);
-    return;
-  }
-  if (!capyState.dragging) return;
+  if (!capyState.dragging || game.state !== 'playing') return;
   const h = pointerToGround(e.clientX, e.clientY);
   if (h){ capyState.dragX = h.x; capyState.dragZ = h.z; }
 });
-const endDrag = e => {
-  if (offId !== null && (!e || e.pointerId === offId)) endOffsetDrag();
+const endDrag = () => {
   capyState.dragging = false; capyState.dragX = null; capyState.dragZ = null;
 };
 canvas.addEventListener('pointerup', endDrag);
@@ -184,7 +130,6 @@ window.addEventListener('keyup', e => {
 });
 window.addEventListener('blur', () => {
   input.left = input.right = input.up = input.down = false;
-  endOffsetDrag();          // a held pointer that leaves the window is released
   if (game.state === 'playing') pauseGame();
 });
 
