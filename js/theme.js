@@ -47,10 +47,7 @@ function applyTheme(th, instant){
   }
   snapshotTheme(themeTo, th);
   themeLerp.t = instant ? 1 : 0;
-  if (instant || skyChanged){
-    scene.background.dispose();
-    scene.background = makeSkyTexture(th.sky, th.skyMode);
-  }
+  if (instant || skyChanged) refreshSky();      // curTheme is already `th` above
   if (typeof refreshThemeEnvironment === 'function') refreshThemeEnvironment(th);
   if (instant) updateThemeMix(1);
 }
