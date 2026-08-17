@@ -12,7 +12,11 @@ function spawnItem(type, opts = {}){
   const targeted = opts.targeted ?? !def.good;
 
   let x, z;
-  if (targeted){
+  if (opts.x !== undefined){
+    // the spawn director places formation beats itself
+    x = THREE.MathUtils.clamp(opts.x, -ARENA.halfX, ARENA.halfX);
+    z = THREE.MathUtils.clamp(opts.z, -ARENA.halfZ, ARENA.halfZ);
+  } else if (targeted){
     const jx = missile ? 0.8 : 2.6, jz = missile ? 0.6 : 1.8;
     x = THREE.MathUtils.clamp(capyState.x + (Math.random()-0.5)*jx, -ARENA.halfX, ARENA.halfX);
     z = THREE.MathUtils.clamp(capyState.z + (Math.random()-0.5)*jz, -ARENA.halfZ, ARENA.halfZ);
@@ -79,13 +83,18 @@ function spawnItem(type, opts = {}){
   }
   items.push({
     type, def, mesh, ring, dead:false, bounces:0, missile,
+    fid: opts.fid || 0,             // formation this beat belongs to, 0 = stray
     // steering: how hard it chases, and how fast it can slide sideways
     homing: missile ? 3.1 : (targeted ? 1.05 : 0),
     maxLat: missile ? 6.4 : Math.min(4.6, 2.4 + game.level * 0.14),
     trail: 0,
-    vy: -(game.fallSpeed * (isMelon ? 0.86 : missile ? 1.18 : 1) * (0.92 + Math.random()*0.2)),
-    vx: isMelon ? (Math.random()-0.5) * 3.2 : (Math.random()-0.5) * 0.5,
-    vz: isMelon ? (Math.random()-0.5) * 1.2 : 0,
+    // A formation beat falls straight down and at the shared speed: the path
+    // ribbon promises where it lands and when, and a melon's usual lateral
+    // wander (up to 3.2 u/s) would make that promise a lie.
+    vy: -(game.fallSpeed * (opts.fid ? 1 : isMelon ? 0.86 : missile ? 1.18 : 1)
+          * (opts.fid ? 1 : 0.92 + Math.random()*0.2)),
+    vx: opts.fid ? 0 : isMelon ? (Math.random()-0.5) * 3.2 : (Math.random()-0.5) * 0.5,
+    vz: opts.fid ? 0 : isMelon ? (Math.random()-0.5) * 1.2 : 0,
     // melons tumble mostly around Z so the cut face keeps facing the player
     spin: new THREE.Vector3(
       (Math.random()-0.5) * (isMelon ? 1.1 : 2.2),
@@ -112,6 +121,7 @@ function clearItems(){ [...items].forEach(removeItem); }
 function onCatch(it){
   const p = it.mesh.position.clone();
   const def = it.def;
+  if (it.fid) formationItemResolved(it, true);
 
   // --- heart: a life back, or points if you're already topped up ---------
   if (def.heal){
@@ -221,6 +231,7 @@ function onCatch(it){
 function onMiss(it){
   const p = it.mesh.position.clone();
   p.y = 0.2;
+  if (it.fid) formationItemResolved(it, false);
   if (it.def.neutral){
     // a missed power-up just fizzles — no combo punishment
     burst(p, 10, PAL.soap, { spread:3.2, up:2.6, size:0.1, life:0.5 });
@@ -377,9 +388,24 @@ function updateItems(dt){
     }
     it.ring.position.x += (THREE.MathUtils.clamp(px, -ARENA.halfX - 1, ARENA.halfX + 1) - it.ring.position.x) * Math.min(1, dt * 9);
     it.ring.position.z += (THREE.MathUtils.clamp(pz, -ARENA.halfZ - 1, ARENA.halfZ + 1) - it.ring.position.z) * Math.min(1, dt * 9);
-    const prox = THREE.MathUtils.clamp(1 - (m.position.y - 1) / 11, 0, 1);
-    it.ring.material.opacity = it.dead ? 0 : 0.14 + prox * 0.5;
-    it.ring.scale.setScalar(1.5 - prox * 0.5);
+
+    /* Landing indicator. This is the only cue for where a thing will end up,
+       and it used to key its visibility off HEIGHT — opacity 0.14 until the
+       item dropped below y=6.5, which at the old top fall speed was two
+       thirds of the way down. You got about 0.3s of legible warning out of a
+       0.82s fall, i.e. the cue arrived after the moment it was useful.
+
+       It keys off TIME TO LAND now, so it reads the same at any fall speed:
+       clearly visible the moment the item exists, and closing from a wide
+       ring onto its exact footprint as the item arrives. That collapse is
+       the timing cue — the ring reaching full size IS the catch moment. */
+    const lead = THREE.MathUtils.clamp(1 - tFall / 1.5, 0, 1);
+    let alpha = 0.4 + lead * 0.5;
+    if (!it.def.good && !it.def.neutral){
+      alpha *= 0.75 + 0.25 * Math.sin(performance.now() * 0.012);   // hazards pulse
+    }
+    it.ring.material.opacity = it.dead ? 0 : alpha;
+    it.ring.scale.setScalar(1 + (1 - lead) * 1.5);
 
     // catch test (hazards phase through you right after a respawn)
     const canHit = it.def.good || (capyState.invuln <= 0 && !capyState.falling);
