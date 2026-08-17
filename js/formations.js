@@ -59,8 +59,14 @@ const FMT_SHAPES = [
     {x:-1,z:0.35}, {x:-0.45,z:-0.75,bad:true}, {x:-0.1,z:0.35},
     {x:0.45,z:-0.75,bad:true}, {x:1,z:0.35} ] },
 
+  /* Every traversal gets its own z LANE, front to back. The swings used to sit
+     at z 0, 0.4, -0.4, 0.35, 0 — four end-to-end lines stacked into the same
+     shallow band, which drew as three overlapping streaks with no way to tell
+     which one came first. The arena is twice as wide as it is deep, so anything
+     that crosses it repeatedly has to step in z as it goes or it is unreadable
+     however it is drawn. The walk is the same; the picture is legible. */
   { id:'pendulum', min:7, span:0.95, weight:2, beats:[
-    {x:-1,z:0}, {x:0.85,z:0.4}, {x:-0.6,z:-0.4}, {x:0.35,z:0.35}, {x:0,z:0} ] },
+    {x:-1,z:-0.9}, {x:0.9,z:-0.4}, {x:-0.7,z:0.15}, {x:0.7,z:0.6}, {x:0,z:0.95} ] },
 
   /* min 11, not 9: the steps here are about the length of one dash, so at 9 a
      player who dashes into them overshoots and the cooldown blocks the
@@ -96,10 +102,11 @@ const FMT_SHAPES = [
   { id:'boomerang', min:5, span:0.95, weight:2, beats:[
     {x:-1,z:0.5}, {x:-0.2,z:-0.55}, {x:0.7,z:0.35}, {x:0,z:0.85}, {x:-0.75,z:-0.2} ] },
 
-  // alternates between the two far ends before collapsing to the middle: the
-  // pendulum's idea, but closing in rather than staying wide
+  // both far corners first, then closing in on the middle — laned in z like the
+  // pendulum above, and unlike it the amplitude shrinks every step, so the
+  // picture is a funnel of crossings converging rather than parallel streaks
   { id:'pincer', min:6, span:1.0, weight:2, beats:[
-    {x:-1,z:0.3}, {x:1,z:0.25}, {x:-0.5,z:-0.55}, {x:0.5,z:-0.5}, {x:0,z:0.15} ] },
+    {x:-1,z:0.9}, {x:1,z:0.45}, {x:-0.55,z:0}, {x:0.5,z:-0.45}, {x:0,z:-0.9} ] },
 
   // decoys strictly off the line, as ever: the food is a straight run along
   // the near edge and the hazards hang above it
@@ -135,6 +142,7 @@ const FMT_SHAPES = [
    This is the lead indicator that matters: the per-item rings only tell you
    about one item at a time, and only once it is close. */
 const fmtPathGeo = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+const fmtDotGeo = new THREE.CircleGeometry(1, 20).rotateX(-Math.PI / 2);
 
 const fmt = { clock:0, queue:[], gap:1.4, strayTimer:2.5, nextId:0, live:new Map() };
 
@@ -155,21 +163,55 @@ function disposePath(rec){
   rec.path = null;
 }
 
-function buildPath(pts, colour, opacity = 0.42){
+/* One ribbon, drawn as a run of segments that TAPER along the route: the first
+   step is the widest and brightest, the last the thinnest and faintest.
+
+   The taper is not decoration. A single flat-opacity ribbon is unreadable the
+   moment a shape doubles back over itself — pincer, boomerang, coil and serpent
+   all put two lines across the same ground, and with both drawn identically
+   there is nothing in the picture that says which one you walk first. Brightness
+   ordering answers that at a glance, in the direction of travel.
+
+   Each segment records the beat it ARRIVES at, so formationItemResolved can
+   take spent segments off the ground as the route is used up — see there. */
+function buildPath(pts, colour, opacity = 0.42, dots = false){
   const g = new THREE.Group();
-  // wide and bright enough to read on a phone, where the whole arena is a
-  // couple of hundred pixels across and a hairline simply disappears
-  const mat = new THREE.MeshBasicMaterial({
-    color: colour, transparent:true, opacity, depthWrite:false });
+  const last = Math.max(1, pts.length - 2);
+
+  /* The landing SPOTS, marked before anything is in the air, and graded largest
+     and brightest first. This is what actually makes a route readable: the
+     connecting lines say how the beats join up, but where two of them run over
+     the same ground — and in an arena twice as wide as it is deep, any shape
+     that crosses from end to end does — the lines alone are spaghetti. Five
+     dots in descending size are not.
+
+     Hazard beats are marked red, because "do not stand here" is part of the
+     route and waiting for the item's own ring to say so is late. */
+  if (dots) for (let i = 0; i < pts.length; i++){
+    const u = pts.length > 1 ? i / (pts.length - 1) : 0;
+    const dot = new THREE.Mesh(fmtDotGeo, new THREE.MeshBasicMaterial({
+      color: pts[i].bad ? 0xff5a4a : colour, transparent:true,
+      opacity: (pts[i].bad ? 0.5 : 0.66) * (1 - 0.45 * u), depthWrite:false }));
+    dot.position.set(pts[i].x, 0.03, pts[i].z);
+    dot.scale.setScalar(0.44 - 0.16 * u);
+    dot.userData.beat = i;
+    g.add(dot);
+  }
+
   for (let i = 1; i < pts.length; i++){
     const a = pts[i-1], b = pts[i];
     const dx = b.x - a.x, dz = b.z - a.z;
     const len = Math.hypot(dx, dz);
     if (len < 0.05) continue;
-    const seg = new THREE.Mesh(fmtPathGeo, mat);
+    const u = Math.min(1, (i - 1) / last);          // 0 at the first step, 1 at the last
+    // wide and bright enough to read on a phone, where the whole arena is a
+    // couple of hundred pixels across and a hairline simply disappears
+    const seg = new THREE.Mesh(fmtPathGeo, new THREE.MeshBasicMaterial({
+      color: colour, transparent:true, opacity: opacity * (1 - 0.5 * u), depthWrite:false }));
     seg.position.set((a.x + b.x) / 2, 0.035, (a.z + b.z) / 2);
     seg.rotation.y = -Math.atan2(dz, dx);
-    seg.scale.set(len, 1, 0.22);
+    seg.scale.set(len, 1, 0.28 - 0.12 * u);
+    seg.userData.beat = i;
     g.add(seg);
   }
   scene.add(g);
@@ -246,7 +288,10 @@ function emitFormation(){
      lead time, and it fails shapes that are comfortably walkable off the
      ribbon. */
   const rec = { fid, total: pts.length, pending: pts.length, goods, caught: 0,
-                spoiled: false, name: shape.id, pts, path: buildPath(pts, 0xffd77a) };
+                spoiled: false, name: shape.id, pts,
+                // dots on a formation, not on a feast: five landing spots are
+                // information, twenty are wallpaper over the trail itself
+                path: buildPath(pts, 0xffd77a, 0.55, true) };
   fmt.live.set(fid, rec);
 
   // Each gap gets exactly the time needed to walk it, floored so a tight
@@ -288,10 +333,14 @@ function formationItemResolved(it, caught){
   } else if (!it.def.good && caught){
     rec.spoiled = true;                       // ate a decoy
   }
-  // the route dims as it gets used up, so a half-run formation still reads
-  // as unfinished business rather than sitting at full brightness
-  if (rec.path && rec.path.children.length){
-    rec.path.children[0].material.opacity = 0.1 + 0.32 * (rec.pending / rec.total);
+  /* Spent segments leave the ground, so what is drawn is always the route you
+     still have to walk. Dimming the whole ribbon instead (what this used to do)
+     left every crossing line in place, which is most of why a doubling-back
+     shape was hard to read halfway through: you were looking at the part you
+     had already done as well as the part you had not. */
+  const done = rec.total - rec.pending;
+  if (rec.path){
+    for (const seg of rec.path.children) seg.visible = seg.userData.beat >= done;
   }
   if (rec.pending <= 0) completeFormation(rec);
 }

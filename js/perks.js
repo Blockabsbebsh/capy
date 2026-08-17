@@ -77,14 +77,41 @@ const ghostMat = new THREE.MeshStandardMaterial({
   color: 0xbfe9ff, roughness: 0.55, metalness: 0,
   emissive: 0x3f6f8f, emissiveIntensity: 0.35,
   transparent: true, opacity: 0.55, depthWrite: true });
+/* The ghost is the REAL capybara: the .glb's skinned geometry, rendered as a
+   plain Mesh so it stands frozen in its bind pose — which is the model's
+   neutral standing pose, since the retarget in capyrig.js composes its deltas
+   onto exactly those bone rest quaternions. A plain Mesh also means no cloned
+   skeleton to keep in step, and no chance of the afterimage animating along
+   with the capybara that left it.
+
+   Placed by the live mesh's own transform relative to `capy.root`, rather than
+   by hand: the loader's own offsets are then accounted for whatever the model
+   does, and the ghost stands where the capybara stands.
+
+   The procedural build stays as the fallback, for the same reason
+   buildCapybara() has one — a model that fails the rig contract should
+   downgrade the ghost, not break the perk. */
 const ghostTemplate = (() => {
+  const skin = capy.torso;
+  if (skin && skin.isSkinnedMesh){
+    capy.root.updateMatrixWorld(true);
+    const g = new THREE.Group();
+    const m = new THREE.Mesh(skin.geometry, ghostMat);
+    new THREE.Matrix4().copy(capy.root.matrixWorld).invert().multiply(skin.matrixWorld)
+      .decompose(m.position, m.quaternion, m.scale);
+    m.frustumCulled = false;    // as with the live mesh
+    g.add(m);
+    g.userData.scale = 1;       // already the right size: it IS the model
+    return g;
+  }
   const g = buildProceduralCapybara();
   g.root.traverse(o => { if (o.isMesh){ o.material = ghostMat; o.castShadow = false; } });
+  // the procedural build is a little smaller than the model the game normally
+  // uses; the ghost has to read as the same animal standing there
+  g.root.userData.scale = 1.15;
   return g.root;
 })();
-// the procedural build is a little smaller than the model the game actually
-// uses; the ghost has to read as the same animal standing there
-const GHOST_SCALE = 1.15;
+const GHOST_SCALE = ghostTemplate.userData.scale;
 const ghosts = [];
 
 function spawnGhost(x, z){
@@ -135,7 +162,18 @@ function ghostItemTest(it){
     const reach = catchReach() + it.def.radius;
     if (dx*dx + dz*dz > reach*reach) continue;
 
-    if (it.def.good && !it.def.power && !it.def.heal){
+    /* Hearts and power-ups go through the ordinary onCatch: the whole point of
+       a heart or a magnet is the effect it has on the RUN, and reimplementing
+       that here is how the ghost ended up silently dropping them. Only plain
+       food takes the ghost-specific path, because that is the only case where
+       the difference matters (no hop, no chew, nothing on the head stack — the
+       food went into something standing somewhere else). */
+    if (it.def.heal || it.def.power){
+      burst(p.clone(), 10, PAL.soap, { spread: 3.0, up: 2.4, size: 0.1, life: 0.5 });
+      onCatch(it);
+      return true;
+    }
+    if (it.def.good){
       ghostCatch(it);
       return true;
     }

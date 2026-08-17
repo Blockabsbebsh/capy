@@ -51,6 +51,9 @@ function resetUpgrades(){
 
 const catchReach = () => CATCH_R + game.up.reach;
 
+/* One run perk per run, total — see the gold slot in offerUpgrades. */
+const hasRunPerk = () => RUN_PERKS.some(p => game.run[p.id]);
+
 /* Every life the game hands out goes through here. Puzzler pays a life per
    cleared route, which can outrun maxLives — so gains raise the ceiling with
    them, up to a cap, rather than silently doing nothing at full health. */
