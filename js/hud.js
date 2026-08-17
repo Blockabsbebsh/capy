@@ -41,16 +41,24 @@ function multiplierFor(c){
 }
 function multiplier(){ return multiplierFor(game.combo); }
 
+/* Write only when the value actually changed. refreshHUD runs every frame, and
+   an assignment to textContent is a DOM mutation whether or not the string is
+   the same — the theme name and the level change a handful of times a RUN, and
+   the power bar's icon markup was being reparsed sixty times a second. */
+const setText = (el, v) => { if (el._v !== v){ el._v = v; el.textContent = v; } };
+const setHTML = (el, v) => { if (el._v !== v){ el._v = v; el.innerHTML = v; } };
+const setStyle = (el, k, v) => { const c = '_s' + k; if (el[c] !== v){ el[c] = v; el.style[k] = v; } };
+
 function refreshHUD(){
-  ui.score.textContent = game.score;
-  ui.best.textContent = 'Best ' + Math.max(game.best, game.score);
-  ui.level.textContent = game.level;
-  ui.themeName.textContent = themeFor(game.level).name;
+  setText(ui.score, game.score);
+  setText(ui.best, 'Best ' + Math.max(game.best, game.score));
+  setText(ui.level, game.level);
+  setText(ui.themeName, themeFor(game.level).name);
 
   const m = multiplier();
   if (game.combo >= 2){
     ui.comboWrap.classList.add('on');
-    ui.comboText.textContent = 'x' + m + '  ·  ' + game.combo + ' combo';
+    setText(ui.comboText, 'x' + m + '  ·  ' + game.combo + ' combo');
     // the bar is the decay timer now: keep eating before it empties
     const frac = THREE.MathUtils.clamp(game.comboTime / game.comboMax, 0, 1);
     ui.comboBar.style.width = (frac * 100) + '%';
@@ -69,9 +77,9 @@ function refreshHUD(){
   if (game.power){
     const P = POWERS[game.power.type];
     ui.powerWrap.classList.add('on');
-    ui.powerName.textContent = P.name;
-    ui.powerName.style.color = P.color;
-    ui.powerBar.style.background = P.color;
+    setHTML(ui.powerName, icon(P.icon, 15) + P.name);
+    setStyle(ui.powerName, 'color', P.color);
+    setStyle(ui.powerBar, 'background', P.color);
     ui.powerBar.style.width = (THREE.MathUtils.clamp(game.power.t / game.power.dur, 0, 1) * 100) + '%';
   } else {
     ui.powerWrap.classList.remove('on');
@@ -103,7 +111,7 @@ function renderHatPicker(){
    this runs inside refreshHUD, i.e. every frame — while the Auto-Shield number
    is written in place, because that does change every frame. */
 const PERK_ALL = UPGRADES.concat(RUN_PERKS);   // static; refreshHUD runs 60x a second
-let railKey = '';
+let railKey = '', railTimer = null;
 
 function renderPerkRail(){
   const box = ui.perkRail;
@@ -117,21 +125,20 @@ function renderPerkRail(){
       const n = game.taken[u.id] || 0;
       const el = document.createElement('div');
       el.className = 'perk' + (u.tier ? ' ' + u.tier : '');
-      el.innerHTML = `<i>${u.icon}</i>` +
+      el.innerHTML = `<i>${icon(u.icon, 17)}</i>` +
         (u.max > 1 ? `<b>${n}/${u.max}</b>` : '') +
         (u.id === 'autoShield' ? `<s></s>` : '');
       el.title = u.name;
       box.appendChild(el);
+      if (u.id === 'autoShield') railTimer = el.querySelector('s');
     }
+    if (!held.some(u => u.id === 'autoShield')) railTimer = null;
   }
   // Auto-Shield: blank when ready, seconds when it is coming back
-  if (game.up.autoShield){
-    const cd = box.querySelector('.perk.silver s');
-    if (cd){
-      const secs = Math.ceil(game.as.cd);
-      cd.textContent = game.as.t > 0 ? 'ON' : (secs > 0 ? secs : '');
-      cd.className = game.as.t > 0 ? 'on' : '';
-    }
+  if (railTimer){
+    const secs = Math.ceil(game.as.cd);
+    setText(railTimer, game.as.t > 0 ? 'ON' : (secs > 0 ? String(secs) : ''));
+    railTimer.className = game.as.t > 0 ? 'on' : '';
   }
 }
 

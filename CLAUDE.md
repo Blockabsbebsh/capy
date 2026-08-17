@@ -40,6 +40,7 @@ Load order, which is also roughly the dependency order:
 | File | Holds |
 |---|---|
 | `config.js` | Tuning constants, `TYPES`, `POWERS`, `UPGRADES`, `THEMES`, `TOUCH`, `REDUCED` |
+| `icons.js` | `ICON_BODY` + `icon()` — inline SVG for every perk and power-up |
 | `audio.js` | The `Audio` IIFE — synth primitives, the five written themes, every SFX |
 | `scene.js` | Renderer, scene, sky texture + `skyBand`/`refreshSky`, camera + `fitCamera`, lights |
 | `materials.js` | `M()` helper and the flat `mat` library |
@@ -56,7 +57,7 @@ Load order, which is also roughly the dependency order:
 | `state.js` | The `game` object, difficulty curve, hat unlocks, combo |
 | `formations.js` | The spawn director: shapes, the route ribbon, route-clear scoring |
 | `powers.js` | Shield bubble, `shieldUp`/`absorbHit`, Auto-Shield, power activation |
-| `hud.js` | `$`, `ui`, HUD rendering, `popup`, `showBanner`, `flash` |
+| `hud.js` | `$`, `ui`, HUD rendering, the perk rail, `popup`, `showBanner`, `flash` |
 | `player.js` | `capyState`, `updateCapybara` physics, `tryDash`, `popUp` |
 | `perks.js` | Perk mechanics: dash shockwave, ghosts, reach aura, golden routes, Puzzler |
 | `input.js` | Keyboard, pointer drag, virtual thumbstick |
@@ -121,6 +122,21 @@ directly at a fixed `1/60` step instead of waiting on real time.
 - **Run `--level 6` or higher as well as the default.** The fill layers only
   exist above the halfway ramp, and a drum pattern keyed to a name with no
   instrument behind it threw on every fill hit — silently fine at level 1.
+
+## UI rules
+
+- **No emoji in the interface.** Every perk and power-up icon is inline SVG in
+  `icons.js`, drawn in the game's palette: emoji are drawn by the platform, so
+  the same card was a flat glyph on one machine and a glossy sticker on the next,
+  and 🛡 in particular came out as a thin outline on Windows. Add an icon there
+  and reference it by id — `icon()` logs a missing id rather than rendering a gap.
+- **`refreshHUD` runs every frame, so it writes only what changed.** Use
+  `setText`/`setHTML`/`setStyle`; a bare `textContent =` is a DOM mutation even
+  when the string is identical, and the power chip's icon markup was being
+  reparsed sixty times a second.
+- **The perk rail rebuilds only when the SET of perks changes** (`railKey`). The
+  Auto-Shield countdown is the one thing written per frame, through a cached
+  element rather than a query.
 
 ## Gameplay rules
 
@@ -192,9 +208,6 @@ directly at a fixed `1/60` step instead of waiting on real time.
 - **A route's golden multiple is fixed when it is emitted.** `rec.gold` is read
   once into the record, the ribbon and every item in it, so the payout cannot
   disagree with what the player was shown mid-route.
-- **The perk rail rebuilds only when the SET of perks changes.** It renders from
-  `refreshHUD`, i.e. every frame; the Auto-Shield countdown is written in place
-  because that is the only part that changes per frame.
 - **One run perk per run, total.** The gold slot closes as soon as any `RUN_PERK`
   is taken (`hasRunPerk`), not just the one that was taken — they are balanced as
   a single trade, and stacking all three cost one life for the lot.

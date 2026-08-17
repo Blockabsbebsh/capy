@@ -76,7 +76,7 @@ function spawnItem(type, opts = {}){
     // hearts are the one thing that ignores fallSpeed entirely — always the
     // same lazy drift, so a rescue is never something you can't get to
     items.push({
-      type, def, mesh, ring, dead:false, bounces:0, missile:false,
+      type, def, mesh, ring, dead:false, missile:false,
       homing:0, maxLat:0, trail:0, sparkle:0,
       vy: -HEART_FALL, vx:(Math.random()-0.5)*0.5, vz:0,
       spin: new THREE.Vector3(0, 1.1, 0),
@@ -88,7 +88,7 @@ function spawnItem(type, opts = {}){
   if (isPower){
     // power-ups drift down slowly, upright, so they read clearly
     items.push({
-      type, def, mesh, ring, dead:false, bounces:0, missile:false,
+      type, def, mesh, ring, dead:false, missile:false,
       homing:0, maxLat:0, trail:0,
       vy: -(game.fallSpeed * 0.55), vx:0, vz:0,
       spin: new THREE.Vector3(0, 1.7, 0),
@@ -104,7 +104,7 @@ function spawnItem(type, opts = {}){
   const straight = !!opts.fid || !!opts.straight;
   const routeMul = opts.fid ? routeFallMul() : 1;
   items.push({
-    type, def, mesh, ring, dead:false, bounces:0, missile,
+    type, def, mesh, ring, dead:false, missile,
     fid: opts.fid || 0,             // formation this beat belongs to, 0 = stray
     // steering: how hard it chases, and how fast it can slide sideways
     homing: missile ? 3.1 : (targeted ? 1.05 : 0),

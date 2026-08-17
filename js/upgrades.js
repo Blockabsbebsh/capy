@@ -57,7 +57,7 @@ function offerUpgrades(level){
     const dead = perkDead(u);
     const b = document.createElement('button');
     b.className = 'upcard' + (u.tier ? ' ' + u.tier : '') + (dead ? ' dead' : '');
-    b.innerHTML = `<i>${u.icon}</i><span style="flex:1"><b>${u.name}</b><span>${u.desc}</span>` +
+    b.innerHTML = `<i>${icon(u.icon, 26)}</i><span style="flex:1"><b>${u.name}</b><span>${u.desc}</span>` +
                   (dead ? `<u>NO USE THIS RUN</u>`
                         : u.tier === 'gold' ? `<u>ONE PER RUN</u>`
                         : u.tier === 'silver' ? `<u>ONE ONLY</u>`
@@ -110,12 +110,17 @@ function takeUpgrade(u){
   const startingLevel = game.pendingLevel;
   game.pendingLevel = null;
   if (startingLevel){
+    const was = curTheme;
     game.level = startingLevel;
     const th = themeFor(startingLevel);
     applyTheme(th, false);
     Audio.setMusicTheme(THEMES.indexOf(th));
-    Audio.themeShift();
-    if (!REDUCED){ flash('#ffffff', 0.3); game.fovKick = 3.2; }
+    // past Hell themeFor clamps, so the arrival ceremony would replay for a
+    // biome that did not change — see the same guard in main.js
+    if (th !== was){
+      Audio.themeShift();
+      if (!REDUCED){ flash('#ffffff', 0.3); game.fovKick = 3.2; }
+    }
     ui.levelBadge.classList.remove('bump');
     void ui.levelBadge.offsetWidth;
     ui.levelBadge.classList.add('bump');
@@ -127,7 +132,7 @@ function takeUpgrade(u){
   Audio.duck(0.55);
   game.state = 'playing';
   clock.getDelta();                     // swallow the paused time
-  showBanner(u.icon + ' ' + u.name.toUpperCase(), '#ffd77a');
+  showBanner(u.name.toUpperCase(), '#ffd77a');   // the banner is text; the card had the icon
   refreshHUD();
 }
 
