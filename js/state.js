@@ -27,8 +27,13 @@ const game = {
   timeScale: 1,
   fovKick: 0,
   unlocked: {},
-  // drafted upgrades; every system reads these live
-  up: { reach:0, decay:0, powerMul:1, speed:1, melon:1, life:0, heartRate:0 },
+  /* Drafted upgrades; every system reads these live. `speed` is no longer
+     something an upgrade raises — Quick Paws moved to the dash — but it stays
+     as the one place anything scales movement, because Sticky Feet halves it
+     and formations.js has to time its gaps against whatever it says. */
+  up: { reach:0, dashCD:1, shock:0, speed:1, melon:1, life:0, heartRate:0,
+        over:false, sweep:false },
+  run: { phantom:false, sticky:false, puzzler:false },   // one-per-run perks
   taken: {},          // upgrade id -> times taken
   pendingLevel: null, // level+theme waiting to start once a draft is picked
 };
@@ -36,13 +41,26 @@ const game = {
 const BASE_FOV = 52;
 
 function resetUpgrades(){
-  game.up = { reach:0, decay:0, powerMul:1, speed:1, melon:1, life:0, heartRate:0 };
+  game.up = { reach:0, dashCD:1, shock:0, speed:1, melon:1, life:0, heartRate:0,
+              over:false, sweep:false };
+  game.run = { phantom:false, sticky:false, puzzler:false };
   game.taken = {};
   game.pendingLevel = null;
   game.maxLives = START_LIVES;
 }
 
 const catchReach = () => CATCH_R + game.up.reach;
+
+/* Every life the game hands out goes through here. Puzzler pays a life per
+   cleared route, which can outrun maxLives — so gains raise the ceiling with
+   them, up to a cap, rather than silently doing nothing at full health. */
+function gainLife(raiseMax){
+  if (raiseMax && game.maxLives < LIVES_MAX && game.lives >= game.maxLives) game.maxLives++;
+  if (game.lives >= game.maxLives) return false;
+  game.lives++;
+  renderLives(game.lives - 1);
+  return true;
+}
 
 try {
   game.unlocked = JSON.parse(localStorage.getItem('capyHats') || '{}') || {};
@@ -86,7 +104,7 @@ function applyDifficulty(){
   // simulated minute this holds them to roughly a quarter of everything that
   // falls; at 4.6 - L*0.15 they were half of it.
   game.strayEvery = Math.max(2.6, 6.0 - L * 0.16);
-  game.comboMax   = Math.max(2.9, 4.8 - L * 0.07) + game.up.decay;
+  game.comboMax   = Math.max(2.9, 4.8 - L * 0.07);
   Audio.setMusicLevel(L);
 }
 

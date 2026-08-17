@@ -7,9 +7,10 @@ and holes. One session, no saves, score attack.
 ## The loop
 
 Food does not fall at random. A **spawn director** emits **formations**: a run
-of 3–7 landing spots forming a shape — a sweep, an arc, a zig-zag, a funnel —
-with the route between them drawn on the ground as a glowing ribbon the moment
-the shape appears. You read the whole route, plan one movement, and run it.
+of 3–7 landing spots forming a shape — nineteen of them, unlocking as the level
+rises: sweeps, arcs, weaves, spirals, pincers, chevrons, out-and-back
+boomerangs, dash-gated leaps — with the route between them drawn on the ground
+as a glowing ribbon the moment the shape appears. You read the whole route, plan one movement, and run it.
 
 Only one route is live at a time. When its last item has landed there is a
 pause — long at low levels, almost none at high ones — before the next. A
@@ -24,12 +25,21 @@ timer. That is the main skill expression.
 
 | | |
 |---|---|
-| Desktop | WASD / arrows, or hold and drag the mouse — the capybara moves to the cursor |
-| Touch | Floating thumbstick, bottom-left; a DASH button bottom-right |
+| Keys | WASD / arrows, always available |
 | Dash | Space, or the button |
 
-Movement is a **velocity-target** model: input says what velocity you want,
-and the capybara eases toward it. It stops quickly and does not coast.
+Pointer steering has **two schemes**, picked on the title screen and remembered:
+
+- **Follow** — the original. On desktop, hold and drag and the capybara walks to
+  the cursor; on touch, a floating thumbstick in the bottom-left.
+- **Drag** — *input-offset*. Press anywhere and the offset from that press point
+  is the stick: a ring appears where you pressed, a knob shows the current
+  offset, and the capybara moves in that direction at a speed proportional to
+  how far you have pulled. Works the same on desktop and touch, and it keeps
+  your hand off the arena you are trying to read.
+
+Either way movement is a **velocity-target** model: input says what velocity you
+want, and the capybara eases toward it. It stops quickly and does not coast.
 
 **Dash** is a committed burst of about 5 units in 0.22s on a ~0.8s cooldown.
 It carries you over an open sinkhole, doubles the score of anything caught
@@ -57,7 +67,8 @@ arrives — the ring reaching full size is the catch moment. Hazard rings pulse.
 
 ## Powers
 
-- **Magnet** — every good item flies to you and is caught; guaranteed 100%.
+- **Magnet** — every good item flies to you and is caught; guaranteed 100%, but
+  only for a short burst (3.75s).
 - **Shield** — a bubble that absorbs one hazard or one sinkhole.
 - **Slow-mo** — items fall at 45% speed and routes arrive much faster.
 
@@ -87,14 +98,43 @@ capybara's top speed, so no shape can ask for more than it has.
 Every ~20s a set-piece interrupts the normal flow:
 
 - **Chilli missiles** — a volley of fast homing hazards to dodge.
-- **Watermelon feast** — a pure reward shower.
+- **Watermelon feast** — a reward, but a routed one: one long continuous path is
+  chosen from five (an S, a circuit, a figure of eight, a triangular weave, a
+  spiral), drawn on the ground, and every melon in the feast lands on it. Follow
+  the trail and you get all twenty. The steps are far slacker than a formation's
+  — it is still a reward beat, not a test.
 - **Sinkholes** — telegraphed by a pulsing red ring, then the ground opens for
-  15s. Walk in and you lose a life; dash over them freely.
+  7s. Walk in and you lose a life; dash over them freely.
 
 ## Structure
 
-Three lives. Every 5 levels the biome changes — Meadow, Lily Pad Ponds,
+Three lives. Every **10** levels the biome changes — Meadow, Lily Pad Ponds,
 Bubblegum, Night, Hell — each with its own lighting, ground, sky and music, and
-each theme change offers a draft of one of three perks (catch radius, combo
-timer, power duration, movement speed, melon value, extra life, heart rate).
+each theme change pauses the run for a draft of three perks.
+
+Ordinary perks stack:
+
+| Perk | Effect | Max |
+|---|---|---|
+| Long Snout | +0.22 catch radius, drawn as an aura around you | 4 |
+| Quick Paws | dash cooldown −25%, and the dash ends in a shockwave that catches food in a widening radius | 3 |
+| Melon Lover | watermelons pay +60% | 3 |
+| Second Wind | +1 max life, and one heart back | 3 |
+| Lucky Heart | hearts drop twice as often | 2 |
+| Overcharged | grabbing a power-up wipes every hazard on the field | 1 |
+| Clean Sweep | a route clear drags the remaining food to you | 1 |
+
+**One-per-run perks** are gold, appear on about half of all drafts alongside the
+ordinary ones, and vanish from the pool once taken. Each is a trade, not a buff:
+
+- **Phantombara** — −1 max life. Every dash leaves a see-through ghost standing
+  where it started for 3s; the ghost catches food on your radius, and a hazard
+  pops it.
+- **Sticky Feet** — immune to sinkholes and soap, at half movement speed and
+  with no dash. Routes re-time themselves to the slower walk, dash-gated beats
+  included, so nothing becomes unclearable.
+- **Puzzler** — routes fall half as fast. Clear one and you gain a life; drop one
+  and it costs a life. The life row shows five hearts and then a tally (`♥♥♥♥♥
+  +3`), because a good Puzzler run banks more than the HUD can draw.
+
 Hats unlock at score thresholds and are cosmetic.

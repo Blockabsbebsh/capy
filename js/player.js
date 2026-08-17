@@ -53,6 +53,7 @@ function tryDash(){
   if (game.state !== 'playing' || capyState.falling) return;
   if (capyState.dashT > 0 || capyState.dashCD > 0) return;
   if (capyState.slip > 0) return;
+  if (game.run.sticky) return;          // Sticky Feet trades the dash away
 
   // dash where you are steering; failing that, where you are already going;
   // failing that, the last way you actually faced
@@ -70,8 +71,13 @@ function tryDash(){
   const len = Math.hypot(dx, dz) || 1;
   capyState.dashDX = dx / len; capyState.dashDZ = dz / len;
 
+  // Quick Paws shortens the cooldown only — the burst itself is untouched, so
+  // the dash keeps the same shape and formations' `dash` beats stay honest.
   capyState.dashT = DASH_TIME;
-  capyState.dashCD = DASH_TIME + DASH_CD;
+  capyState.dashCD = DASH_TIME + DASH_CD * game.up.dashCD;
+  // Phantombara leaves the afterimage where the dash STARTED, which is what
+  // makes it a placement tool rather than a trail
+  if (game.run.phantom) spawnGhost(capyState.x, capyState.z);
   squashPose(1.3, 0.84, 0.86);          // lunge: long and low, whichever way it goes
   Audio.dash();
   burst(new THREE.Vector3(capyState.x, 0.12, capyState.z), 8, PAL.dust,
@@ -148,6 +154,8 @@ function updateCapybara(dt){
   const SPEED = (12.2 + game.level * 0.16) * game.up.speed;
 
   if (capyState.dashCD > 0) capyState.dashCD = Math.max(0, capyState.dashCD - dt);
+
+  const wasDashing = capyState.dashT > 0;
 
   if (capyState.dashT > 0){
     // --- dashing: the burst owns velocity outright, no steering ----------
@@ -241,6 +249,11 @@ function updateCapybara(dt){
   // would otherwise do
   if (hitWall && capyState.dashT > 0) capyState.dashT = 0;
 
+  /* Quick Paws' shockwave, at the moment the burst ends — after the wall clamp
+     above, so a dash cut short against a wall still pays out where it stopped
+     rather than being silently skipped. */
+  if (wasDashing && capyState.dashT <= 0 && game.up.shock > 0) dashShockwave();
+
   // hop physics
   const wasAirborne = capyState.hopY > 0.02;
   const hopGravity = curTheme.arena === 'candy' ? 0.78 : (curTheme.arena === 'night' ? 1.08 : (curTheme.arena === 'hell' ? 1.28 : 1.15));
@@ -267,7 +280,8 @@ function updateCapybara(dt){
   // Sinkholes only catch you when your feet are down — and a dash carries you
   // clean over one. The check resumes the instant the burst ends, so a dash
   // that stops short still drops you in: it has to actually clear the hole.
-  if (game.state === 'playing' && capyState.dashT <= 0 &&
+  // Sticky Feet is the other way past a hole: it never falls in at all.
+  if (game.state === 'playing' && capyState.dashT <= 0 && !game.run.sticky &&
       capyState.hopY < 0.8 && capyState.invuln <= 0){
     const h = holeAt(capyState.x, capyState.z);
     if (h){
