@@ -115,6 +115,14 @@ function respawnCapy(){
 
 function squashPose(sx, sy, sz){ capyState.tsx = sx; capyState.tsy = sy; capyState.tsz = sz; }
 
+/* The one way anything should pop the capybara upward. Scaling by the headroom
+   left is what stops pops stacking: a hit taken at head height barely lifts
+   you, where a bare `hopV = 9.5` would relaunch you from up there and keep
+   doing it. Never lowers an existing pop, so a big one still wins. */
+function popUp(v){
+  capyState.hopV = Math.max(capyState.hopV, v * Math.max(0, 1 - capyState.hopY / HOP_MAX));
+}
+
 function updateCapybara(dt){
   // --- sinking into a sinkhole: no control until we pop back out --------
   if (capyState.falling){
@@ -238,6 +246,12 @@ function updateCapybara(dt){
   const hopGravity = curTheme.arena === 'candy' ? 0.78 : (curTheme.arena === 'night' ? 1.08 : (curTheme.arena === 'hell' ? 1.28 : 1.15));
   capyState.hopV += GRAV * hopGravity * dt;
   capyState.hopY += capyState.hopV * dt;
+  // hard ceiling as well as the scaling in popUp — belt and braces, since a
+  // single very large pop should still not clear the arena
+  if (capyState.hopY > HOP_MAX){
+    capyState.hopY = HOP_MAX;
+    capyState.hopV = Math.min(capyState.hopV, 0);
+  }
   if (capyState.hopY <= 0){
     if (capyState.hopV < -4){
       squashPose(1.18, 0.8, 1.14);
@@ -265,7 +279,7 @@ function updateCapybara(dt){
         away.normalize().multiplyScalar(h.r * 1.35);
         capyState.x = THREE.MathUtils.clamp(h.x + away.x, -ARENA.halfX, ARENA.halfX);
         capyState.z = THREE.MathUtils.clamp(h.z + away.y, -ARENA.halfZ, ARENA.halfZ);
-        capyState.hopV = 7.5;
+        popUp(7.5);
         capyState.invuln = 0.7;
       } else {
         fallInHole(h);
