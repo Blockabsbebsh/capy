@@ -301,30 +301,30 @@
   }
   #btnDash{position:relative; z-index:11;}
 
-  /* ---------- input-offset indicator ----------
-     Ring at the press point, knob at the current offset, and a dot marking the
-     origin so the gesture reads as "how far from there" rather than "where".
-     Not .touch-only: this scheme is available on desktop too. */
-  #dragPad{
-    position:fixed; z-index:11; left:0; top:0; width:200px; height:200px;
-    transform:translate(-50%,-50%); border-radius:50%;
-    background:radial-gradient(circle at 50% 50%, rgba(255,246,230,.07), rgba(0,0,0,.20));
-    border:2px dashed rgba(255,205,140,.34);
-    pointer-events:none; opacity:0; transition:opacity .14s ease;
+  /* ---------- controls help on the title card ----------
+     Two boxes, one per device. The mobile row shows miniatures of the real
+     controls — the floating thumbstick and the DASH button — rather than naming
+     them, because on the device it applies to they are what you actually see. */
+  .ctrlhelp{display:flex; gap:8px; margin:14px 0 2px; text-align:left;}
+  .ctrlbox{
+    flex:1; min-width:0; padding:8px 9px 9px; border-radius:12px;
+    background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.10);
   }
-  #dragPad.on{opacity:1;}
-  #dragPad::after{
-    content:''; position:absolute; left:50%; top:50%; width:10px; height:10px;
-    margin:-5px 0 0 -5px; border-radius:50%; background:rgba(255,225,168,.55);
+  /* the mobile column needs two small chips; give the rest to the key list */
+  .ctrlhelp .ctrlbox:first-child{flex:0 1 auto;}
+  .ctrlbox .label{margin-bottom:6px;}
+  .ctrlbox .keys{margin:0; gap:6px; justify-content:flex-start;}
+  .ic-stick{
+    display:inline-block; width:19px; height:19px; border-radius:50%;
+    border:1.5px solid rgba(255,205,140,.55); vertical-align:-4px;
+    background:radial-gradient(circle at 50% 38%, #ffd07a 0 36%, rgba(0,0,0,.22) 38%);
   }
-  #dragKnob{
-    position:absolute; left:50%; top:50%; width:56px; height:56px; margin:-28px 0 0 -28px;
-    border-radius:50%; background:linear-gradient(180deg,#ffd07a,#ffab3d);
-    box-shadow:0 4px 12px rgba(0,0,0,.45), inset 0 2px 0 rgba(255,255,255,.35);
+  .ic-dash{
+    display:inline-block; font-style:normal; font-weight:bold; font-size:8px;
+    letter-spacing:.3px; width:26px; height:26px; line-height:26px; text-align:center;
+    border-radius:50%; color:#1e3a14; vertical-align:-8px;
+    background:linear-gradient(180deg,#9fe07a,#5eb845); box-shadow:0 2px 0 #3d7a2c;
   }
-  /* in the offset scheme the thumbstick zone must not swallow the press */
-  body.ctrl-offset #stickZone{pointer-events:none !important;}
-  body.ctrl-offset #stick{display:none;}
 
   /* ---------- narrow screens (phones in portrait) ----------
      Keep the legend in 2 columns even here — stacking it into one tall
@@ -334,6 +334,8 @@
     .legend{grid-template-columns:repeat(2,minmax(0,1fr)); gap:5px 6px; margin:10px 0 4px; font-size:11.5px;}
     .legend div{padding:5px 6px;}
     .keys{gap:6px; font-size:12px;}
+    /* two boxes side by side wrap the key rows to bits at this width */
+    .ctrlhelp{flex-direction:column; gap:6px;}
     .sub{font-size:12.5px;}
     #hatPicker{gap:6px;}
     .hatbtn{padding:7px 10px; font-size:12px;}
@@ -416,10 +418,6 @@
 <div id="stickZone" class="touch-only"></div>
 <div id="stick" class="touch-only"><div id="stickKnob"></div></div>
 
-<!-- input-offset indicator: a ring drawn at the point you pressed, with a knob
-     showing the current offset. Sized in JS (see offsetRadius) so the gesture
-     is the same physical size on a phone as on a desktop. -->
-<div id="dragPad"><div id="dragKnob"></div></div>
 
 <!-- ============ START ============ -->
 <div class="panel" id="startPanel">
@@ -431,7 +429,9 @@
       <div><i class="dot" style="background:#d63628"></i>Chili &nbsp;<b>&minus;1 life</b></div>
       <div><i class="dot" style="background:#9fd8ef"></i>Soap &nbsp;<b>slippery!</b></div>
       <div><i class="dot" style="background:#ff4a6a"></i>Heart &nbsp;<b>+1 life</b></div>
-      <div><i class="dot" style="background:#9fe07a"></i>Dash &nbsp;<b>catch mid-dash = 2&times;</b></div>
+      <!-- kept short on purpose: .legend cells do not wrap, and a longer label
+           than this clips off the right edge of the card on a narrow phone -->
+      <div><i class="dot" style="background:#9fe07a"></i>Dash &nbsp;<b>catch = 2&times;</b></div>
     </div>
     <p class="sub" style="margin:10px 0 0; font-size:12.5px">
       Catch food, dodge chilis and soap. Dodge missiles and dash over sinkholes.
@@ -439,15 +439,28 @@
     </p>
     <div class="label" style="margin-top:12px">Headwear</div>
     <div id="hatPicker"></div>
-    <!-- two pointer schemes: walk-to-cursor / thumbstick, or relative drag -->
-    <div class="label" style="margin-top:10px">Steering</div>
-    <div id="ctrlPicker"></div>
-    <div class="keys">
-      <span><kbd>A</kbd><kbd>D</kbd> / <kbd>&larr;</kbd><kbd>&rarr;</kbd> strafe</span>
-      <span><kbd>W</kbd><kbd>S</kbd> depth</span>
-      <span><kbd>Space</kbd> dash</span>
-      <span>drag / touch</span>
-      <span><kbd>Esc</kbd> pause</span>
+    <!-- Controls, split by device. One flat list of chips had a phone player
+         reading keyboard keys and a desktop player reading "touch": the two
+         setups share nothing but the dash, so they are shown as two. -->
+    <div class="ctrlhelp">
+      <div class="ctrlbox">
+        <div class="label">Mobile</div>
+        <div class="keys">
+          <span><i class="ic-stick"></i> steer</span>
+          <span><i class="ic-dash">DASH</i> dash</span>
+        </div>
+      </div>
+      <div class="ctrlbox">
+        <div class="label">PC</div>
+        <!-- two chips, not one: a chip never wraps internally, so WASD and the
+             arrows on a single line overflowed the column -->
+        <div class="keys">
+          <span>move <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span>
+          <span>or <kbd>&larr;</kbd><kbd>&uarr;</kbd><kbd>&darr;</kbd><kbd>&rarr;</kbd></span>
+          <span><kbd>Space</kbd> dash</span>
+          <span><kbd>Esc</kbd> pause</span>
+        </div>
+      </div>
     </div>
     <button id="btnStart">MUNCH TIME</button>
   </div>
