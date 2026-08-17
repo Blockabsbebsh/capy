@@ -10,6 +10,18 @@ const GRAV = -19;
 
 const SLIP_TIME = 2.0;       // seconds of soap-slick controls
 
+/* Ceiling on the hop. Catches, hits, respawns and shield bounces all pop the
+   capybara up, and those pops used to STACK: assigning hopV while already
+   airborne relaunches from that height, so a few hits in quick succession put
+   the capybara in the stratosphere and out of the fight on the way back down.
+   See popUp() in player.js. */
+const HOP_MAX = 2.4;
+
+/* Grace period after taking a hit. There was none, so three chillis landing in
+   quick succession took all three lives with nothing the player could do — the
+   run ended before the first hit had finished reading. */
+const HIT_INVULN = 1.2;
+
 /* --- movement feel -------------------------------------------------------
    Every input path — keys, pointer drag, thumbstick — resolves to a DESIRED
    velocity, and updateCapybara eases the real velocity toward it. These are

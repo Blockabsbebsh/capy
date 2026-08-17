@@ -75,7 +75,12 @@ function applyDifficulty(){
   // What actually ramps now: formations arrive closer together and strays
   // fill the gaps more often. Their internal difficulty — how much slack
   // each step leaves — lives in fmtReach() over in formations.js.
-  game.fmtGap     = Math.max(0.85, 3.4 - L * 0.12);
+  // Routes are the pacing. Early levels get a real breather between them —
+  // one shape, cleared, then a beat to notice you did it — and late levels
+  // get barely a pause, so they run almost back to back. Only one route is
+  // ever live at a time (see formations.js), so this gap is measured from the
+  // last beat of one landing to the first of the next.
+  game.fmtGap     = Math.max(0.45, 4.2 - L * 0.16);
   // Strays are seasoning, not the meal — enough that the sky is not a
   // metronome, not so much that the routes get lost in noise. Measured over a
   // simulated minute this holds them to roughly a quarter of everything that

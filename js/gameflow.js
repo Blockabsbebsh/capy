@@ -1,5 +1,10 @@
 function loseLife(reason){
   game.lives--;
+  // A grace window after every hit. There was none, so three chillis landing
+  // in quick succession — which the targeted hazard spawn makes quite likely —
+  // took all three lives before the first one had finished reading. Hazards
+  // phase through while this runs (see the canHit test in updateItems).
+  capyState.invuln = Math.max(capyState.invuln, HIT_INVULN);
   Audio.life();
   game.shake = 0.42;
   flash('#ff2d40', 0.55);

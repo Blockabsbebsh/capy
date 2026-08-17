@@ -227,6 +227,15 @@ be verified any other way.
   weighting by them paints a boot half way up the hind shins while catching 5-9
   vertices per front foot, which is invisible. `paint()` masks by height
   instead; every foot is planted at y = 0 after grounding.
+- **Only one route is ever live.** `fmt.live.size` gates emission, so a shape
+  has to finish landing before the next is chosen. Two overlapping routes are
+  not twice the challenge, they are unreadable. That gate means a record which
+  never resolves would wedge the director and stop food entirely, which is
+  what the `rec.age` safety valve in `updateFormations` is for.
+- **Nothing assigns `hopV` directly — use `popUp()`.** Pops stack otherwise:
+  assigning while already airborne relaunches from that height, and a few hits
+  in quick succession put the capybara in the stratosphere. `popUp` scales by
+  remaining headroom and `HOP_MAX` caps the arc outright.
 - **Food arrives as formations, and every one is provably clearable.** The gap
   between consecutive beats is computed, not authored: `stepTime()` gives each
   step exactly the time needed to walk that distance at `fmtReach()` of top
