@@ -302,27 +302,33 @@
   #btnDash{position:relative; z-index:11;}
 
   /* ---------- controls help on the title card ----------
-     Two boxes, one per device. The mobile row shows miniatures of the real
-     controls — the floating thumbstick and the DASH button — rather than naming
-     them, because on the device it applies to they are what you actually see. */
-  .ctrlhelp{display:flex; gap:8px; margin:14px 0 2px; text-align:left;}
-  .ctrlbox{
-    flex:1; min-width:0; padding:8px 9px 9px; border-radius:12px;
-    background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.10);
+     Two lines: who, then what. Boxes with a pill around every item were almost
+     entirely padding — the mobile side is two icons and the desktop side is one
+     line of keys, so anything with per-item chrome ends up mostly dead space.
+     A label column and a flowing line each says the same thing in a third of
+     the height. The icons are miniatures of the real controls (the floating
+     thumbstick, the DASH button), which on the device they apply to is exactly
+     what the player sees. */
+  .ctrlhelp{
+    display:grid; grid-template-columns:auto 1fr; gap:5px 10px;
+    align-items:center; margin:14px 2px 2px; text-align:left; font-size:12.5px;
   }
-  /* the mobile column needs two small chips; give the rest to the key list */
-  .ctrlhelp .ctrlbox:first-child{flex:0 1 auto;}
-  .ctrlbox .label{margin-bottom:6px;}
-  .ctrlbox .keys{margin:0; gap:6px; justify-content:flex-start;}
+  .ctrlhelp b{
+    font-size:9.5px; letter-spacing:2px; opacity:.5; text-transform:uppercase;
+    white-space:nowrap;
+  }
+  .ctrlhelp span{line-height:1.95;}      /* room for kbd caps on a wrapped line */
+  .ctrlhelp .nb{white-space:nowrap;}
+  .ctrlhelp em{font-style:normal; opacity:.32; margin:0 4px;}
   .ic-stick{
-    display:inline-block; width:19px; height:19px; border-radius:50%;
+    display:inline-block; width:18px; height:18px; border-radius:50%;
     border:1.5px solid rgba(255,205,140,.55); vertical-align:-4px;
     background:radial-gradient(circle at 50% 38%, #ffd07a 0 36%, rgba(0,0,0,.22) 38%);
   }
   .ic-dash{
-    display:inline-block; font-style:normal; font-weight:bold; font-size:8px;
-    letter-spacing:.3px; width:26px; height:26px; line-height:26px; text-align:center;
-    border-radius:50%; color:#1e3a14; vertical-align:-8px;
+    display:inline-block; font-style:normal; font-weight:bold; font-size:7px;
+    letter-spacing:.3px; width:22px; height:22px; line-height:22px; text-align:center;
+    border-radius:50%; color:#1e3a14; vertical-align:-6px;
     background:linear-gradient(180deg,#9fe07a,#5eb845); box-shadow:0 2px 0 #3d7a2c;
   }
 
@@ -334,8 +340,9 @@
     .legend{grid-template-columns:repeat(2,minmax(0,1fr)); gap:5px 6px; margin:10px 0 4px; font-size:11.5px;}
     .legend div{padding:5px 6px;}
     .keys{gap:6px; font-size:12px;}
-    /* two boxes side by side wrap the key rows to bits at this width */
-    .ctrlhelp{flex-direction:column; gap:6px;}
+    /* the label column costs width the key line needs at this size */
+    .ctrlhelp{grid-template-columns:1fr; gap:1px 0; font-size:12px; margin-top:10px;}
+    .ctrlhelp b{margin-top:5px;}
     .sub{font-size:12.5px;}
     #hatPicker{gap:6px;}
     .hatbtn{padding:7px 10px; font-size:12px;}
@@ -439,28 +446,21 @@
     </p>
     <div class="label" style="margin-top:12px">Headwear</div>
     <div id="hatPicker"></div>
-    <!-- Controls, split by device. One flat list of chips had a phone player
-         reading keyboard keys and a desktop player reading "touch": the two
-         setups share nothing but the dash, so they are shown as two. -->
+    <!-- Controls, split by device: the two setups share nothing but the dash.
+         Written as flowing lines rather than a grid of chips — see the CSS. -->
     <div class="ctrlhelp">
-      <div class="ctrlbox">
-        <div class="label">Mobile</div>
-        <div class="keys">
-          <span><i class="ic-stick"></i> steer</span>
-          <span><i class="ic-dash">DASH</i> dash</span>
-        </div>
-      </div>
-      <div class="ctrlbox">
-        <div class="label">PC</div>
-        <!-- two chips, not one: a chip never wraps internally, so WASD and the
-             arrows on a single line overflowed the column -->
-        <div class="keys">
-          <span>move <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span>
-          <span>or <kbd>&larr;</kbd><kbd>&uarr;</kbd><kbd>&darr;</kbd><kbd>&rarr;</kbd></span>
-          <span><kbd>Space</kbd> dash</span>
-          <span><kbd>Esc</kbd> pause</span>
-        </div>
-      </div>
+      <!-- .nb keeps a key with its verb, and each separator travels INSIDE the
+           group that follows it: without either, the line broke between "Space"
+           and "dash" (two controls, apparently) and left a dangling "·" at the
+           end of the row it wrapped out of. -->
+      <b>Mobile</b>
+      <span><i class="ic-stick"></i> thumbstick to move
+        <span class="nb"><em>·</em> <i class="ic-dash">DASH</i> to dash</span></span>
+      <b>PC</b>
+      <span><span class="nb"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>, arrows</span>
+        or drag with the mouse
+        <span class="nb"><em>·</em> <kbd>Space</kbd> dash</span>
+        <span class="nb"><em>·</em> <kbd>Esc</kbd> pause</span></span>
     </div>
     <button id="btnStart">MUNCH TIME</button>
   </div>
