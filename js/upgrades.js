@@ -20,9 +20,14 @@ function offerUpgrades(level){
   /* Half of all drafts put ONE run perk on the table, in the third slot,
      against two ordinary perks. Half, not always: a run perk reshapes the run,
      and a guaranteed one every draft would make the ordinary perks the
-     sideshow. Once taken it is gone from the pool for good — that is what
-     "one per run" means, and it is why these cards are gold. */
-  const runPool = RUN_PERKS.filter(u => !game.run[u.id]);
+     sideshow.
+
+     ONE PER RUN IS A BUDGET FOR THE WHOLE RUN, not one of each: taking any run
+     perk closes the gold slot for good. Filtering only the perk that was taken
+     let a run stack all three, and they are balanced as a single trade — a
+     Phantombara who is also immune to everything and banking a life per route
+     has paid one life for the lot. */
+  const runPool = hasRunPerk() ? [] : RUN_PERKS.slice();
   const gold = runPool.length && Math.random() < 0.5
              ? shuffled(runPool)[0] : null;
   if (!pool.length && !gold) return false;

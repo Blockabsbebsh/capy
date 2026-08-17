@@ -12,6 +12,12 @@ rises: sweeps, arcs, weaves, spirals, pincers, chevrons, out-and-back
 boomerangs, dash-gated leaps — with the route between them drawn on the ground
 as a glowing ribbon the moment the shape appears. You read the whole route, plan one movement, and run it.
 
+The ribbon is drawn to be read in order: a **dot on every landing spot**, largest
+and brightest at the first beat and tapering to the last, with hazard beats
+marked red so you can see what to walk around before it is in the air. Segments
+you have already used **leave the ground** as their beats land, so what is drawn
+is always the part still ahead of you.
+
 Only one route is live at a time. When its last item has landed there is a
 pause — long at low levels, almost none at high ones — before the next. A
 thinner drip of unscripted **stray** items falls between routes so the sky
@@ -124,12 +130,14 @@ Ordinary perks stack:
 | Overcharged | grabbing a power-up wipes every hazard on the field | 1 |
 | Clean Sweep | a route clear drags the remaining food to you | 1 |
 
-**One-per-run perks** are gold, appear on about half of all drafts alongside the
-ordinary ones, and vanish from the pool once taken. Each is a trade, not a buff:
+**One-per-run perks** are gold and appear on about half of all drafts alongside
+the ordinary ones. You get **one for the entire run**: taking any of the three
+closes the gold slot for good, so it is a choice between them, not a collection.
+Each is a trade, not a buff:
 
-- **Phantombara** — −1 max life. Every dash leaves a see-through ghost standing
-  where it started for 3s; the ghost catches food on your radius, and a hazard
-  pops it.
+- **Phantombara** — −1 max life. Every dash leaves a see-through copy of the
+  capybara standing where it started for 3s; the ghost catches anything good on
+  your radius — food, hearts, power-ups — and a hazard pops it.
 - **Sticky Feet** — immune to sinkholes and soap, at half movement speed and
   with no dash. Routes re-time themselves to the slower walk, dash-gated beats
   included, so nothing becomes unclearable.

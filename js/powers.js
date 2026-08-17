@@ -11,7 +11,12 @@ function activatePower(type, at){
     game.shield = true;
     shieldBubble.visible = true;
   }
-  const dur = P.dur * game.up.powerMul;
+  /* Straight off POWERS — there is no duration multiplier any more (Power
+     Hoarder became Overcharged). This used to read `P.dur * game.up.powerMul`
+     against a field that no longer exists, which made every duration NaN: `t`
+     started NaN, `t -= dt` stayed NaN, `t <= 0` was never true, and slow-mo,
+     shield and magnet all ran for the rest of the run. */
+  const dur = P.dur;
   game.power = { type, t: dur, dur };
   if (type === 'slowmo') Audio.slowmo();
   else Audio.powerUp();
