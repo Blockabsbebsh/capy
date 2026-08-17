@@ -226,6 +226,13 @@ be verified any other way.
   weighting by them paints a boot half way up the hind shins while catching 5-9
   vertices per front foot, which is invisible. `paint()` masks by height
   instead; every foot is planted at y = 0 after grounding.
+- Hell's arena slab is **not** raised — the lava field around it is lowered.
+  `patch` sits at the same height in every biome; for `hell` the background
+  `ground` disc drops by `HELL_LAVA_DROP` and `hellSkirt` fills the step, so
+  the slab's side face shows. Anything planted at lava level (boulders, lava
+  bubbles) has to be offset by the same drop **and** kept outside the patch
+  footprint via `outsidePatch`, or it stands in the lava and pokes through the
+  slab.
 - Eye sockets are **found**, not positioned by bounding-box fractions. The head
   has three concave dishes — sockets, nostrils, mouth line — and `capyrig.js`
   picks the sockets by discrete curvature with the midline and muzzle fenced
