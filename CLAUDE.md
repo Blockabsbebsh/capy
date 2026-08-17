@@ -226,6 +226,16 @@ be verified any other way.
   weighting by them paints a boot half way up the hind shins while catching 5-9
   vertices per front foot, which is invisible. `paint()` masks by height
   instead; every foot is planted at y = 0 after grounding.
+- **The sky is a strip, not a screen.** The camera's pitch and the 60-unit
+  ground disc leave only 3.2% of screen height as sky on a desktop aspect and
+  16.5% on a phone. `makeSkyTexture` therefore draws the whole gradient, the
+  sun and the clouds into that strip, sized from `skyBand()` and corrected for
+  the viewport aspect (the background quad is stretched to fill, so a circle
+  needs its x radius divided by the aspect). `refreshSky()` repaints on every
+  resize and theme change — the strip's height and the correction both move
+  with the viewport. Do not put sky ornaments in `skyRig` as 3D objects: the
+  sun, halo, clouds and hell's moon all still live there and all project to
+  NDC y 1.5-1.8, i.e. none of them have ever been on screen at any aspect.
 - Movement is a **velocity-target** model, not an accelerator. Every input path
   (keys, pointer drag, thumbstick) answers one question — what velocity does
   the player want — and `updateCapybara` eases toward it with a different time
