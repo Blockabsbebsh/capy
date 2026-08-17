@@ -12,9 +12,10 @@ const game = {
   level: 1,
   devLock: false,           // when true, the dev level switcher is holding the level fixed
   elapsed: 0,
-  spawnTimer: 0,
-  spawnInterval: 1.05,
   fallSpeed: 6.0,
+  fmtGap: 2.6,        // seconds between formations
+  strayEvery: 3.6,    // seconds between unscripted single items
+  levelHold: 0,       // seconds until the next level-up is allowed
   shake: 0,
   hitFlash: 0,
   comboTime: 0,
@@ -70,9 +71,17 @@ function difficultyFrom(score, elapsed){
 }
 function applyDifficulty(){
   const L = game.level;
-  game.spawnInterval = Math.max(0.34, 1.08 - L * 0.045);
-  game.fallSpeed     = Math.min(15.5, 5.8 + L * 0.52);
-  game.comboMax      = Math.max(2.9, 4.8 - L * 0.07) + game.up.decay;
+  game.fallSpeed  = Math.min(FALL_CAP, 5.8 + L * 0.52);
+  // What actually ramps now: formations arrive closer together and strays
+  // fill the gaps more often. Their internal difficulty — how much slack
+  // each step leaves — lives in fmtReach() over in formations.js.
+  game.fmtGap     = Math.max(0.85, 3.4 - L * 0.12);
+  // Strays are seasoning, not the meal — enough that the sky is not a
+  // metronome, not so much that the routes get lost in noise. Measured over a
+  // simulated minute this holds them to roughly a quarter of everything that
+  // falls; at 4.6 - L*0.15 they were half of it.
+  game.strayEvery = Math.max(2.6, 6.0 - L * 0.16);
+  game.comboMax   = Math.max(2.9, 4.8 - L * 0.07) + game.up.decay;
   Audio.setMusicLevel(L);
 }
 

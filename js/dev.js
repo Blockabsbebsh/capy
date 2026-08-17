@@ -19,7 +19,7 @@ function jumpToLevel(n){
   const th = themeFor(n);
   applyTheme(th, true);
   Audio.setMusicTheme(THEMES.indexOf(th));
-  clearItems(); clearHoles();
+  clearItems(); clearHoles(); resetFormations();
   refreshHUD();
   [...ui.testLevelButtons.children].forEach(b =>
     b.classList.toggle('active', Number(b.dataset.level) === n));

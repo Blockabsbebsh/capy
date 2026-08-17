@@ -52,6 +52,7 @@ Load order, which is also roughly the dependency order:
 | `sinkholes.js` | Hole telegraph/open/close, `holeAt` |
 | `stack.js` | Hat mounting, the head food-stack, debris |
 | `state.js` | The `game` object, difficulty curve, hat unlocks, combo |
+| `formations.js` | The spawn director: shapes, the route ribbon, route-clear scoring |
 | `powers.js` | Shield bubble, magnet/slowmo/shield activation |
 | `hud.js` | `$`, `ui`, HUD rendering, `popup`, `showBanner`, `flash` |
 | `player.js` | `capyState`, `updateCapybara` physics |
@@ -226,6 +227,15 @@ be verified any other way.
   weighting by them paints a boot half way up the hind shins while catching 5-9
   vertices per front foot, which is invisible. `paint()` masks by height
   instead; every foot is planted at y = 0 after grounding.
+- **Food arrives as formations, and every one is provably clearable.** The gap
+  between consecutive beats is computed, not authored: `stepTime()` gives each
+  step exactly the time needed to walk that distance at `fmtReach()` of top
+  speed, so no shape can ask for more than the capybara has. Difficulty raises
+  `fmtReach` (less slack per step) and shortens `fmtGap`, **not** fall speed,
+  which caps at `FALL_CAP`. If you author a shape with hand-timed gaps instead,
+  you reintroduce exactly the unreadable late game this replaced. Verify new
+  shapes with an autopilot sweep — and have it dash only when walking cannot
+  cover the step, or you are testing a bad player, not a hard shape.
 - **The sky is a strip, not a screen.** The camera's pitch and the 60-unit
   ground disc leave only 3.2% of screen height as sky on a desktop aspect and
   16.5% on a phone. `makeSkyTexture` therefore draws the whole gradient, the
