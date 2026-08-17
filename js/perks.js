@@ -2,9 +2,10 @@
    PERK MECHANICS
 
    The drafted perks that are more than a number: the dash shockwave, the
-   Phantombara afterimage, the Long Snout aura, Clean Sweep's pull and
-   Overcharged's hazard wipe. They all live here rather than being sprinkled
-   through the systems they touch, so a perk is one thing to read.
+   Phantombara afterimage, the Long Snout aura, Chain Sweeper's golden routes and
+   Puzzler's payouts. They all live here rather than being sprinkled through the
+   systems they touch, so a perk is one thing to read. (Auto-Shield is the
+   exception — it lives in powers.js, next to the bubble it borrows.)
 
    Everything in here is inert until the matching perk is drafted — the update
    pass returns immediately when nothing is owned.
@@ -23,16 +24,27 @@ function dashShockwave(){
   const r = shockRadius();
   if (r <= 0) return;
 
+  /* Two rings and a real burst. At one thin ring the perk was easy to miss
+     entirely — you saw food vanish without seeing why — and the whole point of a
+     shockwave is that it reads as a thing you did. */
   const ring = new THREE.Mesh(shockGeo, new THREE.MeshBasicMaterial({
-    color: 0x9fe07a, transparent: true, opacity: 0.75, depthWrite: false }));
+    color: 0xcaff8a, transparent: true, opacity: 0.95, depthWrite: false }));
   ring.position.set(capyState.x, 0.06, capyState.z);
-  ring.scale.setScalar(r * 0.35);
+  ring.scale.setScalar(r * 0.3);
   scene.add(ring);
-  shocks.push({ ring, t: 0, r });
+  shocks.push({ ring, t: 0, r, w: 1 });
+
+  const inner = new THREE.Mesh(shockGeo, new THREE.MeshBasicMaterial({
+    color: 0xffffff, transparent: true, opacity: 0.7, depthWrite: false }));
+  inner.position.set(capyState.x, 0.07, capyState.z);
+  inner.scale.setScalar(r * 0.2);
+  scene.add(inner);
+  shocks.push({ ring: inner, t: -0.06, r: r * 0.75, w: 0.6 });
 
   Audio.shieldBreak();
-  burst(new THREE.Vector3(capyState.x, 0.16, capyState.z), 10, PAL.dust,
-        { spread: r * 2.4, up: 1.6, size: 0.09, life: 0.4 });
+  flash('#dfffb0', 0.16);
+  burst(new THREE.Vector3(capyState.x, 0.16, capyState.z), 22, PAL.dust,
+        { spread: r * 3.0, up: 2.4, size: 0.12, life: 0.55 });
 
   // Good food only. Sweeping hazards up as well would make the dash strictly
   // safer to spam, and the decoys in a formation are the whole reason the
@@ -48,9 +60,9 @@ function updateShocks(dt){
   for (let i = shocks.length - 1; i >= 0; i--){
     const s = shocks[i];
     s.t += dt;
-    const u = s.t / SHOCK_LIFE;
-    s.ring.scale.setScalar(s.r * (0.35 + u * 0.75));
-    s.ring.material.opacity = 0.75 * (1 - u);
+    const u = Math.max(0, s.t) / SHOCK_LIFE;
+    s.ring.scale.setScalar(s.r * (0.3 + u * 0.85));
+    s.ring.material.opacity = (0.95 * s.w) * (1 - u) * (1 - u);
     if (u >= 1){
       scene.remove(s.ring);
       s.ring.material.dispose();
@@ -232,52 +244,25 @@ function updateAura(dt){
   reachDome.scale.set(r * pulse, r * 0.62 * pulse, r * pulse);
 }
 
-/* --- Clean Sweep: the route-clear pull ---------------------------------
-   Reuses the magnet's pursuit in updateItems rather than a second homing
-   model — see the note there about why anything chasing a moving target
-   drives velocity. Negative items are left exactly where they were: a perk
-   that delivered the decoys too would be a punishment. */
-function sweepArena(){
-  let n = 0;
-  for (const it of items){
-    if (it.dead || !it.def.good) continue;
-    it.sweep = 1.4;
-    n++;
-  }
-  if (!n) return;
-  popup(new THREE.Vector3(capyState.x, 2.0, capyState.z), 'CLEAN SWEEP ×' + n, '#9fe07a');
-  burst(new THREE.Vector3(capyState.x, 0.9, capyState.z), 14, PAL.dust,
-        { spread: 5.6, up: 2.2, size: 0.1, life: 0.6 });
-  Audio.powerUp();
-}
+/* --- Chain Sweeper: golden routes ---------------------------------------
+   Clear a route and the next one is worth double; keep clearing and it is worth
+   triple, then quadruple, with no ceiling. The reward for a streak used to be
+   the streak itself (the combo timer refilling); this makes the NEXT route the
+   prize, which is a much better reason to keep one going.
 
-/* --- Overcharged: the hazard wipe --------------------------------------
-   Fires on any power-up pickup, and takes everything hostile with it: items in
-   the air, missiles mid-volley, and open sinkholes, which close early rather
-   than vanishing so the ground still reads as ground growing back. */
-function overchargeWipe(at){
-  let n = 0;
-  for (const it of [...items]){
-    if (it.def.good || it.dead) continue;
-    const p = it.mesh.position.clone();
-    burst(p, 12, PAL.chili, { spread: 4.0, up: 3.0, size: 0.11, life: 0.5 });
-    if (it.fid) formationItemResolved(it, false);
-    removeItem(it);
-    n++;
-  }
-  for (const h of holes){
-    if (h.state === 'close') continue;
-    h.state = 'close'; h.t = 0;
-    h.warn.visible = false;
-    burst(new THREE.Vector3(h.x, 0.25, h.z), 14, PAL.dust,
-          { spread: 5.0, up: 3.4, size: 0.12, life: 0.6 });
-    n++;
-  }
-  if (!n) return;
-  showBanner('⚡ OVERCHARGED — FIELD CLEARED', '#ffe14d');
-  flash('#ffe14d', 0.3);
-  game.shake = Math.max(game.shake, 0.24);
-  Audio.levelUp();
+   The multiple lives on the record and on every item in it, so it cannot drift
+   out of step with what the player was shown. */
+function chainMul(){
+  return game.up.chain && game.chain > 0 ? game.chain + 1 : 1;
+}
+function chainCleared(){
+  if (!game.up.chain) return;
+  game.chain++;
+  showBanner('✨ GOLDEN ROUTE ×' + (game.chain + 1), '#ffe14d');
+}
+function chainBroken(){
+  if (!game.up.chain || game.chain === 0) return;
+  game.chain = 0;
 }
 
 /* --- Puzzler ------------------------------------------------------------
@@ -286,13 +271,19 @@ function overchargeWipe(at){
    table. Strays keep their normal speed — they are noise, not the puzzle. */
 function routeFallMul(){ return game.run.puzzler ? 0.5 : 1; }
 
-function puzzlerReward(cleared){
+/* `blocked` means the route ran through a sinkhole: a beat landed somewhere the
+   player could not stand. Clearing it anyway still pays — sometimes the geometry
+   works out, and that deserves the heart — but failing it costs nothing, because
+   the game asked for something it had already made impossible. */
+function puzzlerReward(cleared, blocked){
   if (!game.run.puzzler) return;
   if (cleared){
     if (gainLife(true)){
       popup(new THREE.Vector3(capyState.x, 2.6, capyState.z), '🧩 +1 ♥', '#ff8fae');
       Audio.heart();
     }
+  } else if (blocked){
+    popup(new THREE.Vector3(capyState.x, 2.6, capyState.z), '🧩 SINKHOLE — NO PENALTY', '#ffcf5a');
   } else {
     popup(new THREE.Vector3(capyState.x, 2.6, capyState.z), '🧩 ROUTE LOST -1 ♥', '#ff6b5a');
     loseLife('route');

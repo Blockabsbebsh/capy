@@ -353,7 +353,7 @@ const fail = [];
                hole: HOLE_LIFE, magnet: POWERS.magnet.dur, shapes: FMT_SHAPES.length,
                feasts: FEAST_ROUTES.length, cardCount: 3 };
     });
-    ok('sinkholes close after 7s', bal.hole === 7, String(bal.hole));
+    ok('sinkholes close after 5s', bal.hole === 5, String(bal.hole));
     ok('magnet halved to 3.75s', Math.abs(bal.magnet - 3.75) < 1e-6, String(bal.magnet));
     ok('a biome every 10 levels',
        String(bal.themes) === 'Meadow,Meadow,Lily Pad Ponds,Lily Pad Ponds,Bubblegum,Night,Hell',
@@ -422,6 +422,124 @@ const fail = [];
     });
     ok('a ghost picks up hearts', gh.heart === 'lives=2 ghosts=1 left=0', gh.heart);
     ok('a ghost picks up power-ups', gh.power === 'power=shield ghosts=1 left=0', gh.power);
+
+    /* --- this batch of perk changes, each asserted where it can regress ---- */
+    const perks = await page.evaluate(() => {
+      const o = {};
+      const fresh = (lvl = 14) => {
+        game.state = 'playing'; game.devLock = true; game.level = lvl;
+        resetUpgrades(); applyDifficulty();
+        clearItems(); clearHoles(); clearPerkFX(); resetFormations(); resetEvents();
+        game.lives = game.maxLives = 3; game.power = null; game.shield = false;
+        shieldBubble.visible = false; resetCapy();
+      };
+      const step = n => { for (let i=0;i<n;i++){ updateCapybara(1/60); updateItems(1/60);
+                                                updatePerks(1/60); updatePower(1/60); } };
+      o.ghostLife = GHOST_LIFE;
+      o.holeLife = HOLE_LIFE;
+      fresh(); game.up.shock = 1; o.shockR = +shockRadius().toFixed(2);
+      o.shockSteps = SHOCK_R.join(',');
+
+      // Auto-Shield fires on proximity, holds, absorbs, and then rests a minute
+      fresh(); game.up.autoShield = true;
+      capyState.x = 0; capyState.z = 0;
+      spawnItem('chili', { targeted:false, x:0.6, z:0 });
+      items[0].mesh.position.y = CATCH_Y + 1.4;
+      step(3);
+      o.asFired = game.as.t > 1.5 && shieldBubble.visible;
+      items[0].mesh.position.y = CATCH_Y - 0.05;
+      step(3);
+      o.asAbsorbed = game.lives === 3 && items.length === 0;
+      step(Math.ceil(60 * (AS_BLINK + 0.3)));
+      o.asRest = Math.round(game.as.cd);
+      o.asDown = !shieldBubble.visible;
+
+      // Chain Sweeper escalates on consecutive clears and resets on a drop
+      fresh(); game.up.chain = true;
+      const rec = perfect => ({ fid:++fmt.nextId, total:3, pending:0, goods:3,
+                                caught: perfect?3:2, spoiled:!perfect, blocked:false,
+                                gold:chainMul(), path:null });
+      o.chain = [];
+      for (let i=0;i<3;i++){ o.chain.push(chainMul()); completeFormation(rec(true)); }
+      o.chain.push(chainMul());
+      completeFormation(rec(false));
+      o.chainReset = chainMul();
+
+      // a route stranded in a sinkhole costs Puzzler nothing, but still pays
+      fresh(); game.run.puzzler = true; game.lives = 3;
+      completeFormation({ fid:1, total:3, pending:0, goods:3, caught:2,
+                          spoiled:true, blocked:true, gold:1, path:null });
+      o.blockedFree = game.lives;
+      completeFormation({ fid:2, total:3, pending:0, goods:3, caught:3,
+                          spoiled:false, blocked:true, gold:1, path:null });
+      o.blockedClearPays = game.lives;
+
+      // hazard rate: +20% per heart over the starting three
+      fresh();
+      const rate = () => { let bad = 0;
+        for (let i=0;i<6000;i++){ const t = pickType(); if (t==='chili'||t==='soap') bad++; }
+        return bad/6000; };
+      game.lives = 3; const h3 = rate();
+      game.lives = 5; const h5 = rate();
+      o.heartHazard = +(h5/h3).toFixed(2);          // expect ~1.4
+
+      // difficulty keeps moving past the point where every curve caps out
+      game.level = 24; const q24 = overtime();
+      game.level = 44; const q44 = overtime();
+      o.overtime = [q24, +q44.toFixed(1)];
+
+      // a perk this run made pointless is never offered
+      fresh(); game.run.sticky = true;
+      let offered = 0;
+      for (let i=0;i<200;i++){ game.taken = {}; offerUpgrades(11);
+        if ([...document.querySelectorAll('#upgradeCards .upcard b')]
+              .some(b => b.textContent === 'Quick Paws')) offered++; }
+      showPanel(null); game.pendingLevel = null; game.state = 'playing';
+      o.deadOffered = offered;
+
+      // every description is a sentence, and the rail shows what is held
+      o.lowercase = UPGRADES.concat(RUN_PERKS).filter(u => /^[a-z]/.test(u.desc)).map(u => u.id);
+      o.tiers = UPGRADES.concat(RUN_PERKS).map(u => u.tier || 'plain')
+                        .filter((v,i,a) => a.indexOf(v) === i).sort().join(',');
+      fresh();
+      game.taken = { reach:2, autoShield:1, puzzler:1 };
+      game.up.autoShield = true; game.run.puzzler = true; game.as.cd = 42;
+      refreshHUD();
+      const rail = document.getElementById('perkRail');
+      o.rail = rail.children.length;
+      o.railTiers = [...rail.children].map(c => c.className.replace('perk','').trim() || 'plain').join(',');
+      o.railBadge = (rail.querySelector('b') || {}).textContent;
+      o.railTimer = (rail.querySelector('s') || {}).textContent;
+      fresh();
+      return o;
+    });
+    ok('ghost lasts 5s', perks.ghostLife === 5, String(perks.ghostLife));
+    ok('sinkholes close after 5s', perks.holeLife === 5, String(perks.holeLife));
+    ok('shockwave is 3x the catch radius at one pick', perks.shockR === 3.75,
+       `${perks.shockR} from ${perks.shockSteps}`);
+    ok('Auto-Shield fires on a near hazard and absorbs it',
+       perks.asFired && perks.asAbsorbed, `fired=${perks.asFired} absorbed=${perks.asAbsorbed}`);
+    ok('Auto-Shield then rests a minute', perks.asRest === 60 && perks.asDown,
+       `cd=${perks.asRest}s down=${perks.asDown}`);
+    ok('Chain Sweeper escalates 1,2,3,4 and resets on a drop',
+       String(perks.chain) === '1,2,3,4' && perks.chainReset === 1,
+       `${perks.chain} then ${perks.chainReset}`);
+    ok('a sinkholed route costs Puzzler nothing but still pays out',
+       perks.blockedFree === 3 && perks.blockedClearPays === 4,
+       `dropped ${perks.blockedFree}, cleared ${perks.blockedClearPays}`);
+    ok('each heart over three adds 20% hazards',
+       Math.abs(perks.heartHazard - 1.4) < 0.09, `5 hearts = ${perks.heartHazard}x of 3`);
+    ok('difficulty still climbing past the caps',
+       perks.overtime[0] === 0 && perks.overtime[1] === 2, String(perks.overtime));
+    ok('a dead perk is never offered', perks.deadOffered === 0,
+       `${perks.deadOffered}/200 drafts`);
+    ok('descriptions all start with a capital', perks.lowercase.length === 0,
+       perks.lowercase.join(','));
+    ok('three card tiers exist', perks.tiers === 'gold,plain,silver', perks.tiers);
+    ok('perk rail shows one tinted icon each, with badge and timer',
+       perks.rail === 3 && perks.railTiers === 'plain,silver,gold' &&
+       perks.railBadge === '2/4' && perks.railTimer === '42',
+       `${perks.rail} icons [${perks.railTiers}] badge=${perks.railBadge} timer=${perks.railTimer}`);
 
     // the ghost is the real model, not the procedural fallback
     const ghostModel = await page.evaluate(() => ({

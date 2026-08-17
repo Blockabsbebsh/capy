@@ -42,10 +42,25 @@ function spawnItem(type, opts = {}){
       new THREE.MeshBasicMaterial({ color: glowColor, transparent: true, opacity: 0.22, depthWrite: false }));
     mesh.add(halo);
   }
+  /* Chain Sweeper's golden route: worth a multiple, so it has to LOOK worth a
+     multiple. A gold shell over the food plus a bigger halo reads at a glance
+     from across the arena, which is the point — you want to see that this is
+     the route not to drop. */
+  if (opts.gold > 1){
+    mesh.scale.multiplyScalar(1.12);
+    const shell = new THREE.Mesh(new THREE.SphereGeometry(def.radius * 1.5, 16, 12),
+      new THREE.MeshBasicMaterial({ color: 0xffd33d, transparent: true, opacity: 0.30, depthWrite: false }));
+    shell.name = 'gold';
+    mesh.add(shell);
+    const halo = new THREE.Mesh(new THREE.SphereGeometry(def.radius * 2.4, 14, 10),
+      new THREE.MeshBasicMaterial({ color: 0xfff0a0, transparent: true, opacity: 0.16, depthWrite: false }));
+    mesh.add(halo);
+  }
   scene.add(mesh);
 
   const ring = new THREE.Mesh(indicatorGeo, new THREE.MeshBasicMaterial({
     color: def.heal ? 0xff5f86
+         : opts.gold > 1 ? 0xffd33d
          : def.good ? (type === 'watermelon' ? 0xff8098 : 0xffd88a)
          : (missile ? 0xff2a1a : 0xff5a4a),
     transparent:true, opacity:0, depthWrite:false
@@ -62,7 +77,7 @@ function spawnItem(type, opts = {}){
     // same lazy drift, so a rescue is never something you can't get to
     items.push({
       type, def, mesh, ring, dead:false, bounces:0, missile:false,
-      homing:0, maxLat:0, trail:0, sparkle:0, sweep:0,   // hearts can be swept
+      homing:0, maxLat:0, trail:0, sparkle:0,
       vy: -HEART_FALL, vx:(Math.random()-0.5)*0.5, vz:0,
       spin: new THREE.Vector3(0, 1.1, 0),
       wobble: Math.random() * Math.PI * 2,
@@ -93,9 +108,9 @@ function spawnItem(type, opts = {}){
     fid: opts.fid || 0,             // formation this beat belongs to, 0 = stray
     // steering: how hard it chases, and how fast it can slide sideways
     homing: missile ? 3.1 : (targeted ? 1.05 : 0),
-    maxLat: missile ? 6.4 : Math.min(4.6, 2.4 + game.level * 0.14),
+    maxLat: missile ? 6.4 : Math.min(4.6, 2.4 + game.level * 0.14) + overtime() * 0.5,
     trail: 0,
-    sweep: 0,                       // Clean Sweep: seconds of pull left
+    gold: opts.gold || 1,           // Chain Sweeper: score multiple on this route
     vy: -(game.fallSpeed * routeMul
           * (straight ? 1 : isMelon ? 0.86 : missile ? 1.18 : 1)
           * (straight ? 1 : 0.92 + Math.random()*0.2)),
@@ -154,8 +169,6 @@ function onCatch(it){
   // --- power-ups ---------------------------------------------------------
   if (def.power){
     activatePower(def.power, p);
-    // Overcharged: the pickup itself is the bomb — every hazard in play goes
-    if (game.up.over) overchargeWipe(p);
     if (game.combo > 0) game.comboTime = game.comboMax;   // catching one keeps the combo alive
     squashPose(1.2, 0.78, 1.16);
     popUp(6.4);
@@ -175,13 +188,14 @@ function onCatch(it){
     // taking it on the dash is the skill play, so it pays double
     const dashCatch = capyState.dashT > 0;
     const melonBonus = it.type === 'watermelon' ? game.up.melon : 1;
-    const gained = Math.round(def.points * mult * melonBonus * (dashCatch ? DASH_BONUS : 1));
+    const gained = Math.round(def.points * mult * melonBonus * (it.gold || 1)
+                              * (dashCatch ? DASH_BONUS : 1));
     game.score += gained;
 
     if (it.type === 'burger'){
       Audio.burger(game.combo);
       burst(p, 16, PAL.burger, { spread:4.2, up:4.4, size:0.11, life:0.7 });
-      popup(p, '+' + gained, '#ffd77a');
+      popup(p, '+' + gained, it.gold > 1 ? '#ffe14d' : '#ffd77a');
       squashPose(1.28, 0.7, 1.22);
       popUp(5.6);
     } else {
@@ -203,9 +217,10 @@ function onCatch(it){
       popup(p.clone().add(new THREE.Vector3(0, 1.2, 0)), 'x' + mult + ' COMBO', '#fff0a0');
       Audio.levelUp();
     }
-  } else if (game.shield){
-    // the bubble eats one hazard
-    popShield(p);
+  } else if (shieldUp()){
+    // the bubble eats the hazard — the power-up shield is spent by it, the
+    // Auto-Shield holds for its full two seconds and eats whatever else arrives
+    absorbHit(p);
     removeItem(it);
     refreshHUD();
     return;
@@ -271,8 +286,11 @@ function onMiss(it){
    ======================================================================= */
 function pickType(){
   const L = game.level;
-  // hazards home in now, so keep the steady drip a bit thinner
-  const badChance = Math.min(0.30, 0.09 + L * 0.015);
+  /* Hazards home in now, so keep the steady drip a bit thinner. The 0.30 cap is
+     what the ramp reaches by level 14; past that hazardMul() carries it — on
+     overtime and on how many hearts are being carried — up to a hard 0.62, which
+     is the point where a stray is more likely to be hostile than not. */
+  const badChance = Math.min(0.62, Math.min(0.30, 0.09 + L * 0.015) * hazardMul());
   const melonChance = 0.17;
   const r = Math.random();
   if (r < badChance){
@@ -293,12 +311,8 @@ function updateItems(dt){
     if (it.gone) continue;
     const m = it.mesh;
 
-    if (it.sweep > 0) it.sweep = Math.max(0, it.sweep - dt);
-    /* Clean Sweep rides the magnet's pursuit rather than adding a second homing
-       model — it is the same job, and the note below is the reason there is
-       only one implementation of it in the game. */
-    const magnetised = it.def.good && !it.def.power && !it.dead && !capyState.falling
-                       && ((!!game.power && game.power.type === 'magnet') || it.sweep > 0);
+    const magnetised = !!game.power && game.power.type === 'magnet'
+                       && it.def.good && !it.def.power && !it.dead && !capyState.falling;
 
     if (magnetised){
       /* Pure pursuit, aimed at the capybara's MOUTH and driving velocity

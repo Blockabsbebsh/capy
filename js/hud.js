@@ -11,7 +11,7 @@ const ui = {
   newBest: $('newBest'), flash: $('flash'), overSub: $('overSub'), overTitle: $('overTitle'),
   btnMute: $('btnMute'), banner: $('banner'), btnDash: $('btnDash'),
   powerWrap: $('powerWrap'), powerName: $('powerName'), powerBar: $('powerBar'),
-  hatPicker: $('hatPicker'),
+  hatPicker: $('hatPicker'), perkRail: $('perkRail'),
   testLevelPanel: $('testLevelPanel'), testLevelButtons: $('testLevelButtons'),
 };
 
@@ -60,6 +60,11 @@ function refreshHUD(){
   }
 
   ui.btnDash.classList.toggle('cooling', capyState.dashCD > 0);
+  // Sticky Feet takes the dash away entirely — the button says so rather than
+  // sitting there looking pressable
+  ui.btnDash.classList.toggle('gone', !!game.run.sticky);
+  document.body.classList.toggle('no-dash', !!game.run.sticky);
+  renderPerkRail();
 
   if (game.power){
     const P = POWERS[game.power.type];
@@ -88,6 +93,45 @@ function renderHatPicker(){
       b.addEventListener('click', () => { setHat(h.id); renderHatPicker(); Audio.jump(); });
     }
     box.appendChild(b);
+  }
+}
+
+/* --------------------------- owned perk rail ---------------------------
+   Every perk you hold, as a small tinted icon down the left edge: tier colour
+   for the background (plain / silver / gold), a n/max badge on anything that
+   stacks, and a countdown on Auto-Shield. Rebuilt only when the SET changes —
+   this runs inside refreshHUD, i.e. every frame — while the Auto-Shield number
+   is written in place, because that does change every frame. */
+const PERK_ALL = UPGRADES.concat(RUN_PERKS);   // static; refreshHUD runs 60x a second
+let railKey = '';
+
+function renderPerkRail(){
+  const box = ui.perkRail;
+  if (!box) return;
+  const held = PERK_ALL.filter(u => (game.taken[u.id] || 0) > 0);
+  const key = held.map(u => u.id + (game.taken[u.id] || 0)).join(',');
+  if (key !== railKey){
+    railKey = key;
+    box.innerHTML = '';
+    for (const u of held){
+      const n = game.taken[u.id] || 0;
+      const el = document.createElement('div');
+      el.className = 'perk' + (u.tier ? ' ' + u.tier : '');
+      el.innerHTML = `<i>${u.icon}</i>` +
+        (u.max > 1 ? `<b>${n}/${u.max}</b>` : '') +
+        (u.id === 'autoShield' ? `<s></s>` : '');
+      el.title = u.name;
+      box.appendChild(el);
+    }
+  }
+  // Auto-Shield: blank when ready, seconds when it is coming back
+  if (game.up.autoShield){
+    const cd = box.querySelector('.perk.silver s');
+    if (cd){
+      const secs = Math.ceil(game.as.cd);
+      cd.textContent = game.as.t > 0 ? 'ON' : (secs > 0 ? secs : '');
+      cd.className = game.as.t > 0 ? 'on' : '';
+    }
   }
 }
 
