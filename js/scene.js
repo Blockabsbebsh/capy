@@ -13,59 +13,108 @@ app.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
 
-// --- gradient sky as a background texture -------------------------------
+/* --- gradient sky as a background texture -------------------------------
+   The camera looks down at ~33 degrees with a 26-degree half-FOV, so the
+   background ground disc reaches nearly to the true horizon and the sky is
+   only ever a STRIP at the top of the frame — measured at 3.2% of screen
+   height on a desktop aspect and 16.5% on a phone. Everything below is drawn
+   into that strip rather than across the full texture. Spread over the whole
+   height, 97% of the gradient sat behind the ground and every biome's sky
+   read as one flat colour, and the sun and clouds — real 3D objects in the
+   sky rig — projected to NDC y 1.5-1.8 and were never in frustum on any
+   aspect, phone or desktop.
+
+   `band` is that strip as a fraction of screen height and `aspect` is the
+   viewport's, both supplied by refreshSky() below; the background texture is
+   stretched to fill the viewport, so a circle drawn here needs its x radius
+   divided by the aspect to come out round on screen. */
 const SKY_STOPS = [0.00, 0.35, 0.62, 0.82, 1.00];
-function makeSkyTexture(colors, mode='gradient'){
+function makeSkyTexture(colors, mode='gradient', band=0.16, aspect=1.6){
   const c = document.createElement('canvas');
-  c.width = (mode === 'candy' || mode === 'night') ? 256 : 8; c.height = 256;
+  // Drawn in a 256 coordinate space but rendered at 2x. The strip is only a
+  // few dozen rows tall and gets stretched several times over on the way to
+  // the screen, so at 1x the stars came out as blocks.
+  const SS = 2;
+  c.width = c.height = 256 * SS;
   const g = c.getContext('2d');
+  g.scale(SS, SS);
+  // the strip in canvas rows, with a little slack past the horizon so the
+  // gradient never ends exactly on the ground edge
+  const H = Math.max(6, Math.round(band * 256 * 1.15));
+  const sunR = Math.max(1.5, H * 0.30);          // sun radius, in canvas rows
+  const round = r => r / Math.max(0.2, aspect);  // rows -> columns, kept circular
+
+  // Ornaments sit LOW in the strip, just above the horizon: the HUD panels
+  // occupy the top of it, and the band under them is the only sky a player
+  // ever actually sees.
+  const drawSun = (x, y, r, core, halo) => {
+    const gr = g.createRadialGradient(x, y, 0, x, y, r * 3.2);
+    gr.addColorStop(0, halo); gr.addColorStop(1, 'rgba(0,0,0,0)');
+    g.save(); g.translate(x, y); g.scale(1 / Math.max(0.2, aspect), 1);
+    g.fillStyle = gr; g.beginPath(); g.arc(0, 0, r * 3.2, 0, Math.PI * 2); g.fill();
+    g.fillStyle = core; g.beginPath(); g.arc(0, 0, r, 0, Math.PI * 2); g.fill();
+    g.restore();
+  };
+  const drawClouds = (tint, n) => {
+    g.fillStyle = tint;
+    for (let i = 0; i < n; i++){
+      const cx = (i + 0.5) / n * 256 + (i % 2 ? 14 : -14);
+      const cy = H * (0.42 + (i % 3) * 0.13);
+      const rw = round(H * 0.5) * (1.6 + (i % 3) * 0.5), rh = H * 0.13;
+      g.beginPath();
+      g.ellipse(cx, cy, rw, rh, 0, 0, Math.PI * 2);
+      g.ellipse(cx + rw * 0.5, cy + rh * 0.3, rw * 0.6, rh * 0.8, 0, 0, Math.PI * 2);
+      g.fill();
+    }
+  };
+  // The full five-stop gradient, compressed into the strip. Below it the
+  // ground covers everything, so the rest of the canvas just holds the
+  // horizon colour rather than wasting the other four stops on rows no
+  // camera in this game will ever show.
+  const grd = g.createLinearGradient(0, 0, 0, H);
+  colors.forEach((col, i) => grd.addColorStop(SKY_STOPS[i], col));
+  g.fillStyle = grd; g.fillRect(0, 0, 256, H);
+  g.fillStyle = colors[colors.length - 1];
+  g.fillRect(0, H - 1, 256, 256 - H + 1);
+
   if (mode === 'candy'){
-    // base: the SAME smooth vertical gradient every other theme uses, so
-    // the stripes have something coherent to sit on top of instead of a
-    // flat fill — that flat-vs-gradient mismatch was the "clash" at the
-    // horizon (a hard-edged diagonal band cutting across a solid color)
-    const base = g.createLinearGradient(0, 0, 0, 256);
-    colors.forEach((col, i) => base.addColorStop(SKY_STOPS[i], col));
-    g.fillStyle = base; g.fillRect(0, 0, c.width, c.height);
     // stripes drawn at partial opacity so the base gradient still shows
     // through — reads as "candy-striped sky," not "stripes over a sky"
-    g.globalAlpha = 0.42;
-    for (let y = -100; y < 356; y += 58){
+    g.globalAlpha = 0.38;
+    const gap = Math.max(4, H * 0.5);
+    for (let y = -H; y < H * 2; y += gap){
       g.save();
       g.translate(128, y);
       g.rotate(-0.16);
-      const grd = g.createLinearGradient(-190, 0, 190, 0);
-      grd.addColorStop(0, colors[1]); grd.addColorStop(0.5, colors[3]); grd.addColorStop(1, colors[2]);
-      g.fillStyle = grd; g.fillRect(-190, -16, 380, 32);
+      const st = g.createLinearGradient(-190, 0, 190, 0);
+      st.addColorStop(0, colors[1]); st.addColorStop(0.5, colors[3]); st.addColorStop(1, colors[2]);
+      g.fillStyle = st; g.fillRect(-190, -gap * 0.26, 380, gap * 0.52);
       g.restore();
     }
     g.globalAlpha = 1;
+    drawClouds('rgba(255,244,251,0.7)', 4);
+    drawSun(66, H * 0.76, sunR, '#fff2fb', 'rgba(255,190,228,0.5)');
   } else if (mode === 'night'){
-    // stars baked directly into the sky texture instead of relying on a
-    // 3D particle field. scene.background is a full-screen quad that's
-    // always fully visible regardless of camera position/rotation — a
-    // real 3D Points object, by contrast, has to actually fall inside the
-    // camera's view frustum, and this camera's pitch changes a lot with
-    // phone aspect ratio (steeper on narrow screens), so a 3D star field
-    // was unreliable and often just didn't appear. Baking them into the
-    // texture sidesteps that: they're guaranteed on screen every time.
-    const grd = g.createLinearGradient(0, 0, 0, 256);
-    colors.forEach((col, i) => grd.addColorStop(SKY_STOPS[i], col));
-    g.fillStyle = grd; g.fillRect(0, 0, c.width, 256);
-    // concentrate stars in the upper 70% — keeps the lower sky (near the
-    // horizon/treeline) clean and readable
-    for (let i = 0; i < 260; i++){
-      const x = Math.random() * c.width, y = Math.random() * 180;
-      const r = Math.random() < 0.15 ? 1.6 : 0.7;
-      g.globalAlpha = 0.45 + Math.random() * 0.55;
+    // Stars are baked in here rather than left to a 3D particle field for
+    // exactly the reason above: a full-screen quad is always on screen, a
+    // Points object has to land in the frustum, and this one never does.
+    for (let i = 0; i < 200; i++){
+      const x = Math.random() * 256, y = Math.random() * H * 0.9;
+      const r = Math.random() < 0.15 ? 1.5 : 0.7;
+      g.globalAlpha = 0.4 + Math.random() * 0.6;
       g.fillStyle = '#ffffff';
-      g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+      // ellipse, not arc: the strip is stretched hard vertically on a phone,
+      // and round stars came out as rain streaks
+      g.beginPath(); g.ellipse(x, y, round(r), r, 0, 0, Math.PI * 2); g.fill();
     }
     g.globalAlpha = 1;
+    // a moon reads much larger than a sun at the same size against a dark sky
+    drawSun(196, H * 0.7, sunR * 0.42, '#e9f1ff', 'rgba(150,180,255,0.22)');
+  } else if (mode === 'hell'){
+    drawSun(72, H * 0.72, sunR * 1.05, '#ff8a3a', 'rgba(255,92,20,0.45)');
   } else {
-    const grd = g.createLinearGradient(0, 0, 0, 256);
-    colors.forEach((col, i) => grd.addColorStop(SKY_STOPS[i], col));
-    g.fillStyle = grd; g.fillRect(0, 0, c.width, 256);
+    drawClouds('rgba(255,255,255,0.75)', 4);
+    drawSun(60, H * 0.74, sunR, '#fff4cf', 'rgba(255,212,138,0.55)');
   }
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -97,6 +146,36 @@ function fitCamera(){
   camFit.y = CAM_LOOK.y + (CAM_BASE.y - CAM_LOOK.y) * zoom;
   camFit.z = CAM_LOOK.z + (CAM_BASE.z - CAM_LOOK.z) * zoom;
   camFit.follow = 1 / zoom;
+  refreshSky();
+}
+
+/* How much of the screen is sky, as a fraction of its height — the boundary
+   is the far edge of the background ground disc, not the true horizon, which
+   sits off the top of the frame at this pitch. Measured off a scratch camera
+   posed at camFit rather than the live one, because animate() only moves the
+   real camera onto camFit on the next frame and fitCamera runs before that. */
+const _skyProbe = new THREE.PerspectiveCamera();
+function skyBand(){
+  _skyProbe.fov = camera.fov;
+  _skyProbe.near = camera.near; _skyProbe.far = camera.far;
+  _skyProbe.aspect = window.innerWidth / window.innerHeight;
+  _skyProbe.position.set(camFit.x, camFit.y, camFit.z);
+  _skyProbe.lookAt(CAM_LOOK);
+  _skyProbe.updateMatrixWorld(true);
+  _skyProbe.updateProjectionMatrix();
+  const r = 60 * (typeof ground === 'undefined' ? 1 : ground.scale.x);
+  const p = new THREE.Vector3(0, 0, -r).project(_skyProbe);
+  return THREE.MathUtils.clamp((1 - p.y) / 2, 0.03, 0.6);
+}
+
+/* Repaint the sky for the current theme, framing and viewport. Cheap enough
+   to run on every resize — one 256x256 canvas — and it has to, because both
+   the strip's height and the aspect correction change with the viewport. */
+function refreshSky(){
+  if (typeof curTheme === 'undefined') return;      // pre-boot, theme.js not up yet
+  scene.background?.dispose();
+  scene.background = makeSkyTexture(curTheme.sky, curTheme.skyMode,
+                                    skyBand(), window.innerWidth / window.innerHeight);
 }
 
 camera.position.copy(CAM_BASE);
