@@ -214,8 +214,6 @@
   /* the dash is on a cooldown, so the button has to say when it is spent */
   #btnDash.cooling{filter:grayscale(.65) brightness(.82); opacity:.5;}
   #flash{position:fixed; inset:0; pointer-events:none; z-index:15; opacity:0; background:#ff2d40; mix-blend-mode:screen;}
-  #vignette{position:fixed; inset:0; pointer-events:none; z-index:5;
-    background:radial-gradient(ellipse at 50% 50%, transparent 45%, rgba(0,0,0,.42) 100%);}
   .popup{
     position:fixed; z-index:12; pointer-events:none; font-weight:bold; font-size:22px;
     text-shadow:0 2px 0 rgba(0,0,0,.45), 0 0 14px rgba(0,0,0,.4);
@@ -309,7 +307,6 @@
 </head>
 <body>
 <div id="app"></div>
-<div id="vignette"></div>
 <div id="flash"></div>
 
 <!-- ============ HUD ============ -->
