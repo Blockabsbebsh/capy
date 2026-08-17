@@ -56,6 +56,11 @@ const TYPES = {
   heart:      { good:true, neutral:true, heal:true,      points:0, radius:0.42 },
 };
 
+/* Magnet pursuit speed. Has to beat the capybara's own top speed outright —
+   (12.2 + level*0.16) * up.speed peaks around 22 — or a running player simply
+   tows the food along behind them and the power-up reads as decoration. */
+const MAGNET_SPEED = 24;
+
 const POWERS = {
   magnet: { name:'MAGNET',   dur:7.5, color:'#ff8494', blurb:'food comes to you' },
   shield: { name:'SHIELD',   dur:12,  color:'#8fe9ff', blurb:'blocks one hit' },
