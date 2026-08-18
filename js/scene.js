@@ -151,14 +151,34 @@ const CAM_PITCH_WIDE = Math.atan2(CAM_BASE.y - CAM_LOOK.y, CAM_BASE.z - CAM_LOOK
 const CAM_PITCH_TALL = THREE.MathUtils.degToRad(46);
 const PITCH_ASPECT = { wide: 1.3, tall: 0.55 };
 
-/* How far above the fingertip the capybara stands on a touch screen, in px.
-   Derived rather than dialled in: a lift of the arena's own projected depth
-   puts the thumb entirely below the play field wherever it is pointing, which
-   is the whole reason pointing is usable on a phone. `room` is the other
-   constraint — the near edge has to stay reachable without the finger falling
-   off the bottom of the screen — and it is what binds in landscape, where the
-   arena already sits low. */
-let touchLift = 90;
+/* The finger-to-ground mapping, all of it derived from where the arena
+   actually lands on screen.
+
+   `touchLift` is how far above the fingertip the capybara stands: a lift of
+   the arena's own projected depth puts the thumb entirely below the play field
+   wherever it is pointing, which is the whole reason pointing is usable on a
+   phone.
+
+   `touchReach` is why the mapping is not quite 1:1. At 1:1 the arena's ends
+   land where they are drawn, and on a 390px-wide phone that is 14px from the
+   bezel — inside the OS edge-gesture strip, and a place a thumb does not want
+   to go. Running out of screen mid-drag is the worst thing that can happen to
+   an absolute scheme, because the only way out is to lift and re-place, which
+   moves the capybara somewhere you did not ask for. So the arena is mapped
+   into a rectangle inset from the edges instead, and the whole play field is
+   reachable with a margin to spare.
+
+   It is capped at 1.35 on purpose: relative mappings at gains of 1.4 and up
+   all measured WORSE than the thumbstick, because a gain multiplies the
+   thumb's own imprecision. This stays under that, and on most screens it comes
+   out at 1.0-1.15 anyway — it is the smallest scale that buys reach, not a
+   dialled-in feel value.
+
+   The two trade against each other in landscape, where the arena already sits
+   low and there is no room for both: the lift gives way first, down to
+   whatever still leaves the near edge reachable inside the cap. */
+let touchLift = 90, touchReach = 1, touchCX = 0, touchCY = 0;
+const REACH_MAX = 1.35;
 
 function fitCamera(){
   const aspect = window.innerWidth / window.innerHeight;
@@ -176,7 +196,7 @@ function fitCamera(){
   camFit.y = CAM_LOOK.y + Math.sin(pitch) * dist;
   camFit.z = CAM_LOOK.z + Math.cos(pitch) * dist;
   camFit.follow = 1 / zoom;
-  refreshLift();
+  refreshTouchMap();
   refreshSky();
 }
 
@@ -196,7 +216,11 @@ function poseProbe(){
   _skyProbe.updateProjectionMatrix();
   return _skyProbe;
 }
-// screen y, in px from the top, of a point on the ground
+// where a point on the ground lands on screen, in px from the top left
+function groundX(x, z){
+  _probePt.set(x, 0, z).project(poseProbe());
+  return (_probePt.x + 1) / 2 * window.innerWidth;
+}
 function groundY(x, z){
   _probePt.set(x, 0, z).project(poseProbe());
   return (1 - _probePt.y) / 2 * window.innerHeight;
@@ -209,11 +233,40 @@ function skyBand(){
   const p = _probePt.set(0, 0, -r).project(poseProbe());
   return THREE.MathUtils.clamp((1 - p.y) / 2, 0.03, 0.6);
 }
-function refreshLift(){
-  const near = groundY(0, ARENA.halfZ), far = groundY(0, -ARENA.halfZ);
-  const ideal = (near - far) + 34;                       // clear of the play field
-  const room  = window.innerHeight - near - 16;          // still on the screen
-  touchLift = THREE.MathUtils.clamp(Math.min(ideal, room), 54, 220);
+function refreshTouchMap(){
+  const W = window.innerWidth, H = window.innerHeight;
+  // margins the finger should never have to cross: the sides belong to the
+  // OS edge gestures, the bottom to the home indicator, the top to the HUD
+  const EDGE = THREE.MathUtils.clamp(W * 0.09, 24, 48);
+  const TOP  = THREE.MathUtils.clamp(H * 0.08, 44, 110);
+  let bottom = H - THREE.MathUtils.clamp(H * 0.06, 30, 64);
+  /* The DASH button is the other thing the finger must not have to reach, and
+     it is a harder edge than any margin: it eats the touch outright. It sits
+     bottom-right, the arena spans nearly the full width, so on a short screen
+     the arena's near-right corner lands squarely on it and that corner simply
+     cannot be steered to. Measured off the live button rather than assumed, so
+     it keeps up with the CSS; hidden on desktop, where the rect is empty. */
+  const dash = document.getElementById('btnDash')?.getBoundingClientRect();
+  const arenaRight = groundX(ARENA.halfX, ARENA.halfZ);
+  if (dash && dash.height > 0 && arenaRight > dash.left) bottom = Math.min(bottom, dash.top - 10);
+
+  touchCX = groundX(0, 0);
+  touchCY = groundY(0, 0);
+  // the widest the arena gets is at its near corners, not its middle
+  const hx = Math.abs(groundX(ARENA.halfX, ARENA.halfZ) - touchCX);
+  const hNear = groundY(0, ARENA.halfZ) - touchCY;
+  const hFar  = touchCY - groundY(0, -ARENA.halfZ);
+
+  // as much lift as the room below allows, once the near edge is guaranteed
+  // reachable within the cap
+  const ideal = (hNear + hFar) + 34;
+  const most  = bottom - touchCY - hNear / REACH_MAX;
+  touchLift = THREE.MathUtils.clamp(Math.min(ideal, most), 30, 240);
+
+  const down = Math.max(1, bottom - (touchCY + touchLift));
+  const up   = Math.max(1, (touchCY + touchLift) - TOP);
+  touchReach = THREE.MathUtils.clamp(
+    Math.max(hx / Math.max(1, W / 2 - EDGE), hNear / down, hFar / up), 1, REACH_MAX);
 }
 
 /* Repaint the sky for the current theme, framing and viewport. Cheap enough

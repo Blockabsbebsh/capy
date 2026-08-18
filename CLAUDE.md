@@ -221,6 +221,23 @@ directly at a fixed `1/60` step instead of waiting on real time.
   `touchLift` is derived in `fitCamera` from the arena's own projected depth, so
   the thumb clears the play field wherever it points; in landscape the near edge
   runs out of screen below it first and the lift is capped by that instead.
+- **Every corner of the arena has to be reachable without the finger going
+  somewhere it cannot.** Running out of screen mid-drag is the one failure an
+  absolute scheme cannot absorb: the only way out is to lift, and lifting moves
+  the capybara somewhere nobody asked for. So `touchReach` maps the arena into
+  a rectangle inset from the edges rather than onto the pixels it is drawn on —
+  at 1:1 the ends of the arena sit 14px from the bezel, inside the OS
+  edge-gesture strip. It is capped at 1.35 because gains of 1.4 and up all
+  measured worse than the thumbstick, and it comes out at 1.0-1.15 on a roomy
+  screen; it is the smallest scale that buys reach, not a feel dial.
+- **The DASH button is part of the input map, not just decoration on top of
+  it.** It eats the touch outright, it sits bottom-right, and the arena spans
+  nearly the full width — so on a short screen the arena's near-right corner
+  landed on it and that corner could not be steered to at all. `refreshTouchMap`
+  reserves its row, measured off the live rect and only where it actually
+  overlaps (in landscape it does not, and reserving it anyway crushed the lift
+  to 10px). Anything else placed over the play field has to do the same.
+  `--touch` checks all four corners at five viewports for exactly this.
   Touch reads against a ground plane and the mouse against one at the
   capybara's middle — pointing at a ribbon dot and sitting on the capybara are
   different jobs, and sharing one plane put every touch target 0.6 units short.

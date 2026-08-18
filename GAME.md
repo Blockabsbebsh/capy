@@ -42,8 +42,10 @@ share nothing but the dash.
 capybara moves faster the further it has to go and slows as it arrives, so
 parking on a landing ring is not a matter of letting go at the right instant.
 On a phone the capybara stands a little way *above* your fingertip, which is
-what keeps your thumb off the part of the ground you are reading. The keys are
-the one input that says a direction instead.
+what keeps your thumb off the part of the ground you are reading, and the whole
+arena is reachable well inside the edges of the screen — you should never have
+to lift your thumb to get somewhere. The keys are the one input that says a
+direction instead.
 
 Movement is a **velocity-target** model: input says what velocity you want, and
 the capybara eases toward it. It stops quickly and does not coast.
