@@ -213,6 +213,15 @@ directly at a fixed `1/60` step instead of waiting on real time.
   per icon in `ART` — a pocket showing the backdrop *through* the art (the gaps
   in the chain links) and art drawn *around* the icon (`reach` came with a ring
   and an outer glow). The long-form reasoning is in the script's docstring.
+- **A leftover shadow only shows on a colour the art never uses**, which is
+  what `--icons` writes `icons-cut.png` for. `reach` shipped a tan drop shadow
+  that was invisible on the brown draft card and the dark perk chip alike: its
+  own outer ramp had been sharpened into a wall, so the fill never got inside
+  it. Look at the magenta plate before believing a cut, not the in-game shots.
+- **`--icons` parks the pointer at 1,1 before it shoots.** Clicking START
+  leaves the mouse where the button was, the draft opens under it, and one card
+  screenshots in `:hover` — which reads as a gold-tinted card and was reported
+  as a bug in the tiers twice over.
 - **`refreshHUD` runs every frame, so it writes only what changed.** Use
   `setText`/`setHTML`/`setStyle`; a bare `textContent =` is a DOM mutation even
   when the string is identical, and the power chip's icon markup was being

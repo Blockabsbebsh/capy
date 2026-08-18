@@ -23,7 +23,7 @@ blurred shadow — changes by a level or two per pixel; an ink outline jumps
 forty. So the fill is over pixels whose local gradient is low, walled in by the
 outline, and the shadow is swallowed on the way because a blur is flat.
 
-Two things the flood fill cannot know on its own, declared per icon in ART:
+Three things the flood fill cannot know on its own, declared per icon in ART:
 
   holes   a pocket enclosed by the art but showing the backdrop THROUGH it —
           the gaps inside the chain links. Matched on the backdrop's own
@@ -33,6 +33,9 @@ Two things the flood fill cannot know on its own, declared per icon in ART:
           runs off the edge of the picture, which is what identifies it. Its
           antialiased edge survives as hairline arcs, so anything left without
           a solid core goes with it — a whisker has one, a hairline does not.
+  shadow  a blur whose own outer ramp got sharpened into a wall — a resize
+          before the art reached here is enough — so the fill never got in and
+          the shadow shipped. Steps across a wall that thin. See the code.
 
 Everything else is uniform on purpose: same canvas, same margin, so the rail
 does not read as a ragged column. The size is a display decision and lives in
@@ -59,7 +62,7 @@ SIZE, MARGIN, COLORS = 192, 0.05, 32
 # Per-icon exceptions. Everything not named here is the plain case.
 ART = {
     'chain': {'holes': True},           # the gaps inside the two links
-    'reach': {'frame': True},           # a ring and an outer glow round the head
+    'reach': {'frame': True, 'shadow': 60},  # a ring, an outer glow and a sealed-in shadow
 }
 
 
@@ -80,7 +83,7 @@ def edge_ids(lab):
     return ids(lab[0]) | ids(lab[-1]) | ids(lab[:, 0]) | ids(lab[:, -1])
 
 
-def cut(rgb, holes=False, frame=False):
+def cut(rgb, holes=False, frame=False, shadow=0):
     """RGB -> boolean keep mask. See the module docstring for why it works."""
     h, w = rgb.shape[:2]
     lab, n = ndimage.label(barrier(rgb))
@@ -92,14 +95,39 @@ def cut(rgb, holes=False, frame=False):
     if not bg.any():
         raise SystemExit('no backdrop found: the art must sit on a flat wash')
     bgcol = np.median(rgb[bg][::97], 0)
+    tone = lambda m: np.abs(np.median(rgb[m][::13], 0) - bgcol).max()
 
     if holes:
         for l in range(1, n + 1):
             if l in outer:
                 continue
             m = (lab == l)
-            if m.sum() >= 64 and np.abs(np.median(rgb[m][::13], 0) - bgcol).max() <= 22:
+            if m.sum() >= 64 and tone(m) <= 22:
                 bg |= m
+
+    if shadow:
+        # A blur is flat and should have been swallowed with the wash. This one
+        # was not: `reach`'s art was resized before it got here, which sharpened
+        # the shadow's own outer ramp into a wall a pixel or two thick, sealing
+        # the blur off behind it. So: step across a wall that thin, and take
+        # what is on the other side if it is still the wash's own colour, until
+        # nothing more gives. The two conditions are both load-bearing —
+        # touching the wash is what spares every fill that has an ink outline
+        # between it and the backdrop (the head here is 66 off the wash, which
+        # no colour threshold alone could tell from the shadow's 55), and the
+        # colour is what spares an unoutlined shape that does touch it. Which is
+        # why this is opt-in per icon and not the default.
+        seen = set(outer)
+        while True:
+            reach = ndimage.binary_dilation(bg, iterations=3) & ~bg
+            fresh = {l for l in ids(lab[reach]) if l not in seen}
+            if not fresh:
+                break
+            seen |= fresh
+            for l in fresh:
+                m = (lab == l)
+                if tone(m) <= shadow:
+                    bg |= m
 
     # the wall itself keeps a pixel or two of backdrop standing on its outside
     bg = ndimage.binary_dilation(bg, iterations=2)
