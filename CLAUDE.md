@@ -199,70 +199,51 @@ directly at a fixed `1/60` step instead of waiting on real time.
   `SPEED` is the dash.
 - **Both pointers name a PLACE, not a speed**, and both write
   `capyState.dragX/dragZ`. The proportional controller behind that channel is
-  the whole reason the game feels good with a mouse — speed scales with distance
-  to go, so arriving is automatic and overshoot is impossible — and it is what
-  a thumb needs most, because it is the half of the job a thumb is worst at. A
-  velocity thumbstick shipped here for months and was the reason routes were
-  unplayable on a phone: a rate device asks the player for a heading and a
-  throttle, neither of which is drawn anywhere on screen, and holds the last
-  answer until they give another. Only the keys still say a direction.
-- **A steering scheme needs evidence, and `--touch` is where it goes.** Two have
-  been removed for lack of it. An input-offset (relative drag) alternative
-  play-tested identical to drag-to-follow, so it was a second code path for
-  nothing. A relative "trackpad" mapping for touch was measured at gains 1.4
-  through 3.6 and every gain lost to the thumbstick, because a gain multiplies
-  the thumb's own imprecision — which is why touch pointing is strictly 1:1.
-  What beat the stick was 1:1 pointing (47% of routes to 39% at a 150ms
-  look-rate, 31% to 16% at 250ms). `updateCapybara` and `tryDash` still know
+  why the game feels good with a mouse — speed scales with distance to go, so
+  arriving is automatic and overshoot impossible — and it is the half of the
+  job a thumb is worst at. A velocity thumbstick shipped here for months and
+  was why routes were unplayable on a phone: a rate device asks for a heading
+  and a throttle, neither of which is drawn anywhere on screen, and holds the
+  last answer until you give another. Only the keys still say a direction.
+- **A steering scheme needs evidence, and `--touch` is where it goes.** Three
+  have now been removed for lack of it: an input-offset drag that play-tested
+  identical to drag-to-follow, a relative "trackpad" mapping that lost to the
+  thumbstick at every gain from 1.4 to 3.6, and the thumbstick itself. The
+  harness puts a modelled thumb — look-rate, finger travel, placement noise —
+  in front of the real physics and the real finger map; a scheme that cannot
+  beat what is there does not ship. `updateCapybara` and `tryDash` still know
   nothing about input devices, and there is no analog-axis channel any more.
 - **On touch the capybara stands ABOVE the fingertip.** That single offset is
   what makes pointing usable on a phone rather than a way to cover the arena
   with your thumb, and it is why drag-to-follow was rejected for touch before.
-  `touchLift` is derived in `fitCamera` from the arena's own projected depth, so
-  the thumb clears the play field wherever it points; in landscape the near edge
-  runs out of screen below it first and the lift is capped by that instead.
-  `LIFT_REACH` is the depth scale the lift is allowed to assume it can spend —
-  it is deliberately NOT `touchReachZ`, which is computed afterwards, because
-  the two are circular and pinning one keeps landscape's occlusion balance from
-  drifting whenever the strain floor moves.
-- **Every corner of the arena has to be reachable without the finger going
-  somewhere it cannot.** Running out of screen mid-drag is the one failure an
-  absolute scheme cannot absorb: the only way out is to lift, and lifting moves
-  the capybara somewhere nobody asked for. So `touchReachX/Z` map the arena
-  into a rectangle inset from the edges rather than onto the pixels it is drawn
-  on — at 1:1 the ends of the arena sit 14px from the bezel, inside the OS
-  edge-gesture strip.
-- **The other cost a thumb pays is strain, and it is not distance travelled —
-  it is how far the thumb stretches from where it rests.** No harness measures
-  that: the modelled thumb slides at a fixed rate and a long drag costs it
-  nothing, so a reach sweep reports flat clear rates from 1.0 to 3.0 and is
-  silent on the thing being complained about. The floor comes from geometry
-  instead — the arena has to fit inside `THUMB_SPAN` on each axis, which at 1:1
-  it did not (321x109px against a thumb's ~180px sweep).
-- **The two reach scales are PER AXIS because the arena is 2:1 and the axes are
-  in opposite trouble.** Width is what strains; depth is already inside a
-  comfortable sweep and is the axis whose precision is worse to start with (16px
-  of thumb per catch radius against 22px across). One uniform scale big enough
-  to fix the width spends that depth precision for nothing. Anisotropy does not
-  make the mapping any less absolute — every finger position still resolves to
-  one point on the ground, corners included, which `--touch` checks.
-- **`TOUCH_MIN_PX` is the ceiling on both, and reach beats it.** Past the point
-  where a catch radius is smaller than the smallest movement a thumb can place,
-  more scale is not more reach, it is a control you cannot aim. But an
-  unreachable corner is worse than an imprecise one, so a margin requirement
-  overrides the ceiling rather than the other way round — which is why the
-  smallest screens sit slightly under it on depth.
-- **The DASH button is part of the input map, not just decoration on top of
-  it.** It eats the touch outright, it sits bottom-right, and the arena spans
-  nearly the full width — so on a short screen the arena's near-right corner
-  landed on it and that corner could not be steered to at all. `refreshTouchMap`
-  reserves its row, measured off the live rect and only where it actually
-  overlaps (in landscape it does not, and reserving it anyway crushed the lift
-  to 10px). Anything else placed over the play field has to do the same.
-  `--touch` checks all four corners at five viewports for exactly this.
-  Touch reads against a ground plane and the mouse against one at the
-  capybara's middle — pointing at a ribbon dot and sitting on the capybara are
+  Touch reads against the GROUND plane and the mouse against one at the
+  capybara's middle: pointing at a ribbon dot and sitting on the capybara are
   different jobs, and sharing one plane put every touch target 0.6 units short.
+- **The finger map is derived from the projected arena, never dialled in.**
+  `refreshTouchMap` answers three constraints, and their priority order is the
+  rule — everything else there is arithmetic:
+
+  1. every corner reachable, clear of the bezel, the HUD and the DASH button;
+  2. the whole arena inside `THUMB_SPAN` on each axis, because the cost a thumb
+     pays is not distance travelled but how far it stretches from where it
+     rests — and no harness here measures that, so the floor is geometric;
+  3. never so scaled that a catch radius is smaller than `TOUCH_MIN_PX`, the
+     smallest movement a thumb can place.
+
+  Reach wins over aim where they conflict: an unreachable corner is worse than
+  an imprecise one, which is why the smallest screens sit slightly under the
+  ceiling on depth. The scales are **per axis** because the arena is 2:1 and
+  the axes are in opposite trouble — width is what strains, depth is already
+  inside a comfortable sweep and has the worse precision to start with, so one
+  uniform scale big enough to fix the width spends that depth for nothing.
+  Anisotropy costs nothing in absoluteness: every finger position still
+  resolves to one point on the ground, corners included.
+- **The DASH button is part of the input map, not decoration on top of it.** It
+  eats the touch outright and sits bottom-right, where the arena's near-right
+  corner lands on a short screen — that corner could not be steered to at all.
+  `refreshTouchMap` reserves its row off the live rect, and only where it
+  actually overlaps (in landscape it does not, and reserving it anyway crushed
+  the lift to 10px). Anything else placed over the play field must do the same.
 - **`game.up.speed` is the only thing that scales movement.** Sticky Feet halves
   it, and `fmtSpeed` reads the same field, which is what keeps routes walkable at
   half speed. Anything that changes how fast the capybara moves goes here, or
@@ -397,6 +378,28 @@ so a silently wrong model looks like a downgrade rather than a crash;
 `updateThemeFX` advances the hell lava bubbles with a hardcoded `1/60` rather
 than the frame delta, so they animate at different speeds on different refresh
 rates. Decided not worth fixing. Not a bug to "discover" again.
+
+**Touch steering is good, not perfect.** Play-tested on a real phone: routes
+clear, the game is properly playable, and it still reads as slightly finicky in
+a way nobody has pinned to a cause yet. Do not go changing the control law on
+that report alone — the scheme is the one thing here with measurements behind
+it. If it is worth chasing, the untested suspects, cheapest first:
+
+- **the finger map's anisotropy.** A diagonal drag moves the capybara at a
+  shallower screen angle than the thumb — worst at a thumb angle near 54°, and
+  worst on a PORTRAIT phone (18°, against 14° in landscape and 4-7° on small
+  screens), because that is where the two scales are furthest apart. Portrait
+  being the common case makes this the first thing to measure, not the last.
+  Narrowing the gap costs either strain or depth aim, so it is a trade, not a
+  fix;
+- **`DRAG_GAIN` at 11**, which saturates the walk until the target is 1.1 units
+  out — so only the last unit of any approach eases at all, and everything
+  shorter than that is the full stop-start;
+- **`MOVE_T_TURN` at 0.07** against a target that can jump the width of the
+  arena in a single frame if the finger does.
+
+None is evidenced. Each is a one-line experiment, and `--touch` will tell you
+whether it cost anything measurable even if it cannot tell you it felt better.
 
 ## Tooling
 
