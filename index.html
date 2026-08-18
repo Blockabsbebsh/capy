@@ -158,7 +158,9 @@
   #powerName{
     font-size:clamp(13px,3vw,17px); font-weight:bold; letter-spacing:3px;
     text-shadow:0 2px 5px rgba(0,0,0,.6), 0 0 18px currentColor;
+    display:flex; align-items:center; justify-content:center; gap:6px;
   }
+  #powerName .ico{width:16px; height:16px; flex:0 0 auto;}
   #powerBarOuter{width:min(34vw,180px); height:6px; border-radius:5px; background:rgba(0,0,0,.5);
     margin:4px auto 0; overflow:hidden; border:1px solid rgba(255,255,255,.18);}
   #powerBar{height:100%; width:100%; border-radius:5px; transition:width .1s linear;}
@@ -197,6 +199,48 @@
   .toprightstack{display:flex; flex-direction:column; align-items:flex-end; gap:8px;}
   .btnrow{display:flex; gap:8px;}
 
+  /* ---------- owned perk rail ---------- */
+  #perkRail{
+    position:absolute; left:calc(clamp(12px,3vw,26px) + env(safe-area-inset-left));
+    top:38%; transform:translateY(-50%);
+    display:flex; flex-direction:column; gap:9px; pointer-events:none;
+  }
+  .perk{
+    position:relative; width:30px; height:30px; border-radius:9px;
+    display:flex; align-items:center; justify-content:center;
+    background:linear-gradient(180deg, rgba(56,40,28,.85), rgba(30,20,14,.85));
+    border:1.5px solid rgba(255,205,140,.38);
+    box-shadow:0 3px 8px rgba(0,0,0,.4);
+  }
+  .perk i{font-style:normal; line-height:0; display:block;}
+  .perk i .ico{width:18px; height:18px; display:block;}
+  /* n/max rides the corner rather than taking a row of its own */
+  .perk b{
+    position:absolute; right:-3px; bottom:-4px; font-size:8.5px; letter-spacing:0;
+    padding:0 3px; border-radius:5px; color:#ffe1a8;
+    background:rgba(18,12,8,.92); border:1px solid rgba(255,205,140,.3);
+  }
+  .perk s{
+    position:absolute; left:-2px; top:-5px; font-size:8.5px; text-decoration:none;
+    padding:0 3px; border-radius:5px; color:#cfeaff; background:rgba(10,24,34,.94);
+    border:1px solid rgba(150,220,255,.35);
+  }
+  .perk s:empty{display:none;}
+  .perk s.on{color:#0d2230; background:#9fe0ff; font-weight:bold;}
+  .perk.silver{
+    border-color:#dfe6ee;
+    background:linear-gradient(180deg, rgba(226,234,242,.34), rgba(120,136,152,.30));
+  }
+  .perk.gold{
+    border-color:#ffd15c;
+    background:linear-gradient(180deg, rgba(255,209,92,.34), rgba(184,124,26,.28));
+  }
+  @media (max-width: 470px){
+    #perkRail{gap:8px; top:36%;}
+    .perk{width:25px; height:25px; border-radius:8px;}
+    .perk i .ico{width:15px; height:15px;}
+  }
+
   /* ---------- effects ---------- */
   #bannerWrap{position:absolute; left:0; right:0; top:22%; display:flex; justify-content:center; pointer-events:none;}
   #banner{
@@ -223,6 +267,14 @@
   #btnDash:active{transform:translateY(5px); box-shadow:0 1px 0 #3d7a2c;}
   /* the dash is on a cooldown, so the button has to say when it is spent */
   #btnDash.cooling{filter:grayscale(.65) brightness(.82); opacity:.5;}
+  /* Sticky Feet: no dash at all. Struck through, not merely dimmed — a dimmed
+     button reads as "wait a moment", and this one is never coming back. */
+  #btnDash.gone{filter:grayscale(1) brightness(.7); opacity:.38;}
+  #btnDash.gone::after{
+    content:''; position:absolute; left:8%; right:8%; top:48%; height:5px;
+    border-radius:3px; background:#7a1d1d; transform:rotate(-24deg);
+  }
+  body.no-dash .dashhint{text-decoration:line-through; opacity:.45;}
   #flash{position:fixed; inset:0; pointer-events:none; z-index:15; opacity:0; background:#ff2d40; mix-blend-mode:screen;}
   .popup{
     position:fixed; z-index:12; pointer-events:none; font-weight:bold; font-size:22px;
@@ -258,7 +310,11 @@
   .upcard:active{transform:translateY(2px); box-shadow:0 1px 0 rgba(0,0,0,.3);}
   .upcard b{display:block; font-size:15.5px; color:#ffe1a8; letter-spacing:.4px;}
   .upcard span{display:block; font-size:12px; opacity:.78; font-weight:normal; margin-top:2px; letter-spacing:.2px;}
-  .upcard i{font-style:normal; font-size:26px; flex:0 0 auto; line-height:1;}
+  .upcard i{font-style:normal; flex:0 0 auto; line-height:0; display:block;}
+  .upcard i .ico{width:28px; height:28px; display:block;}
+  /* the icons are drawn flat, so a soft drop shadow is what lifts them off the
+     card without giving them a border of their own */
+  .ico{filter:drop-shadow(0 1px 1px rgba(0,0,0,.45));}
   .upcard u{display:block; font-size:10px; letter-spacing:1.5px; opacity:.6; text-decoration:none; margin-top:3px;}
   /* one-per-run perks: gold, and lit, so a run-changing pick never reads as
      one more +0.22 */
@@ -271,6 +327,23 @@
   .upcard.gold:hover{border-color:#fff0c0; background:linear-gradient(180deg, rgba(255,224,140,.34), rgba(200,140,30,.2));}
   .upcard.gold b{color:#ffe9a8; text-shadow:0 0 14px rgba(255,200,90,.6);}
   .upcard.gold u{opacity:.85; color:#ffd98a;}
+  /* silver: the one-offs. Same idea as gold, half the volume — they are
+     permanent and unique but they do not rewrite the run. */
+  .upcard.silver{
+    border-color:#dfe6ee;
+    background:linear-gradient(180deg, rgba(226,234,242,.20), rgba(120,136,152,.12));
+    box-shadow:0 3px 0 rgba(0,0,0,.3), 0 0 16px rgba(214,228,240,.22), inset 0 0 14px rgba(230,240,250,.10);
+  }
+  .upcard.silver:hover{border-color:#f4f8fc; background:linear-gradient(180deg, rgba(238,244,250,.28), rgba(140,156,172,.18));}
+  .upcard.silver b{color:#eef4fa; text-shadow:0 0 12px rgba(200,220,240,.5);}
+  .upcard.silver u{opacity:.85; color:#dfe6ee;}
+  /* a perk this run has made pointless: shown so the reason is visible, struck
+     through and inert so it cannot be picked */
+  .upcard.dead{opacity:.42; cursor:not-allowed; filter:grayscale(.7);}
+  .upcard.dead b{text-decoration:line-through;}
+  .upcard.dead:hover{border-color:rgba(255,205,140,.28); background:linear-gradient(180deg, rgba(255,255,255,.11), rgba(255,255,255,.05));}
+  .upcard.dead:active{transform:none;}
+
   @keyframes goldGlow{
     from{box-shadow:0 3px 0 rgba(0,0,0,.3), 0 0 14px rgba(255,196,74,.25), inset 0 0 14px rgba(255,214,120,.12);}
     to  {box-shadow:0 3px 0 rgba(0,0,0,.3), 0 0 30px rgba(255,196,74,.5),  inset 0 0 22px rgba(255,214,120,.22);}
@@ -391,6 +464,10 @@
     </div>
   </div>
 
+  <!-- perks you hold, down the left edge: tier colour, n/max, and the
+       Auto-Shield countdown. Kept narrow so a phone still has an arena. -->
+  <div id="perkRail"></div>
+
   <div id="bannerWrap"><div id="banner"></div></div>
 
   <!-- dev-only level switcher for quickly jumping between biomes while
@@ -459,7 +536,7 @@
       <b>PC</b>
       <span><span class="nb"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>, arrows</span>
         or drag with the mouse
-        <span class="nb"><em>·</em> <kbd>Space</kbd> dash</span>
+        <span class="nb dashhint"><em>·</em> <kbd>Space</kbd> dash</span>
         <span class="nb"><em>·</em> <kbd>Esc</kbd> pause</span></span>
     </div>
     <button id="btnStart">MUNCH TIME</button>
@@ -507,6 +584,7 @@
      scripts sharing one global scope, so the order below is load-bearing. -->
 <script src="vendor/three.min.js"></script>
 <script src="js/config.js"></script>
+<script src="js/icons.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/scene.js"></script>
 <script src="js/materials.js"></script>

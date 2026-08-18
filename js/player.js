@@ -285,9 +285,9 @@ function updateCapybara(dt){
       capyState.hopY < 0.8 && capyState.invuln <= 0){
     const h = holeAt(capyState.x, capyState.z);
     if (h){
-      if (game.shield){
+      if (shieldUp()){
         // the bubble bounces you back out to the rim
-        popShield(new THREE.Vector3(capyState.x, 0.9, capyState.z));
+        absorbHit(new THREE.Vector3(capyState.x, 0.9, capyState.z));
         const away = new THREE.Vector2(capyState.x - h.x, capyState.z - h.z);
         if (away.lengthSq() < 0.001) away.set(1, 0);
         away.normalize().multiplyScalar(h.r * 1.35);

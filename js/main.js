@@ -85,19 +85,28 @@ function animate(){
       if (newLevel >= themeStart){
         if (!offerUpgrades(themeStart)){
           // no perks left to offer — just advance straight into the theme
+          const was = curTheme;
           game.level = themeStart;
           applyDifficulty();
           const th = themeFor(themeStart);
           applyTheme(th, false);
           Audio.setMusicTheme(THEMES.indexOf(th));
-          Audio.themeShift();
           Audio.levelUp();
           refreshHUD();
           ui.levelBadge.classList.remove('bump');
           void ui.levelBadge.offsetWidth;
           ui.levelBadge.classList.add('bump');
-          showBanner('✦ ' + th.name.toUpperCase() + ' ✦', '#ffe1a8');
-          if (!REDUCED){ flash('#ffffff', 0.3); game.fovKick = 3.2; }
+          /* Only announce a biome the player is actually arriving in. themeFor
+             clamps at Hell, so every ten levels past it used to fire the whole
+             arrival ceremony — banner, whoosh, white flash, FOV punch — for a
+             biome that had not changed. */
+          if (th !== was){
+            Audio.themeShift();
+            showBanner('✦ ' + th.name.toUpperCase() + ' ✦', '#ffe1a8');
+            if (!REDUCED){ flash('#ffffff', 0.3); game.fovKick = 3.2; }
+          } else {
+            showBanner('LEVEL ' + themeStart, '#ffe1a8');
+          }
         }
       } else {
         game.level = newLevel;
