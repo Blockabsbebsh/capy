@@ -308,15 +308,22 @@ const fail = [];
       };
       const speed = () => (12.2 + game.level * 0.16) * game.up.speed;
 
-      // the shipped scheme: the target is wherever the finger is, 1:1
+      /* The shipped scheme, driven through the REAL mapping: the noise is put
+         on the FINGER in screen px and then goes through steerTo's transform,
+         so the reach scales multiply it exactly as they would on a phone
+         rather than being assumed away. */
+      const toFinger = (x, z) => { const g = proj(x, z);
+        return { x: touchCX + (g.x - touchCX)/touchReachX,
+                 y: touchCY + (g.y - touchCY)/touchReachZ + touchLift }; };
       const point = () => {
-        const finger = { ...HOME }, want = { ...HOME };
+        const finger = toFinger(0, 0), want = toFinger(0, 0);
         return {
-          decide(t){ const p = proj(t.x, t.z);
-                     want.x = p.x + gauss()*NOISE; want.y = p.y + gauss()*NOISE; },
+          decide(t){ const f = toFinger(t.x, t.z);
+                     want.x = f.x + gauss()*NOISE; want.y = f.y + gauss()*NOISE; },
           step(dt){
             slide(finger, want, dt);
-            const h = pointerToGround(finger.x, finger.y);
+            const h = pointerToGround(touchCX + (finger.x - touchCX)*touchReachX,
+                                      touchCY + (finger.y - touchLift - touchCY)*touchReachZ);
             if (!h) return;
             capyState.dragging = true;
             capyState.dragX = THREE.MathUtils.clamp(h.x, -ARENA.halfX, ARENA.halfX);
@@ -451,38 +458,53 @@ const fail = [];
        the DASH button eating the near-right corner on a short screen. Both are
        invisible until you check the corners at a real phone size. */
     const REACH_MIN = 20;                       // px of screen a corner must spare
+    const AIM_MIN = 10;                         // px of thumb per catch radius
     for (const [w, h] of [[390, 844], [360, 640], [320, 568], [844, 390], [768, 1024]]) {
       await tp.setViewportSize({ width: w, height: h });
       await tp.waitForTimeout(350);
       const r = await tp.evaluate(() => {
         const V = new THREE.Vector3();
-        const finger = (x, z) => {
-          V.set(x, 0, z).project(camera);
-          const g = { x: (V.x + 1)/2*window.innerWidth, y: (1 - V.y)/2*window.innerHeight };
-          return { x: touchCX + (g.x - touchCX)/touchReach,
-                   y: touchCY + (g.y - touchCY)/touchReach + touchLift };
-        };
+        const proj = (x, z) => { V.set(x, 0, z).project(camera);
+          return { x: (V.x + 1)/2*window.innerWidth, y: (1 - V.y)/2*window.innerHeight }; };
+        const finger = (x, z) => { const g = proj(x, z);
+          return { x: touchCX + (g.x - touchCX)/touchReachX,
+                   y: touchCY + (g.y - touchCY)/touchReachZ + touchLift }; };
         const dash = document.getElementById('btnDash').getBoundingClientRect();
         let edge = 1e9, onDash = 0;
+        const fx = [], fy = [];
         for (const [x, z] of [[-ARENA.halfX, ARENA.halfZ], [ARENA.halfX, ARENA.halfZ],
                               [-ARENA.halfX, -ARENA.halfZ], [ARENA.halfX, -ARENA.halfZ]]){
           const f = finger(x, z);
+          fx.push(f.x); fy.push(f.y);
           edge = Math.min(edge, f.x, f.y, window.innerWidth - f.x, window.innerHeight - f.y);
           if (dash.height > 0 && f.x > dash.left && f.x < dash.right &&
               f.y > dash.top && f.y < dash.bottom) onDash++;
           // and the mapping has to actually resolve there
-          const h = pointerToGround(touchCX + (f.x - touchCX)*touchReach,
-                                    touchCY + (f.y - touchLift - touchCY)*touchReach);
+          const h = pointerToGround(touchCX + (f.x - touchCX)*touchReachX,
+                                    touchCY + (f.y - touchLift - touchCY)*touchReachZ);
           if (!h) onDash += 100;
         }
-        return { edge: Math.round(edge), onDash, reach: +touchReach.toFixed(2),
-                 lift: Math.round(touchLift) };
+        const c = proj(0, 0);
+        const perX = Math.abs(proj(1, 0).x - c.x);
+        const perZ = Math.hypot(proj(0, 1).x - c.x, proj(0, 1).y - c.y);
+        return { edge: Math.round(edge), onDash,
+                 rx: +touchReachX.toFixed(2), rz: +touchReachZ.toFixed(2),
+                 lift: Math.round(touchLift),
+                 boxW: Math.round(Math.max(...fx) - Math.min(...fx)),
+                 boxH: Math.round(Math.max(...fy) - Math.min(...fy)),
+                 aimX: +(CATCH_R * perX / touchReachX).toFixed(1),
+                 aimZ: +(CATCH_R * perZ / touchReachZ).toFixed(1) };
       });
       okT(`${w}x${h}: every corner reachable`, r.edge >= REACH_MIN && r.onDash === 0,
-          `nearest corner ${r.edge}px from an edge, ${r.onDash} under the DASH button, ` +
-          `reach ${r.reach} lift ${r.lift}`);
-      okT(`${w}x${h}: reach scale stays under the gains that lost`, r.reach <= 1.35,
-          String(r.reach));
+          `nearest corner ${r.edge}px from an edge, ${r.onDash} under the DASH button`);
+      /* The scales buy reach and cut strain, and the thing they spend to do it
+         is aim: past the point where a catch radius is smaller than the
+         smallest movement a thumb can place, sensitivity stops being reach and
+         becomes a control you cannot aim. The thumb box is reported rather than
+         asserted — it is a tuning outcome, not a contract. */
+      okT(`${w}x${h}: still aimable by thumb`, r.aimX >= AIM_MIN && r.aimZ >= AIM_MIN,
+          `reach ${r.rx}/${r.rz}, lift ${r.lift}, thumb box ${r.boxW}x${r.boxH}px, ` +
+          `catch radius ${r.aimX}x${r.aimZ}px of thumb`);
     }
     await tp.setViewportSize({ width: 390, height: 844 });
     okT('a thumb can still clear routes at all',
