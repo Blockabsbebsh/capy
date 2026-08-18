@@ -935,21 +935,28 @@ const fail = [];
                     .concat(UPGRADES.concat(RUN_PERKS).map(u => u.icon));
       const load = ([id, file]) => new Promise(res => {
         const im = new Image();
-        im.onload  = () => res(im.naturalWidth >= 64 ? null : `${id} is only ${im.naturalWidth}px`);
-        im.onerror = () => res(`${id} failed to load`);
+        im.onload  = () => res(`${id}:${im.naturalWidth}x${im.naturalHeight}`);
+        im.onerror = () => res(`${id}:FAILED`);
         im.src = ICON_DIR + file;
       });
+      const got = await Promise.all(Object.entries(ICON_SRC).map(load));
       return {
         unnamed: ids.filter(id => !ICON_SRC[id]),
-        broken: (await Promise.all(Object.entries(ICON_SRC).map(load))).filter(Boolean),
+        broken: got.filter(g => g.endsWith('FAILED')),
+        // one square source at one size for all of them: the perk rail is a
+        // column, and an icon a few pixels bigger than its neighbours shows
+        sizes: [...new Set(got.map(g => g.split(':')[1]))],
         uppercase: Object.values(ICON_SRC).filter(f => f !== f.toLowerCase()),
         count: Object.keys(ICON_SRC).length,
       };
     });
     ok('every perk and power-up names an icon that exists',
        icons.unnamed.length === 0, icons.unnamed.join(','));
-    ok('every icon file loads at its full source size',
-       icons.broken.length === 0, icons.broken.join(' | ') || `${icons.count} icons`);
+    ok('every icon file loads', icons.broken.length === 0,
+       icons.broken.join(' | ') || `${icons.count} icons`);
+    ok('every icon is the same square source size',
+       icons.sizes.length === 1 && /^(\d+)x\1$/.test(icons.sizes[0]) &&
+       Number(icons.sizes[0].split('x')[0]) >= 128, icons.sizes.join(' | '));
     ok('icon filenames are all lowercase', icons.uppercase.length === 0,
        icons.uppercase.join(','));
 
