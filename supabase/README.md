@@ -48,6 +48,32 @@ write, which reads as "refused" — a false pass, the worst possible outcome for
 a security check. A refused write is only evidence once a read has proved we
 are talking to the right project.
 
+## What none of this protects against
+
+Worth writing down, because the checks look more protective than they are.
+
+**Forged scores are not preventable here, and never were.** The publishable key
+is in the page source and the validation rules are in this repo — but hiding
+either would buy nothing, because anyone can play one run with devtools open
+and read the exact request the game sends. Any conforming score the game could
+send, a person can send by hand.
+
+**The flood guard is per tag.** `submit_score` refuses a second run under the
+same tag within five seconds; rotating tags defeats that entirely and nothing
+here caps total inserts. The board fills with junk, and `truncate` is the fix.
+Closing it properly needs per-IP rate limiting, which the free tier does not
+hand you.
+
+What the SQL does buy is **blast radius**. `anon` holds no delete and no update
+grant, so the worst a stranger can do is add rows — never remove or rewrite
+what is already there. Cheating stays recoverable with a `delete`; destruction
+would not have been.
+
+If the board ever needs real integrity, the answer is not a better check in
+this file. It is moving authority off the client — submitting a seed and an
+input log and re-simulating the run server-side — and that is a different
+project, not a tightening of this one.
+
 ## Moderation
 
 There is no in-game moderation and deliberately no tag ownership, so the
