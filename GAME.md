@@ -164,3 +164,19 @@ silver or gold — with `n/max` on anything that stacks and the Auto-Shield's
 countdown on its own.
 
 Hats unlock at score thresholds and are cosmetic.
+
+## High scores
+
+A shared board, reachable from **HIGH SCORES** on the title card and on the game
+over screen. It lists every submitted run, highest first.
+
+You are asked for a **tag** only when a run beats your own best on that device —
+a bad run never interrupts. The tag is a name everyone knows you by, not an
+account: nothing proves it is yours, and you keep using it across every device
+you play on precisely because you want the board to say it was you. That does
+mean the same tag appears more than once, as a ladder of its own improving runs;
+**Best per tag** collapses it to one row each.
+
+No connection is needed to play. With the board unreachable the game is
+unchanged, the last board you saw is shown with the time it was fetched, and a
+score you earned offline goes up the next time you play.

@@ -34,6 +34,7 @@ in the PR history — go there when a rule looks wrong, before overruling it.
 `vendor/three.min.js` — three.js r160 UMD, inlined verbatim. Do not edit.
 `assets/capybara.glb` — model source of truth, only read by the converter.
 `tools/glb2json.mjs` — the offline converter.
+`supabase/migrations/` — the score board schema. Applied by Supabase, not by the game.
 
 Load order, which is also roughly the dependency order:
 
@@ -58,6 +59,7 @@ Load order, which is also roughly the dependency order:
 | `formations.js` | The spawn director: shapes, the route ribbon, route-clear scoring |
 | `powers.js` | Shield bubble, `shieldUp`/`absorbHit`, Auto-Shield, power activation |
 | `hud.js` | `$`, `ui`, HUD rendering, the perk rail, `popup`, `showBanner`, `flash` |
+| `scores.js` | The high score board: `SCORE_API` transport, tag prompt, board panel |
 | `player.js` | `capyState`, `updateCapybara` physics, `tryDash`, `popUp` |
 | `perks.js` | Perk mechanics: dash shockwave, ghosts, reach aura, golden routes, Puzzler |
 | `input.js` | Keyboard, pointer drag, virtual thumbstick |
@@ -122,6 +124,33 @@ directly at a fixed `1/60` step instead of waiting on real time.
 - **Run `--level 6` or higher as well as the default.** The fill layers only
   exist above the halfway ramp, and a drum pattern keyed to a name with no
   instrument behind it threw on every fill hit — silently fine at level 1.
+
+## High scores
+
+- **Static hosting is not the constraint people assume.** Pages only declines to
+  run code for us; the page it serves still makes network calls like any other.
+  The board is Supabase over plain `fetch` — no SDK, no bundler, no dependency.
+- **`SCORE_API.key` is the publishable key and belongs in public source.** Row
+  level security is what protects the data. A `sb_secret_` key or the database
+  password in `config.js` would hand the project away — they are never needed
+  here, because the game only ever reads the board and calls `submit_score`.
+- **Blank either `SCORE_API` field and the feature turns itself off.** The menu
+  button hides, nothing is fetched. That is the offline story and the reason
+  `--check` needs no network.
+- **The network may never block the game.** Submits are fire-and-forget, a
+  failed one is queued and retried at boot, and the board renders its cached
+  copy before it fetches. A dead Supabase project must cost nothing but a
+  greyed-out board.
+- **One row per run, not per player** — the board shows every score, including
+  the same tag many times. What keeps it short is the submit rule: a run is only
+  offered when it beat that device's own best, which is the `isBest` flag
+  `endGame` already computes. Move that gate and the table fills with noise.
+- **A tag is not an account.** Nothing proves one is yours, deliberately —
+  it is arcade initials, not a login. Do not add ownership to it without
+  deciding you want accounts, because that is what it becomes.
+- **Escape anything from the server before it reaches `innerHTML`.** Tags are
+  written by other players. `submit_score`'s regex already excludes every HTML
+  character; `esc()` is the second lock, and both should stay.
 
 ## UI rules
 

@@ -240,3 +240,28 @@ reduceMotionQuery.addEventListener?.('change', e => { REDUCED = e.matches; });
 /* thumbstick + DASH button on touch devices, keyboard hint on everything else */
 const TOUCH = window.matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
 if (TOUCH) document.body.classList.add('touch');
+
+/* =======================================================================
+   HIGH SCORE BOARD
+
+   The game is served as static files, which only means GitHub Pages never
+   runs code for us — the page itself is free to talk to a server, and this
+   is that server. Supabase is a database with an HTTP API in front of it;
+   we call two endpoints with plain fetch, so there is still no SDK, no
+   bundler and no dependency.
+
+   The key below is the PUBLISHABLE key and is meant to ship in public
+   source. It grants exactly the `anon` role, which row-level security
+   limits to reading the board and calling submit_score. Never put a
+   secret key or the database password here.
+
+   Blank either field and the whole feature turns itself off: the menu
+   button hides and nothing is ever fetched. That is what keeps the game
+   working offline, and what keeps tools/shoot.js from needing a network.
+   ======================================================================= */
+const SCORE_API = {
+  url: 'https://wifqxxujxpuhhkddikhp.supabase.co',
+  key: 'sb_publishable_6Rxj2-rfIDRPUT3JgEC8lg_tiJgiWH1',
+};
+const BOARD_LIMIT = 100;     // rows pulled for the board
+const TAG_MAX = 12;          // keep in step with the regex in submit_score

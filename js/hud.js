@@ -13,6 +13,10 @@ const ui = {
   powerWrap: $('powerWrap'), powerName: $('powerName'), powerBar: $('powerBar'),
   hatPicker: $('hatPicker'), perkRail: $('perkRail'),
   testLevelPanel: $('testLevelPanel'), testLevelButtons: $('testLevelButtons'),
+  scorePanel: $('scorePanel'), scoreList: $('scoreList'), scoreStatus: $('scoreStatus'),
+  boardAll: $('boardAll'), boardBest: $('boardBest'), btnBoardClose: $('btnBoardClose'),
+  btnBoard: $('btnBoard'), btnBoardOver: $('btnBoardOver'),
+  tagRow: $('tagRow'), tagInput: $('tagInput'), tagNote: $('tagNote'), btnTagSubmit: $('btnTagSubmit'),
 };
 
 /* One glyph per life, up to LIVES_SHOWN — past that the row switches to a
@@ -157,7 +161,8 @@ function popup(worldPos, text, color){
 }
 
 function showPanel(p){
-  [ui.startPanel, ui.pausePanel, ui.overPanel, ui.upgradePanel].forEach(x => x.classList.add('hidden'));
+  [ui.startPanel, ui.pausePanel, ui.overPanel, ui.upgradePanel,
+   ui.scorePanel].forEach(x => x.classList.add('hidden'));
   if (p) p.classList.remove('hidden');
 }
 

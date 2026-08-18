@@ -92,6 +92,10 @@ function endGame(reason){
   ui.finalBest.textContent = game.best;
   ui.finalCombo.textContent = game.bestCombo;
   ui.newBest.style.display = isBest && game.score > 0 ? 'block' : 'none';
+  // The board takes a run only when it beat this device's own best — the same
+  // flag the banner uses. A tag is not an account, so nothing here identifies
+  // the player; it just stops the board filling with every mediocre attempt.
+  if (isBest && game.score > 0 && scoresOn()) showTagPrompt(); else hideTagPrompt();
   ui.overTitle.textContent = isBest && game.score > 0 ? 'Snack Legend' : 'Nap Time';
   ui.overSub.textContent =
     reason === 'spicy' ? 'Too many chili peppers. The capybara needs a soak.' :
