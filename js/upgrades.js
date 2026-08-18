@@ -57,11 +57,28 @@ function offerUpgrades(level){
     const dead = perkDead(u);
     const b = document.createElement('button');
     b.className = 'upcard' + (u.tier ? ' ' + u.tier : '') + (dead ? ' dead' : '');
-    b.innerHTML = `<i>${icon(u.icon, 26)}</i><span style="flex:1"><b>${u.name}</b><span>${u.desc}</span>` +
-                  (dead ? `<u>NO USE THIS RUN</u>`
-                        : u.tier === 'gold' ? `<u>ONE PER RUN</u>`
-                        : u.tier === 'silver' ? `<u>ONE ONLY</u>`
-                        : have ? `<u>OWNED ${have}/${u.max}</u>` : '') + `</span>`;
+    /* Every card carries its class line, including an ordinary perk you do not
+       own yet — the row read as ragged when only some of them had one, and
+       "how many of these can I take" is the question the tier is answering.
+       Gold says what taking it costs you, because that is the part a player
+       cannot work out from the card in front of them: it retires the whole
+       gold slot, not just this perk. The tracked small-caps style is built for
+       a short tag, so only the tag is uppercase and the sentence after it
+       stays sentence case.
+
+       An ordinary perk you already hold extends the same line rather than
+       replacing it — `MAX 4 • OWNED 2`, not `OWNED 2/4` — so the limit sits in
+       the same place on every card in the draft and the count is what gets
+       added. Swapping the whole label out is what made the row read as three
+       unrelated things. */
+    const tag = dead ? `<u>NO USE THIS RUN</u>`
+              : u.tier === 'gold'
+                ? `<u>UNIQUE<em> • Once chosen, gold upgrades will no longer ` +
+                  `appear during this run</em></u>`
+              : u.tier === 'silver' ? `<u>UNIQUE</u>`
+              : `<u>MAX ${u.max}${have ? ` • OWNED ${have}` : ''}</u>`;
+    b.innerHTML = `<i>${icon(u.icon, 26)}</i><span style="flex:1"><b>${u.name}</b>` +
+                  `<span>${u.desc}</span>${tag}</span>`;
     if (!dead) b.addEventListener('click', () => takeUpgrade(u));
     box.appendChild(b);
   }
