@@ -12,6 +12,7 @@
  *   node tools/shoot.js --capy             # capybara turnaround
  *   node tools/shoot.js --play             # menu + gameplay + hat fit
  *   node tools/shoot.js --touch            # touch steering vs a modelled thumb
+ *   node tools/shoot.js --icons            # every icon at the size it is drawn at
  *
  * Options: --url <u>  --out <dir>  --browser <path>  --size <WxH>
  * Output goes to .shots/ (gitignored).
@@ -117,6 +118,79 @@ const fail = [];
       await page.waitForTimeout(250);
       await shot('capy-' + name);
     }
+  }
+
+  /* Every icon in the two places it is actually drawn: the perk rail at 15-18px
+     and a draft card at 28px. The art is a downscaled 128px PNG, and the only
+     thing that tells you whether one survives the downscale is looking at it —
+     so this holds every perk at once and opens a draft that shows all of them,
+     rather than whatever three the pool happened to pick. */
+  if (flag('icons')) {
+    console.log('icons:');
+    await page.click('#btnStart').catch(() => {});
+    // park the pointer off every control: clicking start leaves it wherever the
+    // button was, and a card that opens under it screenshots in its :hover
+    // state, which reads as a tinted card rather than a plain one
+    await page.mouse.move(1, 1);
+    await page.waitForTimeout(600);
+    await page.evaluate(() => {
+      // one of everything, at full stacks, so the rail is as crowded as it gets
+      for (const u of UPGRADES) game.taken[u.id] = u.max;
+      for (const u of RUN_PERKS) game.taken[u.id] = 1;
+      game.as.cd = 42;                        // the countdown badge, not a blank
+      refreshHUD();
+    });
+    await page.waitForTimeout(300);
+    await shot('icons-rail');
+
+    // a card per icon, in the real card markup, at the real 28px. The panel
+    // caps its height and scrolls, so the viewport grows for this one shot —
+    // ten cards is more than a draft ever shows and the point is to see them
+    // all side by side.
+    await page.setViewportSize({ width: W, height: Math.max(H, 1100) });
+    await page.evaluate(() => {
+      game.state = 'paused';
+      const box = document.getElementById('upgradeCards');
+      box.innerHTML = '';
+      for (const u of UPGRADES.concat(RUN_PERKS)) {
+        const b = document.createElement('button');
+        b.className = 'upcard' + (u.tier ? ' ' + u.tier : '');
+        b.innerHTML = `<i>${icon(u.icon, 26)}</i><span style="flex:1"><b>${u.name}</b>` +
+                      `<span>${u.desc}</span></span>`;
+        box.appendChild(b);
+      }
+      showPanel(document.getElementById('upgradePanel'));
+    });
+    await page.waitForTimeout(300);
+    await shot('icons-cards');
+    await page.setViewportSize({ width: W, height: H });
+
+    /* The cut, on a field nothing in the art comes near. Every other view here
+       is a dark chip or a brown card, which is exactly where a tan drop shadow
+       or a pastel backdrop left behind by the converter hides — `reach` shipped
+       one and none of the shots above showed it. */
+    await page.evaluate(() => {
+      document.body.insertAdjacentHTML('beforeend',
+        `<div id="cutplate" style="position:fixed; inset:0; z-index:99;
+          background:#f0f; display:flex; flex-wrap:wrap; align-content:center;
+          justify-content:center; gap:6px; padding:20px">` +
+        // no .ico class: the drop shadow it carries would read as a leftover one
+        Object.keys(ICON_SRC).map(id => icon(id, 96).replace('class="ico" ', ''))
+          .join('') + `</div>`);
+    });
+    await page.waitForTimeout(300);
+    await shot('icons-cut');
+    await page.evaluate(() => document.getElementById('cutplate').remove());
+
+    // and the power chip, which draws them smallest of all at 15px
+    await page.evaluate(() => {
+      game.state = 'playing';
+      showPanel(null);
+      game.power = { type: 'magnet', t: 3, dur: 3.75 };
+      refreshHUD();
+    });
+    await page.waitForTimeout(300);
+    await shot('icons-power');
   }
 
   /* Autopilot sweep over every formation shape and every feast route.
@@ -872,6 +946,40 @@ const fail = [];
     ok('showPanel knows about the board panel', board.exclusive);
     ok('only a personal best is offered to the board',
        board.quietOnLoss && board.promptOnBest, JSON.stringify(board));
+
+    /* The icons are files now, so two things can go wrong that could not before:
+       a perk can name an icon nobody drew, and a file can fail to arrive. An
+       uppercase letter in a filename is the same failure with a delay on it —
+       it works on a case-insensitive checkout and 404s on Pages. */
+    const icons = await page.evaluate(async () => {
+      const ids = Object.values(POWERS).map(p => p.icon)
+                    .concat(UPGRADES.concat(RUN_PERKS).map(u => u.icon));
+      const load = ([id, file]) => new Promise(res => {
+        const im = new Image();
+        im.onload  = () => res(`${id}:${im.naturalWidth}x${im.naturalHeight}`);
+        im.onerror = () => res(`${id}:FAILED`);
+        im.src = ICON_DIR + file;
+      });
+      const got = await Promise.all(Object.entries(ICON_SRC).map(load));
+      return {
+        unnamed: ids.filter(id => !ICON_SRC[id]),
+        broken: got.filter(g => g.endsWith('FAILED')),
+        // one square source at one size for all of them: the perk rail is a
+        // column, and an icon a few pixels bigger than its neighbours shows
+        sizes: [...new Set(got.map(g => g.split(':')[1]))],
+        uppercase: Object.values(ICON_SRC).filter(f => f !== f.toLowerCase()),
+        count: Object.keys(ICON_SRC).length,
+      };
+    });
+    ok('every perk and power-up names an icon that exists',
+       icons.unnamed.length === 0, icons.unnamed.join(','));
+    ok('every icon file loads', icons.broken.length === 0,
+       icons.broken.join(' | ') || `${icons.count} icons`);
+    ok('every icon is the same square source size',
+       icons.sizes.length === 1 && /^(\d+)x\1$/.test(icons.sizes[0]) &&
+       Number(icons.sizes[0].split('x')[0]) >= 128, icons.sizes.join(' | '));
+    ok('icon filenames are all lowercase', icons.uppercase.length === 0,
+       icons.uppercase.join(','));
 
     ok('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
   }
