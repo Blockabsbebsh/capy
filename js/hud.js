@@ -81,7 +81,7 @@ function refreshHUD(){
   if (game.power){
     const P = POWERS[game.power.type];
     ui.powerWrap.classList.add('on');
-    setHTML(ui.powerName, icon(P.icon, 15) + P.name);
+    setHTML(ui.powerName, icon(P.icon, 19) + P.name);
     setStyle(ui.powerName, 'color', P.color);
     setStyle(ui.powerBar, 'background', P.color);
     ui.powerBar.style.width = (THREE.MathUtils.clamp(game.power.t / game.power.dur, 0, 1) * 100) + '%';
@@ -129,7 +129,7 @@ function renderPerkRail(){
       const n = game.taken[u.id] || 0;
       const el = document.createElement('div');
       el.className = 'perk' + (u.tier ? ' ' + u.tier : '');
-      el.innerHTML = `<i>${icon(u.icon, 17)}</i>` +
+      el.innerHTML = `<i>${icon(u.icon, 21)}</i>` +
         (u.max > 1 ? `<b>${n}/${u.max}</b>` : '') +
         (u.id === 'autoShield' ? `<s></s>` : '');
       el.title = u.name;
