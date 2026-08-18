@@ -35,6 +35,7 @@ in the PR history — go there when a rule looks wrong, before overruling it.
 `assets/capybara.glb` — model source of truth, only read by the converter.
 `tools/glb2json.mjs` — the offline converter.
 `supabase/migrations/` — the score board schema. Applied by Supabase, not by the game.
+`supabase/README.md` — applying it, proving RLS holds, and the moderation SQL.
 
 Load order, which is also roughly the dependency order:
 
@@ -96,6 +97,13 @@ and you are measuring a bad player).
 Screenshots land in `.shots/` (gitignored). **Read them back** — visual work
 cannot be verified any other way.
 
+**Headless Chromium has no browser chrome, so a whole class of mobile bug is
+invisible to it.** The HIGH SCORES button was untappable on a real iPhone while
+`--check` passed and a touch-emulated repro at four phone viewports — portrait
+and landscape — reported the tap firing and the panel opening. Anything placed
+at the bottom edge of the screen needs a real phone before you believe it
+works; the harness can only tell you it is not a layout or a wiring fault.
+
 Headless rendering runs at ~5fps under swiftshader, and `animate()` clamps
 `dt`, so wall-clock timing tests are meaningless. For anything about rates,
 physics or balance, drive `updateCapybara`/`updateItems`/`updateFormations`
@@ -154,6 +162,14 @@ directly at a fixed `1/60` step instead of waiting on real time.
 
 ## UI rules
 
+- **Full-height overlays are sized in `svh`, never `vh`.** On iOS Safari `vh`
+  resolves against the LARGE viewport — the one with the toolbar hidden — so a
+  panel or card capped in `vh` runs its bottom stripe underneath Safari's
+  toolbar: you can see through it, but every tap there lands on browser chrome.
+  `.panel` and `.card` both cap in `svh` with the `vh` line kept directly above
+  as the fallback. This only bites when a control sits at the bottom edge, which
+  is why it appeared the day a second button went under the start button — and
+  why anything else added there inherits the problem.
 - **No emoji in the interface.** Every perk and power-up icon is inline SVG in
   `icons.js`, drawn in the game's palette: emoji are drawn by the platform, so
   the same card was a flat glyph on one machine and a glossy sticker on the next,
