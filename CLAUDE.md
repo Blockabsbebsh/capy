@@ -221,15 +221,37 @@ directly at a fixed `1/60` step instead of waiting on real time.
   `touchLift` is derived in `fitCamera` from the arena's own projected depth, so
   the thumb clears the play field wherever it points; in landscape the near edge
   runs out of screen below it first and the lift is capped by that instead.
+  `LIFT_REACH` is the depth scale the lift is allowed to assume it can spend —
+  it is deliberately NOT `touchReachZ`, which is computed afterwards, because
+  the two are circular and pinning one keeps landscape's occlusion balance from
+  drifting whenever the strain floor moves.
 - **Every corner of the arena has to be reachable without the finger going
   somewhere it cannot.** Running out of screen mid-drag is the one failure an
   absolute scheme cannot absorb: the only way out is to lift, and lifting moves
-  the capybara somewhere nobody asked for. So `touchReach` maps the arena into
-  a rectangle inset from the edges rather than onto the pixels it is drawn on —
-  at 1:1 the ends of the arena sit 14px from the bezel, inside the OS
-  edge-gesture strip. It is capped at 1.35 because gains of 1.4 and up all
-  measured worse than the thumbstick, and it comes out at 1.0-1.15 on a roomy
-  screen; it is the smallest scale that buys reach, not a feel dial.
+  the capybara somewhere nobody asked for. So `touchReachX/Z` map the arena
+  into a rectangle inset from the edges rather than onto the pixels it is drawn
+  on — at 1:1 the ends of the arena sit 14px from the bezel, inside the OS
+  edge-gesture strip.
+- **The other cost a thumb pays is strain, and it is not distance travelled —
+  it is how far the thumb stretches from where it rests.** No harness measures
+  that: the modelled thumb slides at a fixed rate and a long drag costs it
+  nothing, so a reach sweep reports flat clear rates from 1.0 to 3.0 and is
+  silent on the thing being complained about. The floor comes from geometry
+  instead — the arena has to fit inside `THUMB_SPAN` on each axis, which at 1:1
+  it did not (321x109px against a thumb's ~180px sweep).
+- **The two reach scales are PER AXIS because the arena is 2:1 and the axes are
+  in opposite trouble.** Width is what strains; depth is already inside a
+  comfortable sweep and is the axis whose precision is worse to start with (16px
+  of thumb per catch radius against 22px across). One uniform scale big enough
+  to fix the width spends that depth precision for nothing. Anisotropy does not
+  make the mapping any less absolute — every finger position still resolves to
+  one point on the ground, corners included, which `--touch` checks.
+- **`TOUCH_MIN_PX` is the ceiling on both, and reach beats it.** Past the point
+  where a catch radius is smaller than the smallest movement a thumb can place,
+  more scale is not more reach, it is a control you cannot aim. But an
+  unreachable corner is worse than an imprecise one, so a margin requirement
+  overrides the ceiling rather than the other way round — which is why the
+  smallest screens sit slightly under it on depth.
 - **The DASH button is part of the input map, not just decoration on top of
   it.** It eats the touch outright, it sits bottom-right, and the arena spans
   nearly the full width — so on a short screen the arena's near-right corner

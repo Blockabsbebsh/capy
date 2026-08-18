@@ -159,26 +159,43 @@ const PITCH_ASPECT = { wide: 1.3, tall: 0.55 };
    wherever it is pointing, which is the whole reason pointing is usable on a
    phone.
 
-   `touchReach` is why the mapping is not quite 1:1. At 1:1 the arena's ends
-   land where they are drawn, and on a 390px-wide phone that is 14px from the
-   bezel — inside the OS edge-gesture strip, and a place a thumb does not want
-   to go. Running out of screen mid-drag is the worst thing that can happen to
+   `touchReachX/Z` are why the mapping is not 1:1, and they answer two separate
+   complaints with the same lever.
+
+   REACH. At 1:1 the arena's ends land where they are drawn, and on a
+   390px-wide phone that is 14px from the bezel — inside the OS edge-gesture
+   strip. Running out of screen mid-drag is the worst thing that can happen to
    an absolute scheme, because the only way out is to lift and re-place, which
-   moves the capybara somewhere you did not ask for. So the arena is mapped
-   into a rectangle inset from the edges instead, and the whole play field is
-   reachable with a margin to spare.
+   moves the capybara somewhere nobody asked for.
 
-   It is capped at 1.35 on purpose: relative mappings at gains of 1.4 and up
-   all measured WORSE than the thumbstick, because a gain multiplies the
-   thumb's own imprecision. This stays under that, and on most screens it comes
-   out at 1.0-1.15 anyway — it is the smallest scale that buys reach, not a
-   dialled-in feel value.
+   STRAIN. Cost is not distance travelled, it is how far the thumb has to
+   stretch from where it rests, and at 1:1 the arena is a 321x109px box — twice
+   what a thumb sweeps without moving the whole hand. Fitting the play field
+   into THUMB_SPAN on each axis is what that floor is for.
 
-   The two trade against each other in landscape, where the arena already sits
-   low and there is no room for both: the lift gives way first, down to
-   whatever still leaves the near edge reachable inside the cap. */
-let touchLift = 90, touchReach = 1, touchCX = 0, touchCY = 0;
-const REACH_MAX = 1.35;
+   PER AXIS, because the arena is 2:1 and the two axes are in opposite
+   trouble. Width is what strains (321px of a 390px screen); depth is already
+   inside a comfortable sweep at 109px and is the axis whose precision is worse
+   to begin with — 16px of thumb per catch radius against 22px across. One
+   uniform scale big enough to fix the width would spend that depth precision
+   for nothing. Scaling them apart leaves the mapping exactly absolute — every
+   point still resolves to one place on the ground, corners included — it is
+   only anisotropic, which is what a separate X/Y sensitivity has always been.
+
+   TOUCH_MIN_PX is the ceiling and the reason there is one: past the point
+   where a catch radius is smaller than the smallest movement a thumb can
+   place, more sensitivity is not more reach, it is a control you cannot aim.
+   Reach beats it if they ever conflict — an unreachable corner is worse than
+   an imprecise one.
+
+   The lift and the depth scale trade against each other in landscape, where
+   the arena sits low and there is no room for both: the lift gives way first,
+   down to whatever still leaves the near edge reachable within LIFT_REACH. */
+let touchLift = 90, touchReachX = 1, touchReachZ = 1, touchCX = 0, touchCY = 0;
+const THUMB_SPAN = { x: 185, z: 120 };   // px the arena should fit inside, per axis
+const TOUCH_MIN_PX = 11;                 // smallest thumb movement worth aiming with
+const REACH_CEIL = 2.2;                  // beyond here is guesswork, not evidence
+const LIFT_REACH = 1.35;                 // depth scale the lift may assume it can spend
 
 function fitCamera(){
   const aspect = window.innerWidth / window.innerHeight;
@@ -258,15 +275,25 @@ function refreshTouchMap(){
   const hFar  = touchCY - groundY(0, -ARENA.halfZ);
 
   // as much lift as the room below allows, once the near edge is guaranteed
-  // reachable within the cap
+  // reachable within the depth scale the lift is allowed to spend
   const ideal = (hNear + hFar) + 34;
-  const most  = bottom - touchCY - hNear / REACH_MAX;
+  const most  = bottom - touchCY - hNear / LIFT_REACH;
   touchLift = THREE.MathUtils.clamp(Math.min(ideal, most), 30, 240);
 
   const down = Math.max(1, bottom - (touchCY + touchLift));
   const up   = Math.max(1, (touchCY + touchLift) - TOP);
-  touchReach = THREE.MathUtils.clamp(
-    Math.max(hx / Math.max(1, W / 2 - EDGE), hNear / down, hFar / up), 1, REACH_MAX);
+  // px of screen per world unit, for the precision ceiling
+  const perX = Math.abs(groundX(1, 0) - groundX(0, 0));
+  const perZ = Math.hypot(groundX(0, 1) - groundX(0, 0), groundY(0, 1) - groundY(0, 0));
+
+  /* Three constraints per axis, in priority order: the margins MUST be cleared,
+     the strain floor is taken where precision allows, and 1:1 is the floor
+     under all of it. */
+  const fit = (need, strain, catchPx) => Math.min(REACH_CEIL,
+    Math.max(1, need, Math.min(strain, (CATCH_R * catchPx) / TOUCH_MIN_PX)));
+  touchReachX = fit(hx / Math.max(1, W / 2 - EDGE), (hx * 2) / THUMB_SPAN.x, perX);
+  touchReachZ = fit(Math.max(hNear / down, hFar / up),
+                    (hNear + hFar) / THUMB_SPAN.z, perZ);
 }
 
 /* Repaint the sky for the current theme, framing and viewport. Cheap enough

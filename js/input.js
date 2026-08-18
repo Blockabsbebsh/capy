@@ -52,11 +52,10 @@ function pointerToGround(clientX, clientY, plane = groundPlane){
    projected depth, so on a phone your thumb sits entirely BELOW the play
    field and never covers the thing you are steering onto.
 
-   `touchReach` is the one place the 1:1 gives, and it gives to keep the ends
-   of the arena away from the bezel — see refreshTouchMap. Running out of
-   screen mid-drag is the one failure an absolute scheme cannot absorb, since
-   the only way out of it is to lift, and lifting moves the capybara somewhere
-   nobody asked for. */
+   `touchReachX/Z` are the one place the 1:1 gives, and they give for two
+   reasons — keeping the ends of the arena away from the bezel, and fitting the
+   play field inside a thumb's own sweep. They are separate because the arena
+   is 2:1 and only its width strains; see refreshTouchMap. */
 const canvas = renderer.domElement;
 const touchZone = $('touchZone');
 let steerId = null;
@@ -65,8 +64,8 @@ function steerTo(clientX, clientY){
   // On touch the finger reads against the ground through the inset mapping:
   // lifted, then scaled about the arena's own centre on screen.
   const h = TOUCH
-    ? pointerToGround(touchCX + (clientX - touchCX) * touchReach,
-                      touchCY + (clientY - touchLift - touchCY) * touchReach)
+    ? pointerToGround(touchCX + (clientX - touchCX) * touchReachX,
+                      touchCY + (clientY - touchLift - touchCY) * touchReachZ)
     : pointerToGround(clientX, clientY, bodyPlane);
   if (!h) return;                       // pointing at the sky: keep the last target
   // Clamping matters on touch and not on a mouse: the finger has to be able to
