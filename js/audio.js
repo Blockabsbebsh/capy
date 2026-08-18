@@ -63,7 +63,7 @@ const Audio = (() => {
      melody with a motif that repeats.
 
        Meadow     G major, 104bpm, swung eighths, marimba stroll
-       Pond       D major 7ths, 84bpm, kalimba over water drips, lots of air
+       Pond       D major, 92bpm, kalimba over water drips, lots of air
        Bubblegum  A major, 124bpm, sixteenth-note square lead, four-on-the-floor
        Night      A minor WALTZ (3/4), 72bpm, music box, almost no percussion
        Hell       D harmonic minor, 126bpm, circus oompah organ and tambourine
@@ -143,29 +143,46 @@ const Audio = (() => {
     drums:{ kick:'x . . . x . . .', shaker:'. x . x . x . x', 'tom+':'. . . . . . x .' },
   },
 
-  { /* ---- POND: major sevenths, one phrase per bar, and a lot of silence. The
-         percussion is water: single drips, no kit at all. */
-    id:'pond', tempo:84, tempoUp:5, stepsPerBar:8, stepBeats:0.5, swing:0, mix:1.25,
+  { /* ---- POND: chill, but cheerful about it. The soundscape is the point — a
+         kalimba over water drips, sparse and unhurried — and the first version
+         of this got that part right while reading as SAD, in D major, for four
+         reasons that had nothing to do with the key:
+
+           - the melody fell in three bars out of four, and a descending line is
+             a sigh however bright the chord under it is
+           - maj7 chords everywhere. A major seventh is wistful, not happy; a
+             major SIXTH (the B in bar one) is the playful one
+           - the minor vi (Bm7) landed in bar three, the emphasised bar, exactly
+             where the tune bottomed out
+           - the loop ended on the V, so it never came home
+
+         So: I-IV-V-I, plain triads with a 6th for sparkle, no minor chord
+         anywhere, a melody that CLIMBS and resolves onto the tonic at the top
+         of bar four, a small lilt in the eighths, and eight bpm more. Every
+         sustained note is a unison with a chord tone, which is what makes it
+         sound settled rather than yearning. The drips stay exactly as they
+         were, and get a frog to answer them once the biome fills in. */
+    id:'pond', tempo:92, tempoUp:5, stepsPerBar:8, stepBeats:0.5, swing:0.08, mix:1.18,
     lead:'kalimba', pad:'glass', bass:'round',
     chords:[
-      { bass:38, pad:[61,66,69] },   // Dmaj7
-      { bass:43, pad:[59,62,66] },   // Gmaj7
-      { bass:35, pad:[57,62,66] },   // Bm7
-      { bass:45, pad:[61,64,69] },   // A
+      { bass:38, pad:[66,69,71] },   // D6   — the 6th is the cheerful interval
+      { bass:43, pad:[62,67,71] },   // G
+      { bass:45, pad:[64,69,73] },   // A
+      { bass:38, pad:[62,66,69] },   // D    — home every loop
     ],
     leadP:[
-      '81 -  -  .  78 -  .  .',
-      '83 -  .  81 78 -  -  .',
-      '78 -  .  76 74 -  -  .',
-      '76 -  78 -  81 -  -  .',
+      '74 78 81 -  -  83 .  .',      // up through the chord to the bright 6th
+      '83 81 79 -  -  81 83 .',
+      '81 83 85 -  -  83 81 .',      // peaks on C#6, which wants to go home
+      '86 -  -  83 81 -  78 .',      // and does: D6 on the downbeat
     ],
     bassP:[
-      '38 -  -  .  50 -  .  .',
-      '43 -  -  .  55 -  .  .',
-      '35 -  -  .  47 -  .  .',
-      '45 -  -  .  57 -  .  .',
+      '38 -  -  50 -  .  45 .',
+      '43 -  -  55 -  .  50 .',
+      '45 -  -  57 -  .  52 .',
+      '38 -  -  50 -  .  45 49',     // C#3 leads back up into bar one
     ],
-    drums:{ drip:'. . x . . . . x', 'drip+':'. x . . . x . .' },
+    drums:{ drip:'. . x . . . . x', 'croak+':'. . . x . . . .' },
   },
 
   { /* ---- BUBBLEGUM: the sugar rush. Sixteenth grid, square lead, I-V-vi-IV
@@ -370,7 +387,7 @@ const Audio = (() => {
     src.connect(f); f.connect(g); g.connect(musicBus);
     src.start(time); src.stop(time + dur + 0.02);
   }
-  function mTone(time, dur, gain, f1, f2, type = 'sine'){
+  function mTone(time, dur, gain, f1, f2, type = 'sine', lp = 0){
     const o = ctx.createOscillator(), g = ctx.createGain();
     o.type = type;
     o.frequency.setValueAtTime(f1, time);
@@ -378,7 +395,13 @@ const Audio = (() => {
     g.gain.setValueAtTime(0.0001, time);
     g.gain.exponentialRampToValueAtTime(gain, time + 0.004);
     g.gain.exponentialRampToValueAtTime(0.0001, time + dur);
-    o.connect(g); g.connect(musicBus);
+    o.connect(g);
+    // a square or saw hit needs the top taken off it, or it is all buzz
+    if (lp){
+      const f = ctx.createBiquadFilter();
+      f.type = 'lowpass'; f.frequency.value = lp;
+      g.connect(f); f.connect(musicBus);
+    } else g.connect(musicBus);
     o.start(time); o.stop(time + dur + 0.02);
   }
   const KIT = {
@@ -390,6 +413,11 @@ const Audio = (() => {
     tamb:  t => { mNoise(t, 0.045, 0.024, 'highpass', 5200); mTone(t, 0.05, 0.010, 5200, 0, 'sine'); },
     tom:   t => mTone(t, 0.22, 0.13, 165, 92, 'sine'),
     drip:  t => { mTone(t, 0.09, 0.055, 1500, 880); mNoise(t, 0.02, 0.012, 'highpass', 4000); },
+    /* A frog answering the drips: two low blips, the second lower and quieter,
+       which is what makes it "rib-bit" rather than a beep. Filtered hard —
+       an unfiltered square down here is a buzzer, not an animal. */
+    croak: t => { mTone(t, 0.085, 0.040, 168, 98, 'square', 820);
+                  mTone(t + 0.075, 0.065, 0.026, 152, 92, 'square', 760); },
   };
 
   // compile the written parts once, at load

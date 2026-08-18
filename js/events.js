@@ -55,7 +55,7 @@ function triggerEvent(){
        drawn on the ground the moment the banner does (see startFeastRoute).
        The old version dropped them at random x, which paid the same for
        standing still — and quietly wasted the ones that fell out of reach. */
-    showBanner('🍉 WATERMELON FEAST — FOLLOW THE TRAIL!', '#ffe14d');
+    showBanner('🍉 MELON FEAST!', '#ffe14d');   // any longer overflows a phone
     Audio.feast();
     game.fovKick = 2.4;
     // + the last melon's fall, + a beat before normal service resumes
@@ -67,14 +67,15 @@ function triggerEvent(){
   Audio.alarm();
 
   if (kind === 'missiles'){
-    const n = Math.min(7, 3 + Math.floor(game.level / 3));
+    const n = Math.min(11, 3 + Math.floor(game.level / 3) + Math.floor(overtime() * 2));
     showBanner('⚠ CHILI MISSILES — DODGE!', '#ff7a5a');
     for (let i = 0; i < n; i++){
       evt.queue.push({ at: 1.1 + i * 0.52, fn: () => spawnItem('chili', { missile:true }) });
     }
     evt.dur = 1.1 + n * 0.52 + 2.4;
   } else {
-    const n = 2 + Math.floor(Math.random() * 2) + (game.level >= 8 ? 1 : 0);
+    const n = 2 + Math.floor(Math.random() * 2) + (game.level >= 8 ? 1 : 0)
+            + Math.floor(overtime());
     showBanner('⚠ SINKHOLES — MIND YOUR FEET!', '#ffcf5a');
     for (let i = 0; i < n; i++){
       evt.queue.push({ at: i * 0.4, fn: spawnHoleSafe });
@@ -90,7 +91,7 @@ function updateEvents(dt){
     if (!evt.queue.length && evt.t >= evt.dur){
       if (evt.active === 'feast') disposeFeastPath();
       evt.active = null;
-      evt.timer = 17 + Math.random() * 11;
+      evt.timer = Math.max(7, 17 - overtime() * 3) + Math.random() * 11;
     }
     return;
   }

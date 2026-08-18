@@ -32,8 +32,10 @@ const game = {
      as the one place anything scales movement, because Sticky Feet halves it
      and formations.js has to time its gaps against whatever it says. */
   up: { reach:0, dashCD:1, shock:0, speed:1, melon:1, life:0, heartRate:0,
-        over:false, sweep:false },
+        autoShield:false, chain:false },
   run: { phantom:false, sticky:false, puzzler:false },   // one-per-run perks
+  chain: 0,           // Chain Sweeper: consecutive route clears
+  as: { t:0, cd:0 },  // Auto-Shield: seconds up, then seconds until it can fire
   taken: {},          // upgrade id -> times taken
   pendingLevel: null, // level+theme waiting to start once a draft is picked
 };
@@ -42,8 +44,10 @@ const BASE_FOV = 52;
 
 function resetUpgrades(){
   game.up = { reach:0, dashCD:1, shock:0, speed:1, melon:1, life:0, heartRate:0,
-              over:false, sweep:false };
+              autoShield:false, chain:false };
   game.run = { phantom:false, sticky:false, puzzler:false };
+  game.chain = 0;
+  game.as = { t:0, cd:0 };
   game.taken = {};
   game.pendingLevel = null;
   game.maxLives = START_LIVES;
@@ -109,6 +113,29 @@ function applyDifficulty(){
   game.strayEvery = Math.max(2.6, 6.0 - L * 0.16);
   game.comboMax   = Math.max(2.9, 4.8 - L * 0.07);
   Audio.setMusicLevel(L);
+}
+
+/* --- overtime -------------------------------------------------------------
+   Every curve above bottoms out: fall speed by level 10, fmtReach by 16,
+   strayEvery by 21, fmtGap by 23. Past that the game stopped getting harder at
+   all, which a good player reaches and then farms — the last biome was the
+   easiest part of a long run because nothing was still climbing.
+
+   So one scalar keeps rising, from where the curves stop, and it is deliberately
+   spent on DENSITY rather than on speed: more hazards, less quiet between
+   routes, bigger set-pieces. Fall speed still caps at FALL_CAP and fmtReach
+   still caps at 0.78 — a route you cannot read is not difficulty, and a route
+   that is not clearable is a bug (see CLAUDE.md). Uncapped on purpose: it grows
+   slowly enough that level 60 is hard rather than impossible. */
+const OVERTIME_FROM = 24;
+const overtime = () => Math.max(0, game.level - OVERTIME_FROM) / 10;
+
+/* Hazard rate. Two multipliers, both of which the player chose: overtime, and
+   how many hearts they are carrying — a fourth heart is +20%, a fifth another
+   +20%, so banking lives with Second Wind or Puzzler buys risk with it. */
+function hazardMul(){
+  return (1 + 0.35 * overtime()) *
+         (1 + HAZARD_PER_HEART * Math.max(0, game.lives - START_LIVES));
 }
 
 /* =======================================================================
