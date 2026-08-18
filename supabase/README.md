@@ -1,11 +1,8 @@
 # The score board's database
 
 `migrations/` holds the schema. Supabase applies it, not the game — nothing in
-`js/` ever creates or alters a table.
-
-To apply by hand: Dashboard -> SQL Editor -> New query -> paste the migration ->
-Run. It is written to be safe to re-run (`create table if not exists`,
-`create or replace function`, and the policy is dropped before it is created).
+`js/` ever creates or alters a table. To apply by hand: Dashboard → SQL Editor →
+New query → paste the migration → Run. It is safe to re-run.
 
 The game reads `SCORE_API` in `js/config.js` for the project URL and the
 publishable key. **Blank either field and the whole feature switches off** —
@@ -15,27 +12,23 @@ without removing code.
 ## Checking it is healthy
 
 The board's own status line, under the list in-game, is the first diagnosis:
-`N runs · live` means the fetch succeeded; an offline notice means it did not.
-
-Row count and recent activity:
+`N runs · live` means the fetch succeeded.
 
 ```sql
 select count(*) as runs, max(created_at) as latest from public.runs;
 ```
 
 **Proving row level security actually works.** This is the check worth doing,
-because everything else still looks fine when it is broken — the board reads
-and writes correctly either way. The only proof is to attempt the thing that
-must fail: an anon INSERT straight into the table, bypassing `submit_score`.
+because everything else looks fine when it is broken — the board reads and
+writes correctly either way. The only proof is to attempt the thing that must
+fail: an anon INSERT straight into the table, bypassing `submit_score`.
 
 The SQL Editor cannot answer this. It runs as the table owner and bypasses RLS
 entirely, so it reports success however the policies are set. The question is
 only meaningful from a browser holding the publishable key.
 
-**Add `?dev=1` to the game's URL and tap RLS CHECK** in the panel top-left.
-This works on a phone, which a browser console does not:
-
-    https://gabrieliusskuminas-crypto.github.io/Capy/?dev=1
+**Add `?dev=1` to the game's URL and tap RLS CHECK** in the panel top-left. This
+works on a phone, which a browser console does not.
 
 | Verdict | Means |
 |---|---|
@@ -44,40 +37,36 @@ This works on a phone, which a browser console does not:
 | **INCONCLUSIVE** | The board did not answer at all. Fix `SCORE_API` first. |
 
 The check reads before it writes, on purpose. A wrong URL answers 404 to the
-write, which reads as "refused" — a false pass, the worst possible outcome for
-a security check. A refused write is only evidence once a read has proved we
-are talking to the right project.
+write, which reads as "refused" — a false pass, the worst outcome for a security
+check. A refused write is only evidence once a read has proved we are talking to
+the right project.
 
 ## What none of this protects against
 
-Worth writing down, because the checks look more protective than they are.
+The checks look more protective than they are.
 
 **Forged scores are not preventable here, and never were.** The publishable key
 is in the page source and the validation rules are in this repo — but hiding
-either would buy nothing, because anyone can play one run with devtools open
-and read the exact request the game sends. Any conforming score the game could
-send, a person can send by hand.
+either buys nothing, because anyone can play one run with devtools open and read
+the exact request the game sends.
 
 **The flood guard is per tag.** `submit_score` refuses a second run under the
-same tag within five seconds; rotating tags defeats that entirely and nothing
-here caps total inserts. The board fills with junk, and `truncate` is the fix.
-Closing it properly needs per-IP rate limiting, which the free tier does not
-hand you.
+same tag within five seconds; rotating tags defeats that entirely. The board
+fills with junk and `truncate` is the fix. Closing it properly needs per-IP rate
+limiting, which the free tier does not offer.
 
 What the SQL does buy is **blast radius**. `anon` holds no delete and no update
-grant, so the worst a stranger can do is add rows — never remove or rewrite
-what is already there. Cheating stays recoverable with a `delete`; destruction
-would not have been.
+grant, so the worst a stranger can do is add rows — never remove or rewrite what
+is there. Cheating stays recoverable; destruction would not have been.
 
-If the board ever needs real integrity, the answer is not a better check in
-this file. It is moving authority off the client — submitting a seed and an
-input log and re-simulating the run server-side — and that is a different
-project, not a tightening of this one.
+If the board ever needs real integrity the answer is not a better check here. It
+is moving authority off the client — submit a seed and an input log, re-simulate
+server-side — and that is a different project.
 
 ## Moderation
 
-There is no in-game moderation and deliberately no tag ownership, so the
-dashboard is the only tool. Tags are stored uppercase.
+No in-game moderation and deliberately no tag ownership, so the dashboard is the
+only tool. Tags are stored uppercase.
 
 ```sql
 delete from public.runs where tag = 'BADTAG';          -- one player's runs
@@ -90,12 +79,10 @@ truncate public.runs;                                  -- start the board over
 **"Public Can Execute SECURITY DEFINER Function" is expected and permanent.**
 "Public" is the dashboard's name for the `anon` role — the key the game ships
 with. `submit_score` is security definer precisely so it can write to a table
-the caller cannot touch, and the game has to be able to call it. The Advisor
-flags the shape because it is a common place to get things wrong, not because
-this one is. Dismiss it.
+the caller cannot touch, and the game has to call it. Dismiss it.
 
-**"Signed-In Users Can Execute" is not expected**, and the migration now
-revokes it — nothing here signs in. To see who actually holds the grant:
+**"Signed-In Users Can Execute" is not expected**, and the migration revokes it —
+nothing here signs in. To see who holds the grant:
 
 ```sql
 select grantee, privilege_type
@@ -103,37 +90,27 @@ from information_schema.role_routine_grants
 where routine_name = 'submit_score';
 ```
 
-Three rows are expected and none of them is a hole:
+Three grantees are expected: `postgres` (the owner), `service_role` (reachable
+only with the `sb_secret_` key, which is never in the game), and `anon` (the
+publishable key, the intended write path). The first two look alarming and are
+not — holding either credential already means total control of the database.
 
-| Grantee | What it is |
-|---|---|
-| `postgres` | The owner — it created the function, and owners always hold EXECUTE. |
-| `service_role` | Supabase's privileged backend role, reachable only with the `sb_secret_` key, which is never in the game. Granted by default to everything. |
-| `anon` | The publishable key the game ships. This is the intended write path. |
-
-The last two look alarming and are not: holding the owner or service-role
-credential already means total control of the database, so EXECUTE on one
-function is the least of it. The only credential this repo ships is the
-publishable key, and that is `anon`.
-
-**`authenticated` is the one that should not be there.** If it is listed,
-re-run the migration, or just the revoke on its own:
+**`authenticated` is the one that should not be there.** If listed, re-run the
+migration or just the revoke:
 
 ```sql
 revoke execute on function public.submit_score(text,int,int,int,int) from authenticated;
 ```
 
-The Advisor also flags Auth settings — leaked-password protection, MFA — on
-every project. This one does not use Supabase Auth at all, so those do not
-apply. What matters is that `runs` shows **RLS enabled** with exactly one
-policy, and that policy is `select` only.
+The Advisor also flags Auth settings on every project; this one does not use
+Supabase Auth at all. What matters is that `runs` shows **RLS enabled** with
+exactly one policy, `select` only.
 
 ## Things that will look like bugs
 
 - **A free project pauses after about a week with no traffic.** The board greys
-  out and needs a manual restore from the dashboard. The game is unaffected —
-  see the fire-and-forget rules in `CLAUDE.md`.
+  out and needs a manual restore. The game is unaffected — submits are
+  fire-and-forget (see `CLAUDE.md`).
 - **A failed submit is not lost.** It is queued in `localStorage` and retried at
   next boot, so a score submitted while the project was paused appears later.
-- **Free tier has no point-in-time recovery.** `truncate` is final. For a board
-  of arcade scores that is fine, but it is worth knowing before you run it.
+- **Free tier has no point-in-time recovery.** `truncate` is final.

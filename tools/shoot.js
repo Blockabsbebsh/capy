@@ -605,7 +605,7 @@ const fail = [];
       lives: document.getElementById('lives').children.length,
       hats: document.getElementById('hatPicker').children.length,
       three: THREE.REVISION,
-      // every name the animation code reaches into (see CLAUDE.md)
+      // every name the animation code reaches into (the contract is in MODEL.md)
       rig: ['root','bob','squash','tilt','body','head','legs','muzzle','mouth',
             'skull','hatAnchor','stackAnchor'].filter(k => !capy[k]),
       rigNums: typeof capy.legRestY === 'number' && typeof capy.stackBaseY === 'number',

@@ -31,10 +31,10 @@ Commit the regenerated `js/capymodel.js` (~805 KB raw, ~170 KB gzipped).
 
 `TARGET_HEIGHT` at the top of the converter is the capybara's height in game
 units, floor to the top of the head; everything else scales off it, including
-the foot-sock thresholds, which are fractions of it for exactly that reason.
+the foot-sock thresholds.
 
 The converter is not a plain `toJSON()` dump — the source `.glb` lacks several
-things it needs, and each is documented at its call site: it welds vertices and
+things it needs, each documented at its call site: it welds vertices and
 averages normals (the Blender export splits every vertex per face, so it renders
 flat-shaded), generates cylindrical UVs (there is no `TEXCOORD_0` at all), bakes
 vertex colours from the skin weights, bakes scale and the ground offset into the
@@ -53,8 +53,7 @@ drive: `muzzle`/`mouth`/`skull` are inert proxies and the capybara does not
 chew. Give it a jaw bone and map it in `syncCapyRig` if that changes.
 
 The animation in the `.glb` is discarded — it animates the armature's own
-transform, which would fight the `root/bob/squash/tilt` chain. `scene.toJSON()`
-omits clips anyway.
+transform, which would fight the `root/bob/squash/tilt` chain.
 
 ## The rig contract
 
@@ -83,36 +82,33 @@ bone's rest quaternion. `player.js` is untouched by any of this.
 - `hatAnchor` — hats are parented here.
 - `stackAnchor` + `stackBaseY` — the food stack mounts here; `stack.js` sets
   `stackAnchor.position.y = capy.stackBaseY + hat.top`.
-- `eyes[]`, `torso` — currently unused by other files, kept for API stability.
+- `eyes[]`, `torso` — unused by other files, kept for API stability.
 
 ## Gotchas
 
-- **The `.glb` carries a Z-up→Y-up rotation on the armature node.** Per the
-  glTF spec a skinned mesh **ignores its own node transform**, and three honours
-  that (bindMode `attached` recomputes `bindMatrixInverse` from `matrixWorld`
-  every frame), so the mesh renders in bone space while that rotation sits on
-  the node doing nothing to it. Measure anything through `mesh.matrixWorld` and
-  you are measuring a space the mesh does not render in — and calling
-  `bind(skeleton, matrixWorld)` bakes the rotation in for real and lands the
-  capybara face-down. `glb2json.mjs` pushes the rotation into the bone chain so
-  there is exactly one coordinate space; nothing downstream should reintroduce
-  a matrix.
+- **The `.glb` carries a Z-up→Y-up rotation on the armature node.** Per the glTF
+  spec a skinned mesh **ignores its own node transform**, and three honours that,
+  so the mesh renders in bone space while that rotation sits on the node doing
+  nothing. Measure anything through `mesh.matrixWorld` and you are measuring a
+  space the mesh does not render in — and calling `bind(skeleton, matrixWorld)`
+  bakes the rotation in for real and lands the capybara face-down. `glb2json.mjs`
+  pushes the rotation into the bone chain so there is exactly one coordinate
+  space; nothing downstream should reintroduce a matrix.
 - `Box3.setFromObject` **caches** its result on a `SkinnedMesh`. Rescale the
-  geometry and it keeps returning the old bounds. `glb2json.mjs` has `bboxOf()`
-  for this; do not swap it back for `setFromObject`.
+  geometry and it keeps returning the old bounds. Use `bboxOf()` in
+  `glb2json.mjs`; do not swap it back.
 - **Do not drive the foot colour from the skin weights.** It looks like the
-  principled choice and it is not: the rig's ankle/toe bones are wildly
-  asymmetric front to back — hind ankle at y 0.168, front ankle at y 0.018 — so
-  weighting by them paints a boot half way up the hind shins while catching 5-9
-  vertices per front foot, which is invisible. `paint()` masks by height
-  instead; every foot is planted at y = 0 after grounding.
+  principled choice and is not: the ankle/toe bones are wildly asymmetric front
+  to back (hind ankle y 0.168, front ankle y 0.018), so weighting by them paints
+  a boot half way up the hind shins while catching 5-9 vertices per front foot.
+  `paint()` masks by height instead; every foot is planted at y = 0.
 - **Eye sockets are found, not positioned by bounding-box fractions.** The head
   has three concave dishes — sockets, nostrils, mouth line — and `capyrig.js`
   picks the sockets by discrete curvature with the midline and muzzle fenced
   off. A fractions guess put the eyes on the cheek.
-- `mat.eye` is roughness 0.25. On the procedural capybara's tiny eyes that is
-  invisible; at the model's eye size it is a hard catchlight, which the art
-  direction below rules out. `capyrig.js` uses its own matte eye material.
+- `mat.eye` is roughness 0.25 — invisible on the procedural capybara's tiny
+  eyes, a hard catchlight at the model's eye size, which the art direction below
+  rules out. `capyrig.js` uses its own matte eye material.
 
 ## Art direction
 
@@ -121,14 +117,13 @@ Learned the hard way:
 
 - One continuously sculpted surface. Two overlapping convex primitives leave a
   shading crease exactly where they meet, and that crease is what makes a model
-  read as "assembled from parts". `sculptBlob()` in `models.js` deforms a sphere
-  along Z with a per-slice profile to avoid it.
+  read as "assembled from parts". `sculptBlob()` deforms a sphere along Z with a
+  per-slice profile to avoid it.
 - Unbroken back-to-head line with a soft dip at the neck — *not* a head lifted
-  clear of the shoulders. The chest profile has to stay tall enough to actually
+  clear of the shoulders. The chest profile must stay tall enough to actually
   meet the skull, or the join is a hard step.
 - Small flat dark eyes, no catchlight. Glossy highlights read as cartoon
-  character rather than figurine.
-- No pale belly patch. On the procedural build the whole leg is darker than the
-  body; on the model only the **feet** are dark, as short socks — the legs stay
-  body-coloured. The model's eyes also sit high and well back on the skull,
+  character rather than figurine. They sit high and well back on the skull,
   where a real capybara's are, not on the cheek.
+- No pale belly patch. On the procedural build the whole leg is darker than the
+  body; on the model only the **feet** are dark, as short socks.
