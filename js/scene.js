@@ -134,28 +134,59 @@ const CAM_LOOK = new THREE.Vector3(0, 1.6, -0.6);
 const camFit = { x:CAM_BASE.x, y:CAM_BASE.y, z:CAM_BASE.z, follow:1 };
 const FIT_MARGIN = 1.6;
 
+/* Pitch, by how tall the screen is.
+
+   The arena is twice as wide as it is deep, so fitting its WIDTH is what sets
+   the camera distance, and on a portrait phone that distance leaves the play
+   field a 371x92px strip: eight and a half units of depth inside 92 pixels,
+   which puts the catch radius at 14px measured up the screen. You cannot see
+   whether you are on the dot, and no input scheme fixes that.
+
+   A tall screen has hundreds of pixels of unused height above and below that
+   strip, and pitching the camera down spends them on depth without moving the
+   camera any closer: at 46 degrees the same arena is 120px deep and the catch
+   radius reads 18px. It is gated on aspect and the wide end is the original
+   pose to the last decimal, so every desktop framing is untouched. */
+const CAM_PITCH_WIDE = Math.atan2(CAM_BASE.y - CAM_LOOK.y, CAM_BASE.z - CAM_LOOK.z);
+const CAM_PITCH_TALL = THREE.MathUtils.degToRad(46);
+const PITCH_ASPECT = { wide: 1.3, tall: 0.55 };
+
+/* How far above the fingertip the capybara stands on a touch screen, in px.
+   Derived rather than dialled in: a lift of the arena's own projected depth
+   puts the thumb entirely below the play field wherever it is pointing, which
+   is the whole reason pointing is usable on a phone. `room` is the other
+   constraint — the near edge has to stay reachable without the finger falling
+   off the bottom of the screen — and it is what binds in landscape, where the
+   arena already sits low. */
+let touchLift = 90;
+
 function fitCamera(){
   const aspect = window.innerWidth / window.innerHeight;
   const need = ARENA.halfX + FIT_MARGIN;
   // half-width visible at the arena's distance with the current framing
-  const dist = Math.hypot(CAM_BASE.y - CAM_LOOK.y, CAM_BASE.z - CAM_LOOK.z);
-  const halfH = dist * Math.tan(THREE.MathUtils.degToRad(BASE_FOV) / 2);
+  const base = Math.hypot(CAM_BASE.y - CAM_LOOK.y, CAM_BASE.z - CAM_LOOK.z);
+  const halfH = base * Math.tan(THREE.MathUtils.degToRad(BASE_FOV) / 2);
   const halfW = halfH * aspect;
   const zoom = THREE.MathUtils.clamp(need / halfW, 1, 2.6);
+  const dist = base * zoom;
+  const t = THREE.MathUtils.clamp(
+    (PITCH_ASPECT.wide - aspect) / (PITCH_ASPECT.wide - PITCH_ASPECT.tall), 0, 1);
+  const pitch = CAM_PITCH_WIDE + (CAM_PITCH_TALL - CAM_PITCH_WIDE) * t;
   camFit.x = CAM_BASE.x;
-  camFit.y = CAM_LOOK.y + (CAM_BASE.y - CAM_LOOK.y) * zoom;
-  camFit.z = CAM_LOOK.z + (CAM_BASE.z - CAM_LOOK.z) * zoom;
+  camFit.y = CAM_LOOK.y + Math.sin(pitch) * dist;
+  camFit.z = CAM_LOOK.z + Math.cos(pitch) * dist;
   camFit.follow = 1 / zoom;
+  refreshLift();
   refreshSky();
 }
 
-/* How much of the screen is sky, as a fraction of its height — the boundary
-   is the far edge of the background ground disc, not the true horizon, which
-   sits off the top of the frame at this pitch. Measured off a scratch camera
-   posed at camFit rather than the live one, because animate() only moves the
-   real camera onto camFit on the next frame and fitCamera runs before that. */
+/* A scratch camera posed at camFit rather than the live one, because animate()
+   only moves the real camera onto camFit on the next frame and fitCamera runs
+   before that — so anything fitCamera needs to measure has to be measured
+   against the pose it just chose. Both the sky band and the touch lift do. */
 const _skyProbe = new THREE.PerspectiveCamera();
-function skyBand(){
+const _probePt = new THREE.Vector3();
+function poseProbe(){
   _skyProbe.fov = camera.fov;
   _skyProbe.near = camera.near; _skyProbe.far = camera.far;
   _skyProbe.aspect = window.innerWidth / window.innerHeight;
@@ -163,9 +194,26 @@ function skyBand(){
   _skyProbe.lookAt(CAM_LOOK);
   _skyProbe.updateMatrixWorld(true);
   _skyProbe.updateProjectionMatrix();
+  return _skyProbe;
+}
+// screen y, in px from the top, of a point on the ground
+function groundY(x, z){
+  _probePt.set(x, 0, z).project(poseProbe());
+  return (1 - _probePt.y) / 2 * window.innerHeight;
+}
+/* How much of the screen is sky, as a fraction of its height — the boundary
+   is the far edge of the background ground disc, not the true horizon, which
+   sits off the top of the frame at this pitch. */
+function skyBand(){
   const r = 60 * (typeof ground === 'undefined' ? 1 : ground.scale.x);
-  const p = new THREE.Vector3(0, 0, -r).project(_skyProbe);
+  const p = _probePt.set(0, 0, -r).project(poseProbe());
   return THREE.MathUtils.clamp((1 - p.y) / 2, 0.03, 0.6);
+}
+function refreshLift(){
+  const near = groundY(0, ARENA.halfZ), far = groundY(0, -ARENA.halfZ);
+  const ideal = (near - far) + 34;                       // clear of the play field
+  const room  = window.innerHeight - near - 16;          // still on the screen
+  touchLift = THREE.MathUtils.clamp(Math.min(ideal, room), 54, 220);
 }
 
 /* Repaint the sky for the current theme, framing and viewport. Cheap enough
