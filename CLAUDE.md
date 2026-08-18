@@ -44,7 +44,7 @@ Load order, which is also roughly the dependency order:
 | `config.js` | Tuning constants, `TYPES`, `POWERS`, `UPGRADES`, `THEMES`, `TOUCH`, `REDUCED` |
 | `icons.js` | `ICON_BODY` + `icon()` — inline SVG for every perk and power-up |
 | `audio.js` | The `Audio` IIFE — synth primitives, the five written themes, every SFX |
-| `scene.js` | Renderer, scene, sky texture + `skyBand`/`refreshSky`, camera + `fitCamera`, lights |
+| `scene.js` | Renderer, scene, sky texture + `skyBand`/`refreshSky`, camera + `fitCamera` (fit, pitch, `touchLift`), lights |
 | `materials.js` | `M()` helper and the flat `mat` library |
 | `theme.js` | `curTheme`, the theme colour lerp (`applyTheme`/`updateThemeMix`) |
 | `environment.js` | Ground, arena `patch`, `border`, pond, scenery, clouds |
@@ -61,9 +61,9 @@ Load order, which is also roughly the dependency order:
 | `powers.js` | Shield bubble, `shieldUp`/`absorbHit`, Auto-Shield, power activation |
 | `hud.js` | `$`, `ui`, HUD rendering, the perk rail, `popup`, `showBanner`, `flash` |
 | `scores.js` | The high score board: `SCORE_API` transport, tag prompt, board panel |
-| `player.js` | `capyState`, `updateCapybara` physics, `tryDash`, `popUp` |
+| `player.js` | `capyState`, `updateCapybara` physics, `tryDash`, `popUp`, the steer mark |
 | `perks.js` | Perk mechanics: dash shockwave, ghosts, reach aura, golden routes, Puzzler |
-| `input.js` | Keyboard, pointer drag, virtual thumbstick |
+| `input.js` | Keyboard, and the pointer steering both devices share |
 | `events.js` | Set-piece director (missiles / feast / sinkholes) |
 | `upgrades.js` | The every-10-levels perk draft, ordinary + one-per-run |
 | `gameflow.js` | `startGame`, pause/menu/`endGame`, button wiring |
@@ -80,6 +80,7 @@ python3 -m http.server 8765 &
 node tools/shoot.js --check                  # assertions, non-zero on failure
 node tools/music.js --wav                    # check the five themes, write WAVs
 node tools/shoot.js --fmt                    # autopilot-walks every shape + feast route
+node tools/shoot.js --touch                  # touch steering against a modelled thumb
 node tools/shoot.js --biome hell,night       # screenshot biomes
 node tools/shoot.js --capy                   # capybara turnaround
 node tools/shoot.js --play                   # menu + gameplay + hat fit
@@ -190,19 +191,39 @@ directly at a fixed `1/60` step instead of waiting on real time.
 
 ## Gameplay rules
 
-- **Movement is a velocity-target model, not an accelerator.** Every input path
-  (keys, pointer drag, thumbstick) answers one question — what velocity does the
-  player want — and `updateCapybara` eases toward it with separate time constants
-  for opening up, braking and turning (`MOVE_T_*`). Do not reintroduce a friction
-  multiplier or a top-speed clamp; the easing cannot overshoot, and the only thing
-  above `SPEED` is the dash.
-- **There is one pointer scheme per device, deliberately.** An input-offset
-  (relative drag) alternative was built, shipped behind a title-screen toggle,
-  and removed again: play-tested against drag-to-follow it measured the same, so
-  it was a second code path and a second thing to explain for nothing. A new
-  scheme needs evidence it beats the existing one, not just that it works. If one
-  is ever added back, it feeds `capyState.stickX/stickZ` like the thumbstick —
-  `updateCapybara` and `tryDash` should never learn about input devices.
+- **Movement is a velocity-target model, not an accelerator.** Both input paths
+  (keys, pointer) answer one question — what velocity does the player want —
+  and `updateCapybara` eases toward it with separate time constants for opening
+  up, braking and turning (`MOVE_T_*`). Do not reintroduce a friction multiplier
+  or a top-speed clamp; the easing cannot overshoot, and the only thing above
+  `SPEED` is the dash.
+- **Both pointers name a PLACE, not a speed**, and both write
+  `capyState.dragX/dragZ`. The proportional controller behind that channel is
+  the whole reason the game feels good with a mouse — speed scales with distance
+  to go, so arriving is automatic and overshoot is impossible — and it is what
+  a thumb needs most, because it is the half of the job a thumb is worst at. A
+  velocity thumbstick shipped here for months and was the reason routes were
+  unplayable on a phone: a rate device asks the player for a heading and a
+  throttle, neither of which is drawn anywhere on screen, and holds the last
+  answer until they give another. Only the keys still say a direction.
+- **A steering scheme needs evidence, and `--touch` is where it goes.** Two have
+  been removed for lack of it. An input-offset (relative drag) alternative
+  play-tested identical to drag-to-follow, so it was a second code path for
+  nothing. A relative "trackpad" mapping for touch was measured at gains 1.4
+  through 3.6 and every gain lost to the thumbstick, because a gain multiplies
+  the thumb's own imprecision — which is why touch pointing is strictly 1:1.
+  What beat the stick was 1:1 pointing (47% of routes to 39% at a 150ms
+  look-rate, 31% to 16% at 250ms). `updateCapybara` and `tryDash` still know
+  nothing about input devices, and there is no analog-axis channel any more.
+- **On touch the capybara stands ABOVE the fingertip.** That single offset is
+  what makes pointing usable on a phone rather than a way to cover the arena
+  with your thumb, and it is why drag-to-follow was rejected for touch before.
+  `touchLift` is derived in `fitCamera` from the arena's own projected depth, so
+  the thumb clears the play field wherever it points; in landscape the near edge
+  runs out of screen below it first and the lift is capped by that instead.
+  Touch reads against a ground plane and the mouse against one at the
+  capybara's middle — pointing at a ribbon dot and sitting on the capybara are
+  different jobs, and sharing one plane put every touch target 0.6 units short.
 - **`game.up.speed` is the only thing that scales movement.** Sticky Feet halves
   it, and `fmtSpeed` reads the same field, which is what keeps routes walkable at
   half speed. Anything that changes how fast the capybara moves goes here, or
@@ -270,6 +291,14 @@ directly at a fixed `1/60` step instead of waiting on real time.
 
 - `animate()` rewrites `camera.position` every frame from `camFit`/`CAM_LOOK`.
   To move the camera, mutate those — not the camera.
+- **`fitCamera` fits the arena's WIDTH, and on a tall screen also pitches.**
+  The play field is 2:1, so on a portrait phone the width fit alone left it a
+  371x92px strip — 8.4 units of depth inside 92 pixels, putting the catch radius
+  at 14px measured up the screen, which no input scheme can make up for. The
+  pitch is interpolated on aspect and the wide end reproduces the original pose
+  to the last decimal, so every desktop framing is byte-identical; do not make
+  it unconditional. `touchLift` is recomputed in the same pass because it is
+  measured off the projected arena.
 - **The sky is a strip, not a screen**: 3.2% of screen height on a desktop
   aspect, 16.5% on a phone. `makeSkyTexture` draws the gradient, sun and clouds
   into that strip, sized by `skyBand()` and corrected for viewport aspect (the

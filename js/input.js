@@ -1,103 +1,95 @@
 const input = { left:false, right:false, up:false, down:false };
 const raycaster = new THREE.Raycaster();
-const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.7);
+/* Two planes, because the two devices point at different things. A mouse sits
+   ON the capybara, so it reads against a plane at its middle and the body ends
+   up under the cursor. A finger points at a spot on the GROUND — a ribbon dot,
+   a landing ring — from a fixed distance below it, so it reads against y=0 or
+   the lift is quietly 0.6 units short of what it says. */
+const bodyPlane  = new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.7);
+const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 const _ndc = new THREE.Vector2();
 const _hit = new THREE.Vector3();
 
-function pointerToGround(clientX, clientY){
+function pointerToGround(clientX, clientY, plane = groundPlane){
   _ndc.x = (clientX / window.innerWidth) * 2 - 1;
   _ndc.y = -(clientY / window.innerHeight) * 2 + 1;
   raycaster.setFromCamera(_ndc, camera);
-  if (raycaster.ray.intersectPlane(groundPlane, _hit)) return _hit;
+  if (raycaster.ray.intersectPlane(plane, _hit)) return _hit;
   return null;
 }
 
-/* ---- virtual thumbstick (touch only) ----------------------------------
-   Drag-to-follow puts your thumb on top of the thing you're trying to see,
-   so on touch devices we hand movement to a floating stick instead: touch
-   down anywhere in the bottom-left zone and the ring appears right under
-   your thumb, so you never have to hunt for a small fixed target. */
-const stickZone = $('stickZone'), stickEl = $('stick'), knobEl = $('stickKnob');
-if (TOUCH && stickZone && stickEl){
-  const R = 58;                        // knob travel in px
-  const DEAD = 11;                     // dead zone in px, generous for thumbs
-  /* Response curve. Since the stick's magnitude IS the target speed, how much
-     thumb travel the slow end gets is exactly how precisely you can park under
-     falling food — and it used to get almost none. Saturating at 60% of the
-     radius left 21px between the dead zone and full speed to express every
-     speed the capybara has, of which the parking crawl (~2 u/s) occupied about
-     three. Ramping across the full radius doubles that band to 47px, and the
-     exponent spends most of it on the slow end: the same crawl is now roughly
-     16px of travel, and full speed still sits exactly at the rim where your
-     thumb can feel it. */
-  const CURVE = 1.8;
-  let stickId = null, originX = 0, originY = 0;
+/* ---- steering: one scheme, two devices --------------------------------
+   Both the mouse and a thumb answer the same question — WHERE do you want to
+   be — and hand `capyState.dragX/dragZ` to the proportional controller in
+   updateCapybara. That controller is why the game feels good with a mouse: it
+   scales speed by how far away the target is, so arriving is automatic and
+   overshoot is impossible. Nothing about arrival is left to the player's
+   timing.
 
-  const setStick = (dx, dz) => {
-    const d = Math.hypot(dx, dz);
-    const clamped = Math.min(d, R);
-    const nx = d > 0 ? dx / d : 0, nz = d > 0 ? dz / d : 0;
-    knobEl.style.transform = `translate(${nx * clamped}px, ${nz * clamped}px)`;
-    const t = d < DEAD ? 0 : Math.min(1, (d - DEAD) / (R - DEAD));
-    const mag = Math.pow(t, CURVE);
-    capyState.stickX = nx * mag;
-    capyState.stickZ = nz * mag;
-  };
-  const release = () => {
-    stickId = null;
-    capyState.stickX = capyState.stickZ = 0;
-    knobEl.style.transform = 'translate(0,0)';
-    stickEl.classList.remove('on');
-  };
-  stickZone.addEventListener('pointerdown', e => {
-    if (game.state !== 'playing') return;
-    e.preventDefault();
-    stickId = e.pointerId;
-    stickZone.setPointerCapture?.(e.pointerId);
-    // the ring is centered exactly on the touch point — clamping this to
-    // avoid screen-edge clipping used to offset the ring from your thumb,
-    // so the very first pointermove would register a big, sudden input
-    // even though your thumb hadn't actually moved yet. Anchoring on the
-    // real touch point keeps input glued to your thumb from frame one.
-    originX = e.clientX;
-    originY = e.clientY;
-    stickEl.style.left = originX + 'px';
-    stickEl.style.top = originY + 'px';
-    stickEl.classList.add('on');
-    setStick(0, 0);
-  });
-  stickZone.addEventListener('pointermove', e => {
-    if (e.pointerId !== stickId) return;
-    e.preventDefault();
-    setStick(e.clientX - originX, e.clientY - originY);
-  });
-  ['pointerup','pointercancel','pointerleave'].forEach(ev =>
-    stickZone.addEventListener(ev, e => { if (e.pointerId === stickId) release(); }));
+   Touch used to get a velocity thumbstick instead, and that is what made
+   routes unplayable on a phone. A rate device asks the player for two
+   quantities they cannot see anywhere on screen — a heading and a throttle —
+   and holds whatever they last said until they say something else, so every
+   moment of inattention is an integration error. Measured against the
+   thumbstick with a modelled thumb (see `--touch` in tools/shoot.js) it clears
+   47% of routes to the stick's 39% at a 150ms look-rate, and 31% to 16% at
+   250ms — an ordinary rate for someone reading a route rather than drilling
+   one. The gap widens as the player slows down because a destination stays
+   correct while nobody is looking at it and a velocity does not.
+
+   Two things make pointing work on a phone at all, and both are load-bearing:
+
+   1:1, never a gain. A relative "trackpad" mapping was measured at gains 1.4
+   through 3.6 and every one of them was WORSE than the thumbstick, because a
+   gain multiplies the thumb's own imprecision: 6px of thumb wobble at gain 2.4
+   is half a catch radius on a screen where the whole arena is 350px wide. At
+   1:1 the arena is small enough on screen to cover without ever clutching, so
+   there is no reason to pay for reach.
+
+   The capybara stands ABOVE the fingertip, by `touchLift` px. This is the
+   reason drag-to-follow was rejected for touch before, and it is the whole
+   fix rather than a detail: the lift is computed from the arena's own
+   projected depth, so on a phone your thumb sits entirely BELOW the play
+   field and never covers the thing you are steering onto. */
+const canvas = renderer.domElement;
+const touchZone = $('touchZone');
+let steerId = null;
+
+function steerTo(clientX, clientY){
+  const h = TOUCH ? pointerToGround(clientX, clientY - touchLift)
+                  : pointerToGround(clientX, clientY, bodyPlane);
+  if (!h) return;                       // pointing at the sky: keep the last target
+  // Clamping matters on touch and not on a mouse: the finger has to be able to
+  // ask for the arena's near and far edges without landing exactly on them.
+  capyState.dragX = TOUCH ? THREE.MathUtils.clamp(h.x, -ARENA.halfX, ARENA.halfX) : h.x;
+  capyState.dragZ = TOUCH ? THREE.MathUtils.clamp(h.z, -ARENA.halfZ, ARENA.halfZ) : h.z;
+}
+function endSteer(){
+  steerId = null;
+  capyState.dragging = false;
+  capyState.dragX = null; capyState.dragZ = null;
 }
 
-/* ---- drag to follow (desktop) ------------------------------------------
-   Hold anywhere and the capybara walks to the cursor. Touch never gets this —
-   your thumb would sit on top of the arena you are trying to read — which is
-   what the thumbstick above is for. */
-const canvas = renderer.domElement;
-canvas.addEventListener('pointerdown', e => {
-  if (game.state !== 'playing' || TOUCH) return;   // touch steers with the stick
-  canvas.setPointerCapture?.(e.pointerId);
+/* On touch the surface is a full-screen zone that sits under the buttons, so
+   either thumb can steer and the DASH button still swallows its own taps. On
+   desktop it is the canvas, which is all there is to press. */
+const surface = TOUCH && touchZone ? touchZone : canvas;
+surface.addEventListener('pointerdown', e => {
+  if (game.state !== 'playing') return;
+  if (steerId !== null) return;         // a second thumb does not fight the first
+  e.preventDefault();
+  steerId = e.pointerId;
+  surface.setPointerCapture?.(e.pointerId);
   capyState.dragging = true;
-  const h = pointerToGround(e.clientX, e.clientY);
-  if (h){ capyState.dragX = h.x; capyState.dragZ = h.z; }
+  steerTo(e.clientX, e.clientY);
 });
-canvas.addEventListener('pointermove', e => {
-  if (!capyState.dragging || game.state !== 'playing') return;
-  const h = pointerToGround(e.clientX, e.clientY);
-  if (h){ capyState.dragX = h.x; capyState.dragZ = h.z; }
+surface.addEventListener('pointermove', e => {
+  if (e.pointerId !== steerId || game.state !== 'playing') return;
+  e.preventDefault();
+  steerTo(e.clientX, e.clientY);
 });
-const endDrag = () => {
-  capyState.dragging = false; capyState.dragX = null; capyState.dragZ = null;
-};
-canvas.addEventListener('pointerup', endDrag);
-canvas.addEventListener('pointercancel', endDrag);
-canvas.addEventListener('pointerleave', endDrag);
+['pointerup','pointercancel','pointerleave'].forEach(ev =>
+  surface.addEventListener(ev, e => { if (e.pointerId === steerId) endSteer(); }));
 
 window.addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
@@ -130,6 +122,6 @@ window.addEventListener('keyup', e => {
 });
 window.addEventListener('blur', () => {
   input.left = input.right = input.up = input.down = false;
+  endSteer();
   if (game.state === 'playing') pauseGame();
 });
-
