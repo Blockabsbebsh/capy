@@ -260,8 +260,8 @@ if (TOUCH) document.body.classList.add('touch');
    working offline, and what keeps tools/shoot.js from needing a network.
    ======================================================================= */
 const SCORE_API = {
-  url: 'https://jojpudfwsxweoezmrshf.supabase.co',
-  key: 'sb_publishable_ht01bnbNB40j3BlRs_I1ZA_DxRgsj5w',
+  url: 'https://wifqxxujxpuhhkddikhp.supabase.co',
+  key: 'sb_publishable_6Rxj2-rfIDRPUT3JgEC8lg_tiJgiWH1',
 };
 const BOARD_LIMIT = 100;     // rows pulled for the board
 const TAG_MAX = 12;          // keep in step with the regex in submit_score
