@@ -53,6 +53,7 @@ function offerUpgrades(level){
   const box = $('upgradeCards');
   box.innerHTML = '';
   for (const u of picks){
+    const have = game.taken[u.id] || 0;
     const dead = perkDead(u);
     const b = document.createElement('button');
     b.className = 'upcard' + (u.tier ? ' ' + u.tier : '') + (dead ? ' dead' : '');
@@ -63,15 +64,19 @@ function offerUpgrades(level){
        cannot work out from the card in front of them: it retires the whole
        gold slot, not just this perk. The tracked small-caps style is built for
        a short tag, so only the tag is uppercase and the sentence after it
-       stays sentence case. How many you already own is deliberately not here:
-       the perk rail down the left edge already carries n/max for everything
-       that stacks, and the card is answering a different question. */
+       stays sentence case.
+
+       An ordinary perk you already hold extends the same line rather than
+       replacing it — `MAX 4 • OWNED 2`, not `OWNED 2/4` — so the limit sits in
+       the same place on every card in the draft and the count is what gets
+       added. Swapping the whole label out is what made the row read as three
+       unrelated things. */
     const tag = dead ? `<u>NO USE THIS RUN</u>`
               : u.tier === 'gold'
                 ? `<u>UNIQUE<em> • Once chosen, gold upgrades will no longer ` +
                   `appear during this run</em></u>`
               : u.tier === 'silver' ? `<u>UNIQUE</u>`
-              : `<u>MAX ${u.max}</u>`;
+              : `<u>MAX ${u.max}${have ? ` • OWNED ${have}` : ''}</u>`;
     b.innerHTML = `<i>${icon(u.icon, 26)}</i><span style="flex:1"><b>${u.name}</b>` +
                   `<span>${u.desc}</span>${tag}</span>`;
     if (!dead) b.addEventListener('click', () => takeUpgrade(u));
