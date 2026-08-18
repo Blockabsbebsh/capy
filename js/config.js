@@ -23,9 +23,10 @@ const HOP_MAX = 2.4;
 const HIT_INVULN = 1.2;
 
 /* --- movement feel -------------------------------------------------------
-   Every input path — keys, pointer drag, thumbstick — resolves to a DESIRED
-   velocity, and updateCapybara eases the real velocity toward it. These are
-   the times, in seconds, to close 90% of that gap; smaller is snappier.
+   Both input paths — the keys, and the pointer that mouse and thumb share —
+   resolve to a DESIRED velocity, and updateCapybara eases the real velocity
+   toward it. These are the times, in seconds, to close 90% of that gap;
+   smaller is snappier.
 
    Having three of them is the whole point. The previous model accelerated at
    a fixed 92 u/s² and then let friction do the stopping, which measured out
@@ -36,7 +37,12 @@ const MOVE_T_ACCEL = 0.10;   // opening up, or holding a line
 const MOVE_T_BRAKE = 0.07;   // input released: stop, don't coast
 const MOVE_T_TURN  = 0.07;   // reversing into the opposite direction
 const MOVE_T_SLIP  = 0.55;   // soap turns all of the above to mush
-const DRAG_GAIN    = 11;     // pointer drag: desired speed per unit of offset
+/* The pointer's proportional controller, and the reason a pointer feels good:
+   desired speed is min(distance * DRAG_GAIN, SPEED), so the walk saturates
+   until the target is about 1.1 units out and then eases itself to a stop. No
+   part of arriving is left to the player's timing — which is most of why the
+   same channel works for a thumb (see input.js). */
+const DRAG_GAIN    = 11;     // desired speed per unit of offset
 const DRAG_DEAD    = 0.05;   // pointer offset below which we simply stop
 
 /* --- dash ----------------------------------------------------------------
@@ -237,7 +243,8 @@ const reduceMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
 let REDUCED = reduceMotionQuery.matches;
 reduceMotionQuery.addEventListener?.('change', e => { REDUCED = e.matches; });
 
-/* thumbstick + DASH button on touch devices, keyboard hint on everything else */
+/* Full-screen steering + the DASH button on touch devices, keyboard hint on
+   everything else. Also gates the finger map in refreshTouchMap. */
 const TOUCH = window.matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
 if (TOUCH) document.body.classList.add('touch');
 
