@@ -548,6 +548,23 @@ const fail = [];
       ok(`${name}: ground material reused`, a.ground === b.ground);
     }
 
+    /* Nothing may stand in the pond. Meadow is the only biome that draws the
+       pond and the default scenery together, so this had exactly one place to
+       show and two hand-placed trees plus a share of the random scatter were
+       growing out of the water there. The scatter is random per load, so this
+       is worth asserting rather than eyeballing once. */
+    const scenery = await page.evaluate(() => {
+      const bad = [];
+      for (const g of sceneryGroup.children){
+        if (!outsidePond(g.position.x, g.position.z)){
+          bad.push(`${g.position.x.toFixed(1)},${g.position.z.toFixed(1)}`);
+        }
+      }
+      return { bad, total: sceneryGroup.children.length };
+    });
+    ok('no scenery standing in the pond', scenery.bad.length === 0,
+       `${scenery.total} pieces${scenery.bad.length ? ', in the water: ' + scenery.bad.join(' ') : ''}`);
+
     // Set-pieces must never repeat back to back.
     const seq = await page.evaluate(() => {
       game.level = 8; evt.last = null;
