@@ -50,14 +50,24 @@ function pointerToGround(clientX, clientY, plane = groundPlane){
    reason drag-to-follow was rejected for touch before, and it is the whole
    fix rather than a detail: the lift is computed from the arena's own
    projected depth, so on a phone your thumb sits entirely BELOW the play
-   field and never covers the thing you are steering onto. */
+   field and never covers the thing you are steering onto.
+
+   `touchReach` is the one place the 1:1 gives, and it gives to keep the ends
+   of the arena away from the bezel — see refreshTouchMap. Running out of
+   screen mid-drag is the one failure an absolute scheme cannot absorb, since
+   the only way out of it is to lift, and lifting moves the capybara somewhere
+   nobody asked for. */
 const canvas = renderer.domElement;
 const touchZone = $('touchZone');
 let steerId = null;
 
 function steerTo(clientX, clientY){
-  const h = TOUCH ? pointerToGround(clientX, clientY - touchLift)
-                  : pointerToGround(clientX, clientY, bodyPlane);
+  // On touch the finger reads against the ground through the inset mapping:
+  // lifted, then scaled about the arena's own centre on screen.
+  const h = TOUCH
+    ? pointerToGround(touchCX + (clientX - touchCX) * touchReach,
+                      touchCY + (clientY - touchLift - touchCY) * touchReach)
+    : pointerToGround(clientX, clientY, bodyPlane);
   if (!h) return;                       // pointing at the sky: keep the last target
   // Clamping matters on touch and not on a mouse: the finger has to be able to
   // ask for the arena's near and far edges without landing exactly on them.
@@ -88,7 +98,14 @@ surface.addEventListener('pointermove', e => {
   e.preventDefault();
   steerTo(e.clientX, e.clientY);
 });
-['pointerup','pointercancel','pointerleave'].forEach(ev =>
+/* `pointerleave` is desktop-only. With the pointer captured it should never
+   fire mid-drag, but if capture is ever refused it would end steering the
+   moment a thumb grazed the screen edge — the exact place the reach margin
+   exists to keep you away from. A touch that the OS does steal arrives as
+   pointercancel. */
+const enders = TOUCH ? ['pointerup','pointercancel']
+                     : ['pointerup','pointercancel','pointerleave'];
+enders.forEach(ev =>
   surface.addEventListener(ev, e => { if (e.pointerId === steerId) endSteer(); }));
 
 window.addEventListener('keydown', e => {
