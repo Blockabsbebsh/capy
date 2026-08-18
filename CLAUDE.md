@@ -34,7 +34,9 @@ in the PR history — go there when a rule looks wrong, before overruling it.
 `index.html` — CSS, markup, ordered script tags.
 `vendor/three.min.js` — three.js r160 UMD, inlined verbatim. Do not edit.
 `assets/capybara.glb` — model source of truth, only read by the converter.
-`assets/icons/` — one drawn PNG per perk and power-up. Lowercase names, 128px.
+`assets/icons/` — GENERATED. One PNG per perk and power-up, 192px, lowercase.
+`assets/icons/src/` — the drawn art those are cut from. The source of truth.
+`tools/icons.py` — the offline icon converter.
 `tools/glb2json.mjs` — the offline converter.
 `supabase/migrations/` — the score board schema. Applied by Supabase, not by the game.
 `supabase/README.md` — applying it, proving RLS holds, and the moderation SQL.
@@ -78,6 +80,7 @@ No test suite. Verify in a real browser — `tools/shoot.js` wraps it:
 
 ```sh
 npm i playwright-core          # not committed; chromium is preinstalled
+pip install pillow numpy scipy # only for tools/icons.py
 python3 -m http.server 8765 &
 node tools/shoot.js --check                  # assertions, non-zero on failure
 node tools/music.js --wav                    # check the five themes, write WAVs
@@ -85,6 +88,7 @@ node tools/shoot.js --fmt                    # autopilot-walks every shape + fea
 node tools/shoot.js --touch                  # touch steering against a modelled thumb
 node tools/shoot.js --biome hell,night       # screenshot biomes
 node tools/shoot.js --icons                  # every icon at the size it is drawn at
+python3 tools/icons.py --check               # every icon PNG still matches its art
 node tools/shoot.js --capy                   # capybara turnaround
 node tools/shoot.js --play                   # menu + gameplay + hat fit
 ```
@@ -189,9 +193,26 @@ directly at a fixed `1/60` step instead of waiting on real time.
 - **Icon filenames are lowercase, and `ICON_SRC` maps id to file.** Pages is
   case-sensitive, so `autoShield.png` works on a Mac checkout and 404s live;
   the map is the one place a filename is written down, and `--check` asserts
-  the whole set is lowercase. The art is square, 128px, transparent — it is
-  drawn at 15px on the perk rail, so a new icon has to survive the downscale as
-  a silhouette. `--icons` is where you look at that, not a viewer.
+  the whole set is lowercase.
+- **`assets/icons/*.png` is BUILT.** The art is `assets/icons/src/<id>.jpg` and
+  `tools/icons.py` cuts it out, squares it and quantises it; hand-editing a PNG
+  there edits a build artefact that the next run overwrites. `--check` on that
+  script fails if any PNG has drifted from its source.
+- **One square size for the whole set, and it is a DISPLAY decision.** 192px,
+  because the biggest thing that draws one is a 46px draft card and 3x DPR
+  wants 138. A set at the display size looked soft on a retina card, and 256
+  doubled every file for detail no screen shows; `--check` asserts they are all
+  square and all the same. Anything much finer than a silhouette is lost by the
+  time it reaches the perk rail — `--icons` is where you look at that, not a
+  viewer.
+- **The background cut is a flood fill over FLATNESS, not over colour.** The
+  art arrives on a pastel wash with a soft drop shadow, and pulling everything
+  near the backdrop colour leaves the shadow behind as a grey smear. What
+  separates backdrop from subject is the edge: a wash moves a level or two per
+  pixel, an ink outline jumps forty. Two things it cannot infer are declared
+  per icon in `ART` — a pocket showing the backdrop *through* the art (the gaps
+  in the chain links) and art drawn *around* the icon (`reach` came with a ring
+  and an outer glow). The long-form reasoning is in the script's docstring.
 - **`refreshHUD` runs every frame, so it writes only what changed.** Use
   `setText`/`setHTML`/`setStyle`; a bare `textContent =` is a DOM mutation even
   when the string is identical, and the power chip's icon markup was being

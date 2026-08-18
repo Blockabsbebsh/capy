@@ -9,16 +9,20 @@
    glossy sticker on the next, and 🛡 in particular came out as a thin outline
    on Windows.
 
-   These are the only image files the game loads, and the rules they answer to:
+   These are the only image files the game loads. They are BUILT, not drawn by
+   hand: the art lives in `assets/icons/src/` and `tools/icons.py` cuts the
+   background out, squares it up and quantises it. Replace art there and re-run
+   that; editing a PNG here is editing a build artefact. The rules:
 
    - **Lowercase filenames, relative path.** Pages is case-sensitive, and
      `autoShield` is the one id whose file therefore cannot simply be the id —
      `ICON_SRC` is where that is written down rather than guessed at.
-   - **A square source, 128px, transparent.** Drawn at 15px on the perk rail
-     and 28px on a draft card, so the source is downscaled everywhere and the
-     browser filters it; a source at the display size would be soft on any
-     retina screen.
-   - **Silhouette first, detail second.** The rail is small: at 15px what
+   - **A square source, 192px, transparent, 3-6KB.** Drawn at 18px on a phone
+     perk rail and 46px on a draft card, so it is downscaled everywhere and
+     never stretched — with headroom left for a 3x screen at the largest of
+     those. A source at the display size looks soft on any retina screen, which
+     is what a 128px set was doing on the card.
+   - **Silhouette first, detail second.** The rail is small: at 18px what
      survives is the outline and the two or three biggest blocks of colour.
      Verified with `--icons`, which renders every one of them at rail size.
    - **Nothing is fetched at call time.** `preloadIcons()` runs at boot, so an
@@ -28,7 +32,7 @@
 const ICON_DIR = 'assets/icons/';
 const ICON_SRC = {
   /* perks */
-  reach:      'reach.png',        // Long Snout — a capybara muzzle in profile
+  reach:      'reach.png',        // Long Snout — a capybara head, whiskers out front
   dash:       'dash.png',         // Quick Paws — a paw print, shockwave behind it
   melon:      'melon.png',        // Melon Lover — a wedge, cut side out
   life:       'life.png',         // Second Wind — a heart with a plus in it
@@ -40,7 +44,7 @@ const ICON_SRC = {
   puzzler:    'puzzler.png',      // Puzzler — one piece
   /* the three falling power-ups */
   magnet:     'magnet.png',
-  shield:     'shield.png',
+  shield:     'shield.png',      // the blue heart crest
   slowmo:     'slowmo.png',
 };
 

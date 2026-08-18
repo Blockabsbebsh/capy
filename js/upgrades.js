@@ -77,7 +77,7 @@ function offerUpgrades(level){
                   `appear during this run</em></u>`
               : u.tier === 'silver' ? `<u>UNIQUE</u>`
               : `<u>MAX ${u.max}${have ? ` • OWNED ${have}` : ''}</u>`;
-    b.innerHTML = `<i>${icon(u.icon, 26)}</i><span style="flex:1"><b>${u.name}</b>` +
+    b.innerHTML = `<i>${icon(u.icon, 46)}</i><span style="flex:1"><b>${u.name}</b>` +
                   `<span>${u.desc}</span>${tag}</span>`;
     if (!dead) b.addEventListener('click', () => takeUpgrade(u));
     box.appendChild(b);
