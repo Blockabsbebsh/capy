@@ -53,15 +53,27 @@ function offerUpgrades(level){
   const box = $('upgradeCards');
   box.innerHTML = '';
   for (const u of picks){
-    const have = game.taken[u.id] || 0;
     const dead = perkDead(u);
     const b = document.createElement('button');
     b.className = 'upcard' + (u.tier ? ' ' + u.tier : '') + (dead ? ' dead' : '');
-    b.innerHTML = `<i>${icon(u.icon, 26)}</i><span style="flex:1"><b>${u.name}</b><span>${u.desc}</span>` +
-                  (dead ? `<u>NO USE THIS RUN</u>`
-                        : u.tier === 'gold' ? `<u>ONE PER RUN</u>`
-                        : u.tier === 'silver' ? `<u>ONE ONLY</u>`
-                        : have ? `<u>OWNED ${have}/${u.max}</u>` : '') + `</span>`;
+    /* Every card carries its class line, including an ordinary perk you do not
+       own yet — the row read as ragged when only some of them had one, and
+       "how many of these can I take" is the question the tier is answering.
+       Gold says what taking it costs you, because that is the part a player
+       cannot work out from the card in front of them: it retires the whole
+       gold slot, not just this perk. The tracked small-caps style is built for
+       a short tag, so only the tag is uppercase and the sentence after it
+       stays sentence case. How many you already own is deliberately not here:
+       the perk rail down the left edge already carries n/max for everything
+       that stacks, and the card is answering a different question. */
+    const tag = dead ? `<u>NO USE THIS RUN</u>`
+              : u.tier === 'gold'
+                ? `<u>UNIQUE<em> • Once chosen, gold upgrades will no longer ` +
+                  `appear during this run</em></u>`
+              : u.tier === 'silver' ? `<u>UNIQUE</u>`
+              : `<u>MAX ${u.max}</u>`;
+    b.innerHTML = `<i>${icon(u.icon, 26)}</i><span style="flex:1"><b>${u.name}</b>` +
+                  `<span>${u.desc}</span>${tag}</span>`;
     if (!dead) b.addEventListener('click', () => takeUpgrade(u));
     box.appendChild(b);
   }
