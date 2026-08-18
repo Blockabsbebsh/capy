@@ -11,6 +11,7 @@
  *   node tools/shoot.js --biome hell,night # screenshot named biomes
  *   node tools/shoot.js --capy             # capybara turnaround
  *   node tools/shoot.js --play             # menu + gameplay + hat fit
+ *   node tools/shoot.js --touch            # touch steering vs a modelled thumb
  *
  * Options: --url <u>  --out <dir>  --browser <path>  --size <WxH>
  * Output goes to .shots/ (gitignored).
@@ -160,12 +161,14 @@ const fail = [];
           }
         }
         if (!target) target = ring;
-        if (!target) { capyState.stickX = capyState.stickZ = 0; return; }
+        if (!target) { capyState.dragX = capyState.dragZ = null; return; }
 
-        const dx = target.x - capyState.x, dz = target.z - capyState.z;
-        const d = Math.hypot(dx, dz);
-        if (d > 0.04) { capyState.stickX = dx / d; capyState.stickZ = dz / d; }
-        else { capyState.stickX = capyState.stickZ = 0; }
+        // Steer the way both real devices do: name a destination and let the
+        // controller in updateCapybara pick the speed. There is no other
+        // channel any more — the thumbstick is gone.
+        capyState.dragging = true;
+        capyState.dragX = target.x; capyState.dragZ = target.z;
+        const d = Math.hypot(target.x - capyState.x, target.z - capyState.z);
 
         /* Dash ONLY when walking cannot cover the step: either the beat is
            dash-timed by construction, or the thing already in the air will land
@@ -249,6 +252,205 @@ const fail = [];
                   `${r.caught}/${r.goods}${r.spoiled ? ' SPOILED' : ''}${r.secs ? ' ' + r.secs + 's' : ''}`);
       if (!all) fail.push(`${r.kind} ${r.id}: ${r.caught}/${r.goods}`);
     }
+  }
+
+  /* Touch steering, against a modelled thumb.
+   *
+   * CLAUDE.md: a steering scheme needs evidence it beats the one it replaces,
+   * and the only honest way to get that headless is to put a thumb's real
+   * limits in front of the game's own physics — a player who re-looks every
+   * LAT seconds, whose finger takes time to slide, and who is a few pixels
+   * imprecise. Everything else (the arena, the shapes, updateCapybara) is the
+   * shipped code.
+   *
+   * Both schemes drive capyState.dragX/dragZ, which can reproduce a rate stick
+   * EXACTLY and so keeps the comparison runnable after the stick itself was
+   * deleted: the drag controller's desired speed is min(d * DRAG_GAIN, SPEED),
+   * so parking the target mag*SPEED/DRAG_GAIN units ahead of the capybara,
+   * every frame, commands exactly `mag` of top speed along that heading. Same
+   * physics, same easing — the only differences are the ones being measured.
+   *
+   * The result that decided the scheme: the two are level at a 150ms look-rate
+   * and pointing pulls away as the player gets slower, because a destination
+   * stays correct while nobody is looking at it and a velocity does not.
+   */
+  if (flag('touch')) {
+    console.log('touch steering (modelled thumb, 390x844):');
+    const tp = await browser.newPage({ viewport: { width: 390, height: 844 },
+                                       hasTouch: true, isMobile: true });
+    tp.on('pageerror', e => errors.push('touch: ' + e.message));
+    await tp.goto(URL, { waitUntil: 'load' });
+    await tp.waitForTimeout(1200);
+    await tp.click('#btnStart').catch(() => {});
+    await tp.waitForTimeout(900);
+
+    const rows = await tp.evaluate(({ lats, levels, reps }) => {
+      let seed = 20260817;
+      const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+      const gauss = () => (rnd()+rnd()+rnd()+rnd()+rnd()+rnd() - 3) / 1.5;
+      /* The game rolls for item type, mirroring and hazard placement, so two
+         schemes only get the same routes if the whole thing is seeded. Without
+         this the run-to-run spread was wider than the difference being
+         measured. Restored at the end — the page stays playable. */
+      const realRandom = Math.random;
+      Math.random = rnd;
+      const reseed = () => { seed = 20260817; };
+
+      const THUMB = 1100;              // px/s a thumb actually slides
+      const NOISE = 5;                 // px, one sigma of placement error
+      const HOME  = { x: window.innerWidth * 0.5, y: window.innerHeight * 0.78 };
+      const V = new THREE.Vector3();
+      const proj = (x, z) => { V.set(x, 0, z).project(camera);
+        return { x:(V.x + 1)/2*window.innerWidth, y:(1 - V.y)/2*window.innerHeight }; };
+      const slide = (from, to, dt) => {
+        const dx = to.x - from.x, dy = to.y - from.y, d = Math.hypot(dx, dy), m = THUMB*dt;
+        if (d > m){ from.x += dx/d*m; from.y += dy/d*m; } else { from.x = to.x; from.y = to.y; }
+      };
+      const speed = () => (12.2 + game.level * 0.16) * game.up.speed;
+
+      // the shipped scheme: the target is wherever the finger is, 1:1
+      const point = () => {
+        const finger = { ...HOME }, want = { ...HOME };
+        return {
+          decide(t){ const p = proj(t.x, t.z);
+                     want.x = p.x + gauss()*NOISE; want.y = p.y + gauss()*NOISE; },
+          step(dt){
+            slide(finger, want, dt);
+            const h = pointerToGround(finger.x, finger.y);
+            if (!h) return;
+            capyState.dragging = true;
+            capyState.dragX = THREE.MathUtils.clamp(h.x, -ARENA.halfX, ARENA.halfX);
+            capyState.dragZ = THREE.MathUtils.clamp(h.z, -ARENA.halfZ, ARENA.halfZ);
+          },
+        };
+      };
+      // the removed thumbstick: R/DEAD/CURVE as it shipped, aimed the way a
+      // player aims — along the direction they SEE, which the stick then read
+      // as a world-space heading
+      const stick = () => {
+        const R = 58, DEAD = 11, CURVE = 1.8;
+        const thumb = { ...HOME }, want = { ...HOME };
+        return {
+          decide(t){
+            const dx = t.x - capyState.x, dz = t.z - capyState.z;
+            const d = Math.hypot(dx, dz) || 1e-6;
+            const c = proj(capyState.x, capyState.z);
+            const fz = Math.hypot(proj(capyState.x, capyState.z + 1).x - c.x,
+                                  proj(capyState.x, capyState.z + 1).y - c.y) /
+                       Math.hypot(proj(capyState.x + 1, capyState.z).x - c.x,
+                                  proj(capyState.x + 1, capyState.z).y - c.y);
+            let ax = dx, az = dz * fz;
+            const an = Math.hypot(ax, az) || 1; ax /= an; az /= an;
+            const mag = Math.min(1, d * DRAG_GAIN / speed());
+            const px = DEAD + Math.pow(mag, 1/CURVE) * (R - DEAD) + gauss()*NOISE;
+            want.x = HOME.x + ax*px; want.y = HOME.y + az*px;
+          },
+          step(dt){
+            slide(thumb, want, dt);
+            const ox = thumb.x - HOME.x, oy = thumb.y - HOME.y, od = Math.hypot(ox, oy);
+            const t = od < DEAD ? 0 : Math.min(1, (od - DEAD) / (R - DEAD));
+            const mag = Math.pow(t, CURVE);
+            if (mag <= 0){ capyState.dragX = capyState.dragZ = null; return; }
+            capyState.dragging = true;
+            const ahead = mag * speed() / DRAG_GAIN;     // exact velocity emulation
+            capyState.dragX = capyState.x + ox/od*ahead;
+            capyState.dragZ = capyState.z + oy/od*ahead;
+          },
+        };
+      };
+
+      const setup = level => {
+        game.state = 'playing'; game.devLock = true; game.level = level;
+        resetUpgrades(); game.run.sticky = false; game.up.speed = 1;
+        applyDifficulty();
+        clearItems(); clearHoles(); resetFormations(); resetEvents(); resetCapy();
+        game.maxLives = game.lives = 99; game.combo = 0; game.shield = false;
+        game.power = null; game.timeScale = 1; fmt.strayTimer = 1e9;
+      };
+      const realPick = pickShape, realComplete = completeFormation;
+      const out = [];
+
+      for (const [name, make] of [['pointing', point], ['thumbstick', stick]]){
+        for (const lat of lats){
+          reseed();                       // every scheme walks the same routes
+          let cleared = 0, routes = 0, caught = 0, goods = 0;
+          for (const shape of FMT_SHAPES){
+            for (const level of levels){
+              if (level < shape.min) continue;
+              for (let r = 0; r < reps; r++){
+                let rec = null;
+                pickShape = () => shape;
+                completeFormation = x => {
+                  rec = { caught:x.caught, goods:x.goods, spoiled:x.spoiled }; realComplete(x); };
+                setup(level);
+                const dev = make();
+                emitFormation();
+                let clock = 0, next = 0;
+                for (let i = 0; i < 60*40 && !rec; i++){
+                  if (clock >= next){
+                    // the ribbon read, same as the --fmt autopilot
+                    let soonest = 1e9, ring = null;
+                    for (const it of items){
+                      if (it.dead || !it.def.good) continue;
+                      const tt = (it.mesh.position.y - CATCH_Y) / Math.max(0.5, -it.vy);
+                      if (tt < soonest){ soonest = tt; ring = it.ring.position; }
+                    }
+                    let target = null, wantsDash = false;
+                    const live = fmt.live.values().next().value;
+                    if (live && live.pts){
+                      const done = live.total - live.pending;
+                      for (let k = Math.max(0, done); k < live.pts.length; k++){
+                        if (!live.pts[k].bad){ target = live.pts[k]; wantsDash = !!live.pts[k].dash; break; }
+                      }
+                    }
+                    if (!target) target = ring;
+                    if (target){
+                      dev.decide(target);
+                      const d = Math.hypot(target.x - capyState.x, target.z - capyState.z);
+                      const sp = speed();
+                      if (d > 2.5 && ((soonest > 0.12 && d > sp*soonest*0.92) ||
+                                      (wantsDash && d > sp*DASH_TIME*2))) tryDash();
+                    }
+                    next = clock + lat;
+                  }
+                  dev.step(1/60);
+                  updateFormations(1/60); updateCapybara(1/60); updateItems(1/60);
+                  clock += 1/60;
+                }
+                pickShape = realPick; completeFormation = realComplete;
+                routes++;
+                if (rec){ caught += rec.caught; goods += rec.goods;
+                  if (rec.caught === rec.goods && rec.goods > 0 && !rec.spoiled) cleared++; }
+              }
+            }
+          }
+          out.push({ name, lat, routes, cleared, caught, goods });
+        }
+      }
+      Math.random = realRandom;
+      return out;
+    }, { lats: [0.15, 0.25], levels: [10, 18, 24], reps: 2 });
+
+    const pct = r => r.cleared / r.routes * 100;
+    for (const r of rows) {
+      console.log(`  ${r.name.padEnd(11)} ${String(r.lat*1000).padStart(4)}ms look   ` +
+        `${String(r.cleared).padStart(3)}/${r.routes} routes cleared = ${pct(r).toFixed(0).padStart(3)}%   ` +
+        `${r.caught}/${r.goods} items = ${(r.caught/r.goods*100).toFixed(1)}%`);
+    }
+    const at = (n, l) => rows.find(r => r.name === n && r.lat === l);
+    const okT = (label, cond, detail = '') => {
+      console.log(`  ${cond ? 'ok  ' : 'FAIL'} ${label}${detail ? '  ' + detail : ''}`);
+      if (!cond) fail.push(label);
+    };
+    okT('a thumb can still clear routes at all',
+        pct(at('pointing', 0.15)) > 30, `${pct(at('pointing', 0.15)).toFixed(0)}%`);
+    /* The reason the thumbstick was replaced, kept as an assertion: pointing is
+       what survives a player who is slow to look up. If this ever inverts, the
+       scheme is no longer earning its place. */
+    okT('pointing beats the thumbstick for a slow look',
+        pct(at('pointing', 0.25)) > pct(at('thumbstick', 0.25)),
+        `${pct(at('pointing', 0.25)).toFixed(0)}% vs ${pct(at('thumbstick', 0.25)).toFixed(0)}%`);
+    await tp.close();
   }
 
   if (flag('check')) {
