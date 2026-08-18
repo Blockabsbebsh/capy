@@ -3,8 +3,9 @@
 A 3D browser game: a capybara catches falling food. **three.js**, not 2D canvas.
 Nearly everything is generated at runtime — meshes assembled from primitives,
 textures painted onto a `<canvas>`, all audio synthesized with the Web Audio
-API. There are no image or sound files in the repo. The one exception is the
-capybara: `assets/capybara.glb`, converted offline into `js/capymodel.js`.
+API. There are no sound files at all, and the only images are art nobody
+would want generated: the capybara (`assets/capybara.glb`, converted offline
+into `js/capymodel.js`) and the perk and power-up icons in `assets/icons/`.
 
 Deploys to GitHub Pages from `main`. Live at
 `https://gabrieliusskuminas-crypto.github.io/Capy/`.
@@ -33,6 +34,7 @@ in the PR history — go there when a rule looks wrong, before overruling it.
 `index.html` — CSS, markup, ordered script tags.
 `vendor/three.min.js` — three.js r160 UMD, inlined verbatim. Do not edit.
 `assets/capybara.glb` — model source of truth, only read by the converter.
+`assets/icons/` — one drawn PNG per perk and power-up. Lowercase names, 128px.
 `tools/glb2json.mjs` — the offline converter.
 `supabase/migrations/` — the score board schema. Applied by Supabase, not by the game.
 `supabase/README.md` — applying it, proving RLS holds, and the moderation SQL.
@@ -42,7 +44,7 @@ Load order, which is also roughly the dependency order:
 | File | Holds |
 |---|---|
 | `config.js` | Tuning constants, `TYPES`, `POWERS`, `UPGRADES`, `THEMES`, `TOUCH`, `REDUCED` |
-| `icons.js` | `ICON_BODY` + `icon()` — inline SVG for every perk and power-up |
+| `icons.js` | `ICON_SRC` + `icon()` — the `<img>` for every perk and power-up icon |
 | `audio.js` | The `Audio` IIFE — synth primitives, the five written themes, every SFX |
 | `scene.js` | Renderer, scene, sky texture + `skyBand`/`refreshSky`, camera + `fitCamera` (fit, pitch, `touchLift`), lights |
 | `materials.js` | `M()` helper and the flat `mat` library |
@@ -82,6 +84,7 @@ node tools/music.js --wav                    # check the five themes, write WAVs
 node tools/shoot.js --fmt                    # autopilot-walks every shape + feast route
 node tools/shoot.js --touch                  # touch steering against a modelled thumb
 node tools/shoot.js --biome hell,night       # screenshot biomes
+node tools/shoot.js --icons                  # every icon at the size it is drawn at
 node tools/shoot.js --capy                   # capybara turnaround
 node tools/shoot.js --play                   # menu + gameplay + hat fit
 ```
@@ -176,11 +179,19 @@ directly at a fixed `1/60` step instead of waiting on real time.
   as the fallback. This only bites when a control sits at the bottom edge, which
   is why it appeared the day a second button went under the start button — and
   why anything else added there inherits the problem.
-- **No emoji in the interface.** Every perk and power-up icon is inline SVG in
-  `icons.js`, drawn in the game's palette: emoji are drawn by the platform, so
-  the same card was a flat glyph on one machine and a glossy sticker on the next,
-  and 🛡 in particular came out as a thin outline on Windows. Add an icon there
-  and reference it by id — `icon()` logs a missing id rather than rendering a gap.
+- **No emoji in the interface.** Every perk and power-up icon is a drawn PNG in
+  `assets/icons/`, listed by id in `icons.js`: emoji are drawn by the platform,
+  so the same card was a flat glyph on one machine and a glossy sticker on the
+  next, and 🛡 in particular came out as a thin outline on Windows. Add art
+  there and reference it by id — `icon()` logs a missing id rather than
+  rendering a gap, and `--check` fails on an id nobody drew or a file that does
+  not load.
+- **Icon filenames are lowercase, and `ICON_SRC` maps id to file.** Pages is
+  case-sensitive, so `autoShield.png` works on a Mac checkout and 404s live;
+  the map is the one place a filename is written down, and `--check` asserts
+  the whole set is lowercase. The art is square, 128px, transparent — it is
+  drawn at 15px on the perk rail, so a new icon has to survive the downscale as
+  a silhouette. `--icons` is where you look at that, not a viewer.
 - **`refreshHUD` runs every frame, so it writes only what changed.** Use
   `setText`/`setHTML`/`setStyle`; a bare `textContent =` is a DOM mutation even
   when the string is identical, and the power chip's icon markup was being

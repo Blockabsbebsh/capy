@@ -371,8 +371,9 @@
   .upcard span{display:block; font-size:12px; opacity:.78; font-weight:normal; margin-top:2px; letter-spacing:.2px;}
   .upcard i{font-style:normal; flex:0 0 auto; line-height:0; display:block;}
   .upcard i .ico{width:28px; height:28px; display:block;}
-  /* the icons are drawn flat, so a soft drop shadow is what lifts them off the
-     card without giving them a border of their own */
+  /* the drop shadow is what lifts an icon off the card without giving it a
+     border of its own. It reads the alpha silhouette, so it works the same on
+     the drawn PNGs as it did on the flat SVGs they replaced. */
   .ico{filter:drop-shadow(0 1px 1px rgba(0,0,0,.45));}
   .upcard u{display:block; font-size:10px; letter-spacing:1.5px; opacity:.6; text-decoration:none; margin-top:3px;}
   /* the sentence half of the gold line: tracked small caps are for the tag,
