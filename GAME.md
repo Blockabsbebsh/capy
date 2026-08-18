@@ -32,14 +32,27 @@ timer. That is the main skill expression.
 | | |
 |---|---|
 | PC | WASD or the arrow keys; or hold and drag, and the capybara walks to the cursor |
-| Mobile | Floating thumbstick, bottom-left; a DASH button bottom-right |
+| Mobile | Drag anywhere — the capybara walks to a point just above your finger. A DASH button, bottom-right |
 | Dash | Space, or the button |
 
 The title card lists these as two lines, Mobile and PC, since the two setups
 share nothing but the dash.
 
+**Both pointers steer the same way: you name a place, not a speed.** The
+capybara moves faster the further it has to go and slows as it arrives, so
+parking on a landing ring is not a matter of letting go at the right instant.
+On a phone the capybara stands a little way *above* your fingertip, which is
+what keeps your thumb off the part of the ground you are reading. The keys are
+the one input that says a direction instead.
+
 Movement is a **velocity-target** model: input says what velocity you want, and
 the capybara eases toward it. It stops quickly and does not coast.
+
+On a tall screen the camera tips further down than it does on a desktop, so the
+arena is seen from a steeper angle. The play field is twice as wide as it is
+deep, and fitting its width is what sets the camera distance — which on a phone
+would otherwise leave the whole thing a shallow letterbox strip you cannot read
+your own depth in.
 
 **Dash** is a committed burst of about 5 units in 0.22s on a ~0.8s cooldown.
 It carries you over an open sinkhole, doubles the score of anything caught

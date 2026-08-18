@@ -17,7 +17,6 @@ const capyState = {
   chew: 0,
   slip: 0,              // soap: seconds of low-friction skidding left
   slipSpin: 0,
-  stickX: 0, stickZ: 0, // analog thumbstick axes (touch)
   pvx: 0, pvz: 0,       // previous velocity, for stack-driving acceleration
   dashT: 0, dashCD: 0,  // seconds of burst left, then seconds until the next one
   dashDX: 0, dashDZ: 0, // unit direction the current dash is committed to
@@ -58,9 +57,7 @@ function tryDash(){
   // dash where you are steering; failing that, where you are already going;
   // failing that, the last way you actually faced
   let dx = 0, dz = 0;
-  if (capyState.stickX !== 0 || capyState.stickZ !== 0){
-    dx = capyState.stickX; dz = capyState.stickZ;
-  } else if (input.left || input.right || input.up || input.down){
+  if (input.left || input.right || input.up || input.down){
     dx = (input.right ? 1 : 0) - (input.left ? 1 : 0);
     dz = (input.down ? 1 : 0) - (input.up ? 1 : 0);
   } else if (capyState.dragX !== null){
@@ -129,7 +126,35 @@ function popUp(v){
   capyState.hopV = Math.max(capyState.hopV, v * Math.max(0, 1 - capyState.hopY / HOP_MAX));
 }
 
+/* Where the finger is pointing, drawn on the ground.
+
+   A mouse has a cursor and a thumb does not, and the capybara stands a fixed
+   distance ABOVE the fingertip, so without this the offset is something the
+   player has to infer from watching the capybara chase it. It fades out as the
+   capybara arrives — once you are standing on the mark there is nothing left
+   to say, and a ring under your feet during the parked half of every beat is
+   just clutter on the part of the ground the ribbon is drawn on. */
+const steerMark = new THREE.Mesh(
+  new THREE.RingGeometry(0.30, 0.44, 28).rotateX(-Math.PI / 2),
+  new THREE.MeshBasicMaterial({ color:0xffd07a, transparent:true, opacity:0, depthWrite:false }));
+steerMark.position.y = 0.045;
+steerMark.renderOrder = 2;
+steerMark.visible = false;
+scene.add(steerMark);
+
+function updateSteerMark(dt){
+  if (!TOUCH) return;                    // a mouse already draws its own
+  const on = capyState.dragging && capyState.dragX !== null && game.state === 'playing';
+  const d = on ? Math.hypot(capyState.dragX - capyState.x, capyState.dragZ - capyState.z) : 0;
+  const want = on ? THREE.MathUtils.clamp((d - 0.45) / 1.4, 0, 1) * 0.5 : 0;
+  const m = steerMark.material;
+  m.opacity += (want - m.opacity) * (1 - Math.pow(0.002, dt));
+  steerMark.visible = m.opacity > 0.01;
+  if (on){ steerMark.position.x = capyState.dragX; steerMark.position.z = capyState.dragZ; }
+}
+
 function updateCapybara(dt){
+  updateSteerMark(dt);
   // --- sinking into a sinkhole: no control until we pop back out --------
   if (capyState.falling){
     capyState.fallT += dt;
@@ -171,16 +196,14 @@ function updateCapybara(dt){
             { spread:1.8, up:0.9, size:0.08, life:0.3 });
     }
   } else {
-    /* --- one velocity-target model for all three input paths -------------
-       Each path answers a single question — what velocity does the player
-       want right now — and the easing below is shared. Previously keys fed
-       an accelerator, the pointer fed a spring and the thumbstick had its own
+    /* --- one velocity-target model for both input paths ------------------
+       Keys say a direction, a pointer says a destination, and both resolve to
+       a desired velocity that the easing below closes on. Previously keys fed
+       an accelerator, the pointer fed a spring and a thumbstick had its own
        snap that had to opt out of the friction pass to avoid fighting it;
        three different feels for one character. */
     let dvx = 0, dvz = 0;
-    if (capyState.stickX !== 0 || capyState.stickZ !== 0){
-      dvx = capyState.stickX * SPEED; dvz = capyState.stickZ * SPEED;
-    } else if (input.left || input.right || input.up || input.down){
+    if (input.left || input.right || input.up || input.down){
       const ax = (input.right ? 1 : 0) - (input.left ? 1 : 0);
       const az = (input.down ? 1 : 0) - (input.up ? 1 : 0);
       const len = Math.hypot(ax, az) || 1;

@@ -409,25 +409,13 @@
   .touch-only{display:none;}
   body.touch .touch-only{display:block;}
   body.touch .desktop-only{display:none;}
-  #stickZone{
-    position:fixed; z-index:10; left:0; bottom:0; width:62vw; height:58vh;
+  /* The whole screen steers, so either thumb can do it and there is no control
+     to find. It sits under the buttons, which keep their own taps. */
+  #touchZone{
+    position:fixed; z-index:10; inset:0;
     touch-action:none; pointer-events:none; /* enabled in JS once touch controls are on */
   }
-  body.touch #hud.on ~ #stickZone{pointer-events:auto;}
-  #stick{
-    position:fixed; z-index:11; left:0; top:0;
-    width:184px; height:184px; margin:-92px 0 0 -92px; border-radius:50%;
-    background:radial-gradient(circle at 50% 50%, rgba(255,246,230,.10), rgba(0,0,0,.28));
-    border:2px solid rgba(255,205,140,.30);
-    touch-action:none; pointer-events:none; opacity:0; transition:opacity .15s ease;
-  }
-  #stick.on{opacity:1;}
-  #stickKnob{
-    position:absolute; left:50%; top:50%; width:84px; height:84px; margin:-42px 0 0 -42px;
-    border-radius:50%; background:linear-gradient(180deg,#ffd07a,#ffab3d);
-    box-shadow:0 4px 12px rgba(0,0,0,.45), inset 0 2px 0 rgba(255,255,255,.35);
-    pointer-events:none;
-  }
+  body.touch #hud.on ~ #touchZone{pointer-events:auto;}
   #btnDash{position:relative; z-index:11;}
 
   /* ---------- controls help on the title card ----------
@@ -435,9 +423,9 @@
      entirely padding — the mobile side is two icons and the desktop side is one
      line of keys, so anything with per-item chrome ends up mostly dead space.
      A label column and a flowing line each says the same thing in a third of
-     the height. The icons are miniatures of the real controls (the floating
-     thumbstick, the DASH button), which on the device they apply to is exactly
-     what the player sees. */
+     the height. The icons are miniatures of the real controls (a fingertip
+     with the capybara above it, the DASH button), which on the device they
+     apply to is exactly what the player sees. */
   .ctrlhelp{
     display:grid; grid-template-columns:auto 1fr; gap:5px 10px;
     align-items:center; margin:14px 2px 2px; text-align:left; font-size:12.5px;
@@ -449,10 +437,19 @@
   .ctrlhelp span{line-height:1.95;}      /* room for kbd caps on a wrapped line */
   .ctrlhelp .nb{white-space:nowrap;}
   .ctrlhelp em{font-style:normal; opacity:.32; margin:0 4px;}
-  .ic-stick{
-    display:inline-block; width:18px; height:18px; border-radius:50%;
-    border:1.5px solid rgba(255,205,140,.55); vertical-align:-4px;
-    background:radial-gradient(circle at 50% 38%, #ffd07a 0 36%, rgba(0,0,0,.22) 38%);
+  /* The capybara (filled) standing above a fingertip (the open contact ring) —
+     the miniature says the one thing about this scheme that pressing the
+     screen does not tell you by itself. */
+  .ic-touch{
+    display:inline-block; position:relative; width:14px; height:18px; vertical-align:-5px;
+  }
+  .ic-touch::before{
+    content:''; position:absolute; left:2px; top:0; width:9px; height:7px;
+    border-radius:4px; background:#ffd07a;
+  }
+  .ic-touch::after{
+    content:''; position:absolute; left:1px; bottom:0; width:10px; height:10px;
+    border-radius:50%; border:1.5px solid rgba(255,205,140,.6);
   }
   .ic-dash{
     display:inline-block; font-style:normal; font-weight:bold; font-size:7px;
@@ -557,11 +554,10 @@
   </div>
 </div>
 
-<!-- virtual thumbstick (touch devices only) — stickZone is a big forgiving
-     hit area so you don't have to land your thumb exactly on the ring;
-     the ring itself floats to wherever you first touch down. -->
-<div id="stickZone" class="touch-only"></div>
-<div id="stick" class="touch-only"><div id="stickKnob"></div></div>
+<!-- steering surface (touch devices only). Full screen on purpose: there is
+     no control to find and no handedness to it — press anywhere and the
+     capybara walks to a point just above your fingertip. -->
+<div id="touchZone" class="touch-only"></div>
 
 
 <!-- ============ START ============ -->
@@ -592,8 +588,8 @@
            and "dash" (two controls, apparently) and left a dangling "·" at the
            end of the row it wrapped out of. -->
       <b>Mobile</b>
-      <span><i class="ic-stick"></i> thumbstick to move
-        <span class="nb"><em>·</em> <i class="ic-dash">DASH</i> to dash</span></span>
+      <span><i class="ic-touch"></i> drag anywhere — the capybara follows just
+        above your finger <span class="nb"><em>·</em> <i class="ic-dash">DASH</i> to dash</span></span>
       <b>PC</b>
       <span><span class="nb"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>, arrows</span>
         or drag with the mouse
