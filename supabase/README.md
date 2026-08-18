@@ -61,7 +61,30 @@ truncate public.runs;                                  -- start the board over
 
 ## Expected dashboard warnings
 
-The Security Advisor flags Auth settings — leaked-password protection, MFA — on
+**"Public Can Execute SECURITY DEFINER Function" is expected and permanent.**
+"Public" is the dashboard's name for the `anon` role — the key the game ships
+with. `submit_score` is security definer precisely so it can write to a table
+the caller cannot touch, and the game has to be able to call it. The Advisor
+flags the shape because it is a common place to get things wrong, not because
+this one is. Dismiss it.
+
+**"Signed-In Users Can Execute" is not expected**, and the migration now
+revokes it — nothing here signs in. To see who actually holds the grant:
+
+```sql
+select grantee, privilege_type
+from information_schema.role_routine_grants
+where routine_name = 'submit_score';
+```
+
+`anon` should be the only row. If `authenticated` is still listed, re-run the
+migration or just run the revoke on its own:
+
+```sql
+revoke execute on function public.submit_score(text,int,int,int,int) from authenticated;
+```
+
+The Advisor also flags Auth settings — leaked-password protection, MFA — on
 every project. This one does not use Supabase Auth at all, so those do not
 apply. What matters is that `runs` shows **RLS enabled** with exactly one
 policy, and that policy is `select` only.
