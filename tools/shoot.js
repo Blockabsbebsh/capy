@@ -551,6 +551,44 @@ const fail = [];
        ghostModel.one && ghostModel.shared && ghostModel.scale === 1,
        JSON.stringify(ghostModel));
 
+    // ---- high score board -------------------------------------------------
+    // No network here on purpose: --check must pass offline and in CI, so this
+    // covers the parts that do not need Supabase — normalisation, the
+    // best-per-tag collapse, the panel wiring, and the rule that a run is only
+    // offered to the board when it beat this device's own best.
+    const board = await page.evaluate(() => {
+      const o = {};
+      o.tags = ['cap!!ybarry', '  spaced  ', 'waytoolongatagname', 'ok'].map(cleanTag);
+      o.valid = [validTag('AB'), validTag('A'), validTag('CAPY KING'), validTag('BAD<TAG>')];
+      o.escaped = esc('<img onerror=1>');
+      o.best = bestPerTag([
+        { tag:'A', score:9 }, { tag:'B', score:8 }, { tag:'A', score:7 }, { tag:'B', score:1 },
+      ]).map(r => r.tag + ':' + r.score);
+      // showPanel must know about the board, or opening it leaves two panels up
+      showPanel(ui.scorePanel);
+      o.exclusive = !ui.scorePanel.classList.contains('hidden') &&
+                    ui.startPanel.classList.contains('hidden') &&
+                    ui.overPanel.classList.contains('hidden');
+      // a losing run must not ask for a tag; a personal best must
+      game.best = 9999; game.score = 10; game.elapsed = 30; endGame('spicy');
+      o.quietOnLoss = getComputedStyle(ui.tagRow).display === 'none';
+      game.best = 0; game.score = 4310; game.elapsed = 60; endGame('spicy');
+      o.promptOnBest = getComputedStyle(ui.tagRow).display !== 'none';
+      showPanel(ui.startPanel);
+      return o;
+    });
+    ok('tags normalise to what the server will store',
+       String(board.tags) === 'CAPYBARRY,SPACED,WAYTOOLONGAT,OK', String(board.tags));
+    ok('tag validation matches the SQL regex',
+       String(board.valid) === 'true,false,true,false', String(board.valid));
+    ok('board text is escaped before it reaches innerHTML',
+       !/[<>]/.test(board.escaped), board.escaped);
+    ok('best-per-tag keeps one row per tag, the highest',
+       String(board.best) === 'A:9,B:8', String(board.best));
+    ok('showPanel knows about the board panel', board.exclusive);
+    ok('only a personal best is offered to the board',
+       board.quietOnLoss && board.promptOnBest, JSON.stringify(board));
+
     ok('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
   }
 
