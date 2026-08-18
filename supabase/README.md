@@ -24,21 +24,55 @@ select count(*) as runs, max(created_at) as latest from public.runs;
 ```
 
 **Proving row level security actually works.** This is the check worth doing,
-because everything else still looks fine when it is broken. The SQL Editor runs
-as the owner and bypasses RLS, so it cannot test this — run it from the browser
-console on the live site instead, where you are `anon`:
+because everything else still looks fine when it is broken — the board reads
+and writes correctly either way. The only proof is to attempt the thing that
+must fail: an anon INSERT straight into the table, bypassing `submit_score`.
 
-```js
-fetch(SCORE_API.url + '/rest/v1/runs', {
-  method: 'POST',
-  headers: { apikey: SCORE_API.key, 'Content-Type': 'application/json' },
-  body: '{"tag":"HACK","score":999999}',
-}).then(r => console.log(r.status));
-```
+The SQL Editor cannot answer this. It runs as the table owner and bypasses RLS
+entirely, so it reports success however the policies are set. The question is
+only meaningful from a browser holding the publishable key.
 
-**401 or 403 is the correct answer.** A 201 means anon can write to the table
-directly, the `submit_score` guards are bypassable, and the grants in the
-migration did not take.
+**Add `?dev=1` to the game's URL and tap RLS CHECK** in the panel top-left.
+This works on a phone, which a browser console does not:
+
+    https://gabrieliusskuminas-crypto.github.io/Capy/?dev=1
+
+| Verdict | Means |
+|---|---|
+| **PASS** | The table refused a direct write. `submit_score` is the only way in. |
+| **FAIL** | Anon inserted straight into `runs`. Every guard in `submit_score` is bypassable — re-run the migration, then delete the `RLSCHECK` row. |
+| **INCONCLUSIVE** | The board did not answer at all. Fix `SCORE_API` first. |
+
+The check reads before it writes, on purpose. A wrong URL answers 404 to the
+write, which reads as "refused" — a false pass, the worst possible outcome for
+a security check. A refused write is only evidence once a read has proved we
+are talking to the right project.
+
+## What none of this protects against
+
+Worth writing down, because the checks look more protective than they are.
+
+**Forged scores are not preventable here, and never were.** The publishable key
+is in the page source and the validation rules are in this repo — but hiding
+either would buy nothing, because anyone can play one run with devtools open
+and read the exact request the game sends. Any conforming score the game could
+send, a person can send by hand.
+
+**The flood guard is per tag.** `submit_score` refuses a second run under the
+same tag within five seconds; rotating tags defeats that entirely and nothing
+here caps total inserts. The board fills with junk, and `truncate` is the fix.
+Closing it properly needs per-IP rate limiting, which the free tier does not
+hand you.
+
+What the SQL does buy is **blast radius**. `anon` holds no delete and no update
+grant, so the worst a stranger can do is add rows — never remove or rewrite
+what is already there. Cheating stays recoverable with a `delete`; destruction
+would not have been.
+
+If the board ever needs real integrity, the answer is not a better check in
+this file. It is moving authority off the client — submitting a seed and an
+input log and re-simulating the run server-side — and that is a different
+project, not a tightening of this one.
 
 ## Moderation
 
@@ -53,7 +87,43 @@ truncate public.runs;                                  -- start the board over
 
 ## Expected dashboard warnings
 
-The Security Advisor flags Auth settings — leaked-password protection, MFA — on
+**"Public Can Execute SECURITY DEFINER Function" is expected and permanent.**
+"Public" is the dashboard's name for the `anon` role — the key the game ships
+with. `submit_score` is security definer precisely so it can write to a table
+the caller cannot touch, and the game has to be able to call it. The Advisor
+flags the shape because it is a common place to get things wrong, not because
+this one is. Dismiss it.
+
+**"Signed-In Users Can Execute" is not expected**, and the migration now
+revokes it — nothing here signs in. To see who actually holds the grant:
+
+```sql
+select grantee, privilege_type
+from information_schema.role_routine_grants
+where routine_name = 'submit_score';
+```
+
+Three rows are expected and none of them is a hole:
+
+| Grantee | What it is |
+|---|---|
+| `postgres` | The owner — it created the function, and owners always hold EXECUTE. |
+| `service_role` | Supabase's privileged backend role, reachable only with the `sb_secret_` key, which is never in the game. Granted by default to everything. |
+| `anon` | The publishable key the game ships. This is the intended write path. |
+
+The last two look alarming and are not: holding the owner or service-role
+credential already means total control of the database, so EXECUTE on one
+function is the least of it. The only credential this repo ships is the
+publishable key, and that is `anon`.
+
+**`authenticated` is the one that should not be there.** If it is listed,
+re-run the migration, or just the revoke on its own:
+
+```sql
+revoke execute on function public.submit_score(text,int,int,int,int) from authenticated;
+```
+
+The Advisor also flags Auth settings — leaked-password protection, MFA — on
 every project. This one does not use Supabase Auth at all, so those do not
 apply. What matters is that `runs` shows **RLS enabled** with exactly one
 policy, and that policy is `select` only.
