@@ -24,21 +24,29 @@ select count(*) as runs, max(created_at) as latest from public.runs;
 ```
 
 **Proving row level security actually works.** This is the check worth doing,
-because everything else still looks fine when it is broken. The SQL Editor runs
-as the owner and bypasses RLS, so it cannot test this — run it from the browser
-console on the live site instead, where you are `anon`:
+because everything else still looks fine when it is broken — the board reads
+and writes correctly either way. The only proof is to attempt the thing that
+must fail: an anon INSERT straight into the table, bypassing `submit_score`.
 
-```js
-fetch(SCORE_API.url + '/rest/v1/runs', {
-  method: 'POST',
-  headers: { apikey: SCORE_API.key, 'Content-Type': 'application/json' },
-  body: '{"tag":"HACK","score":999999}',
-}).then(r => console.log(r.status));
-```
+The SQL Editor cannot answer this. It runs as the table owner and bypasses RLS
+entirely, so it reports success however the policies are set. The question is
+only meaningful from a browser holding the publishable key.
 
-**401 or 403 is the correct answer.** A 201 means anon can write to the table
-directly, the `submit_score` guards are bypassable, and the grants in the
-migration did not take.
+**Add `?dev=1` to the game's URL and tap RLS CHECK** in the panel top-left.
+This works on a phone, which a browser console does not:
+
+    https://gabrieliusskuminas-crypto.github.io/Capy/?dev=1
+
+| Verdict | Means |
+|---|---|
+| **PASS** | The table refused a direct write. `submit_score` is the only way in. |
+| **FAIL** | Anon inserted straight into `runs`. Every guard in `submit_score` is bypassable — re-run the migration, then delete the `RLSCHECK` row. |
+| **INCONCLUSIVE** | The board did not answer at all. Fix `SCORE_API` first. |
+
+The check reads before it writes, on purpose. A wrong URL answers 404 to the
+write, which reads as "refused" — a false pass, the worst possible outcome for
+a security check. A refused write is only evidence once a read has proved we
+are talking to the right project.
 
 ## Moderation
 

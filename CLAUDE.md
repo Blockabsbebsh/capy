@@ -67,7 +67,7 @@ Load order, which is also roughly the dependency order:
 | `events.js` | Set-piece director (missiles / feast / sinkholes) |
 | `upgrades.js` | The every-10-levels perk draft, ordinary + one-per-run |
 | `gameflow.js` | `startGame`, pause/menu/`endGame`, button wiring |
-| `dev.js` | `?dev=1` level switcher. Deletable in one piece. |
+| `dev.js` | `?dev=1` level switcher + the RLS self-check. Deletable in one piece. |
 | `main.js` | `clock`, `animate()`, `onResize`, boot |
 
 ## Testing
@@ -156,6 +156,11 @@ directly at a fixed `1/60` step instead of waiting on real time.
 - **A tag is not an account.** Nothing proves one is yours, deliberately —
   it is arcade initials, not a login. Do not add ownership to it without
   deciding you want accounts, because that is what it becomes.
+- **Only the browser can prove RLS holds.** Supabase's SQL Editor runs as the
+  table owner and bypasses row level security, so it reports success however
+  the policies are set. `?dev=1` -> RLS CHECK attempts the anon INSERT that
+  must fail. It reads before it writes because a wrong URL answers 404 to the
+  write, which reads as "refused" — a false pass is worse than no check.
 - **Escape anything from the server before it reaches `innerHTML`.** Tags are
   written by other players. `submit_score`'s regex already excludes every HTML
   character; `esc()` is the second lock, and both should stay.
