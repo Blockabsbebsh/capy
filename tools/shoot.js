@@ -442,6 +442,49 @@ const fail = [];
       console.log(`  ${cond ? 'ok  ' : 'FAIL'} ${label}${detail ? '  ' + detail : ''}`);
       if (!cond) fail.push(label);
     };
+
+    /* Reach. An absolute scheme lives or dies on whether every part of the
+       arena can be pointed at without the finger going somewhere it cannot or
+       must not go, because the only way out mid-drag is to lift — and lifting
+       moves the capybara somewhere nobody asked for. Two separate things have
+       already broken this: the arena's ends landing 14px from the bezel, and
+       the DASH button eating the near-right corner on a short screen. Both are
+       invisible until you check the corners at a real phone size. */
+    const REACH_MIN = 20;                       // px of screen a corner must spare
+    for (const [w, h] of [[390, 844], [360, 640], [320, 568], [844, 390], [768, 1024]]) {
+      await tp.setViewportSize({ width: w, height: h });
+      await tp.waitForTimeout(350);
+      const r = await tp.evaluate(() => {
+        const V = new THREE.Vector3();
+        const finger = (x, z) => {
+          V.set(x, 0, z).project(camera);
+          const g = { x: (V.x + 1)/2*window.innerWidth, y: (1 - V.y)/2*window.innerHeight };
+          return { x: touchCX + (g.x - touchCX)/touchReach,
+                   y: touchCY + (g.y - touchCY)/touchReach + touchLift };
+        };
+        const dash = document.getElementById('btnDash').getBoundingClientRect();
+        let edge = 1e9, onDash = 0;
+        for (const [x, z] of [[-ARENA.halfX, ARENA.halfZ], [ARENA.halfX, ARENA.halfZ],
+                              [-ARENA.halfX, -ARENA.halfZ], [ARENA.halfX, -ARENA.halfZ]]){
+          const f = finger(x, z);
+          edge = Math.min(edge, f.x, f.y, window.innerWidth - f.x, window.innerHeight - f.y);
+          if (dash.height > 0 && f.x > dash.left && f.x < dash.right &&
+              f.y > dash.top && f.y < dash.bottom) onDash++;
+          // and the mapping has to actually resolve there
+          const h = pointerToGround(touchCX + (f.x - touchCX)*touchReach,
+                                    touchCY + (f.y - touchLift - touchCY)*touchReach);
+          if (!h) onDash += 100;
+        }
+        return { edge: Math.round(edge), onDash, reach: +touchReach.toFixed(2),
+                 lift: Math.round(touchLift) };
+      });
+      okT(`${w}x${h}: every corner reachable`, r.edge >= REACH_MIN && r.onDash === 0,
+          `nearest corner ${r.edge}px from an edge, ${r.onDash} under the DASH button, ` +
+          `reach ${r.reach} lift ${r.lift}`);
+      okT(`${w}x${h}: reach scale stays under the gains that lost`, r.reach <= 1.35,
+          String(r.reach));
+    }
+    await tp.setViewportSize({ width: 390, height: 844 });
     okT('a thumb can still clear routes at all',
         pct(at('pointing', 0.15)) > 30, `${pct(at('pointing', 0.15)).toFixed(0)}%`);
     /* The reason the thumbstick was replaced, kept as an assertion: pointing is
@@ -504,6 +547,23 @@ const fail = [];
       ok(`${name}: patch not stained`, a.mapped ? a.tint === '#ffffff' : true, a.tint);
       ok(`${name}: ground material reused`, a.ground === b.ground);
     }
+
+    /* Nothing may stand in the pond. Meadow is the only biome that draws the
+       pond and the default scenery together, so this had exactly one place to
+       show and two hand-placed trees plus a share of the random scatter were
+       growing out of the water there. The scatter is random per load, so this
+       is worth asserting rather than eyeballing once. */
+    const scenery = await page.evaluate(() => {
+      const bad = [];
+      for (const g of sceneryGroup.children){
+        if (!outsidePond(g.position.x, g.position.z)){
+          bad.push(`${g.position.x.toFixed(1)},${g.position.z.toFixed(1)}`);
+        }
+      }
+      return { bad, total: sceneryGroup.children.length };
+    });
+    ok('no scenery standing in the pond', scenery.bad.length === 0,
+       `${scenery.total} pieces${scenery.bad.length ? ', in the water: ' + scenery.bad.join(' ') : ''}`);
 
     // Set-pieces must never repeat back to back.
     const seq = await page.evaluate(() => {

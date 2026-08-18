@@ -277,9 +277,12 @@
     82%{opacity:1; transform:scale(1);}
     100%{opacity:0; transform:scale(1.15) translateY(-16px);}
   }
+  /* `display` is left to the .touch-only rules below — an id here would
+     outrank them on specificity and the button would show on desktop too,
+     where the dash is Space. */
   #btnDash{
     pointer-events:auto; margin:0 6px 4px 0; font-size:16px; letter-spacing:1.5px;
-    width:96px; height:96px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    width:96px; height:96px; border-radius:50%; align-items:center; justify-content:center;
     background:linear-gradient(180deg,#9fe07a,#5eb845);
     color:#1e3a14; box-shadow:0 6px 0 #3d7a2c, 0 12px 22px rgba(0,0,0,.32);
     touch-action:none;
@@ -416,6 +419,8 @@
     touch-action:none; pointer-events:none; /* enabled in JS once touch controls are on */
   }
   body.touch #hud.on ~ #touchZone{pointer-events:auto;}
+  /* flex, not the .touch-only default of block, so the label stays centred */
+  body.touch #btnDash{display:flex;}
   #btnDash{position:relative; z-index:11;}
 
   /* ---------- controls help on the title card ----------
