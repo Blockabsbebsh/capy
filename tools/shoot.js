@@ -128,6 +128,10 @@ const fail = [];
   if (flag('icons')) {
     console.log('icons:');
     await page.click('#btnStart').catch(() => {});
+    // park the pointer off every control: clicking start leaves it wherever the
+    // button was, and a card that opens under it screenshots in its :hover
+    // state, which reads as a tinted card rather than a plain one
+    await page.mouse.move(1, 1);
     await page.waitForTimeout(600);
     await page.evaluate(() => {
       // one of everything, at full stacks, so the rail is as crowded as it gets
@@ -143,7 +147,7 @@ const fail = [];
     // caps its height and scrolls, so the viewport grows for this one shot —
     // ten cards is more than a draft ever shows and the point is to see them
     // all side by side.
-    await page.setViewportSize({ width: W, height: Math.max(H, 1000) });
+    await page.setViewportSize({ width: W, height: Math.max(H, 1100) });
     await page.evaluate(() => {
       game.state = 'paused';
       const box = document.getElementById('upgradeCards');
@@ -160,6 +164,23 @@ const fail = [];
     await page.waitForTimeout(300);
     await shot('icons-cards');
     await page.setViewportSize({ width: W, height: H });
+
+    /* The cut, on a field nothing in the art comes near. Every other view here
+       is a dark chip or a brown card, which is exactly where a tan drop shadow
+       or a pastel backdrop left behind by the converter hides — `reach` shipped
+       one and none of the shots above showed it. */
+    await page.evaluate(() => {
+      document.body.insertAdjacentHTML('beforeend',
+        `<div id="cutplate" style="position:fixed; inset:0; z-index:99;
+          background:#f0f; display:flex; flex-wrap:wrap; align-content:center;
+          justify-content:center; gap:6px; padding:20px">` +
+        // no .ico class: the drop shadow it carries would read as a leftover one
+        Object.keys(ICON_SRC).map(id => icon(id, 96).replace('class="ico" ', ''))
+          .join('') + `</div>`);
+    });
+    await page.waitForTimeout(300);
+    await shot('icons-cut');
+    await page.evaluate(() => document.getElementById('cutplate').remove());
 
     // and the power chip, which draws them smallest of all at 15px
     await page.evaluate(() => {
