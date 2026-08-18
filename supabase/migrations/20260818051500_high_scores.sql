@@ -87,3 +87,13 @@ end $$;
 
 revoke all on function public.submit_score(text,int,int,int,int) from public;
 grant execute on function public.submit_score(text,int,int,int,int) to anon;
+
+-- `anon` must keep this grant: it is the game's only way to write, and the
+-- whole reason the function is security definer. The dashboard's Advisor
+-- flags that as "Public Can Execute SECURITY DEFINER Function" and always
+-- will — the warning is pointing at the design, not at a fault.
+--
+-- `authenticated` is a different matter. Nothing in this game signs in, so
+-- that role should never be calling this. Revoking costs nothing and drops
+-- the second of the two warnings. Revisit only if the game ever gains auth.
+revoke execute on function public.submit_score(text,int,int,int,int) from authenticated;
