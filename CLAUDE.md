@@ -330,6 +330,13 @@ directly at a fixed `1/60` step instead of waiting on real time.
   `HELL_LAVA_DROP`, with `hellSkirt` filling the step. Anything at lava level
   must be offset by the same drop *and* kept outside the patch footprint via
   `outsidePatch`.
+- **Meadow is the only biome that draws the pond and the default scenery at the
+  same time**, so anything wrong with the two together has exactly one place to
+  show — which is how two hand-placed trees and a share of the random scatter
+  stood in the water for as long as they did. `outsidePond` in `environment.js`
+  is the exclusion, measured off the meshes rather than repeating their
+  numbers, and `--check` asserts it because the scatter is random per load.
+  Note the pond rings are rotated flat, so their world-z extent is `scale.y`.
 - `clearThemeFX` disposes everything it walks. Module-level shared geometry and
   materials must set `userData.shared = true`.
 - **Ghosts are clones of one template**, so they share its geometry and material:

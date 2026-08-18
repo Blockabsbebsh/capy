@@ -39,6 +39,23 @@ pondRim.scale.set(1.5, 1, 1);
 pondRim.receiveShadow = true;
 world.add(pondRim);
 
+/* The pond's whole footprint, bank included, as somewhere scenery may not
+   stand. Two hand-placed trees and a share of the random scatter were growing
+   straight out of the water, which only ever showed in Meadow — it is the one
+   biome that draws the pond and the default scenery at the same time, so the
+   bug had exactly one place to appear and stayed there.
+
+   Measured off the meshes rather than repeating their numbers, so moving or
+   resizing the pond keeps the exclusion with it. `--check` asserts it. */
+function outsidePond(x, z, margin = 0){
+  // the ring lies in its own XY plane and is rotated flat, so world z is
+  // scaled by scale.Y — both are 1 today, and reading .z would be right by
+  // accident until someone stretched the pond the other way
+  const rx = 7.3 * pondRim.scale.x + margin, rz = 7.3 * pondRim.scale.y + margin;
+  const dx = x - pond.position.x, dz = z - pond.position.z;
+  return (dx*dx)/(rx*rx) + (dz*dz)/(rz*rz) > 1;
+}
+
 // --- scenery builders ---------------------------------------------------
 // all the default meadow trees/bushes/rocks live in this group so a theme
 // can hide them wholesale and swap in its own background dressing
@@ -91,10 +108,11 @@ function makeRock(x, z, s = 1){
   return m;
 }
 
-// place scenery well outside the play field
+// place scenery well outside the play field, and off the pond — the three
+// spots that used to sit in the water are now on the bank around it
 const treeSpots = [
-  [-15,-4,1.15],[-12.5,-9,0.95],[13.8,-5,1.1],[16.5,-10,1.25],[-19,-16,1.4],
-  [10,-16,1.3],[-6,-19,1.2],[3,-21,1.35],[19,-18,1.15],[-22,-8,1.0],
+  [-15,-4,1.15],[-4.6,-9.6,0.95],[13.8,-5,1.1],[16.5,-10,1.25],[-21.5,-21,1.4],
+  [10,-16,1.3],[-6,-19,1.2],[3,-21,1.35],[19,-18,1.15],[-24.5,-5.5,1.0],
   [-13.5, 7, 1.0],[14.5, 7.5, 1.05],
 ];
 treeSpots.forEach(([x,z,s]) => makeTree(x, z, s));
@@ -102,6 +120,7 @@ for (let i = 0; i < 22; i++){
   const a = Math.random()*Math.PI*2, r = 13 + Math.random()*16;
   const x = Math.cos(a)*r, z = Math.sin(a)*r*0.85 - 3;
   if (Math.abs(x) < 12 && z > -9 && z < 9) continue;
+  if (!outsidePond(x, z, 0.4)) continue;
   (Math.random() < 0.72 ? makeBush : makeRock)(x, z, 0.7 + Math.random()*0.7);
 }
 
