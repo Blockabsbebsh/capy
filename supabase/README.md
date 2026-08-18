@@ -77,8 +77,21 @@ from information_schema.role_routine_grants
 where routine_name = 'submit_score';
 ```
 
-`anon` should be the only row. If `authenticated` is still listed, re-run the
-migration or just run the revoke on its own:
+Three rows are expected and none of them is a hole:
+
+| Grantee | What it is |
+|---|---|
+| `postgres` | The owner — it created the function, and owners always hold EXECUTE. |
+| `service_role` | Supabase's privileged backend role, reachable only with the `sb_secret_` key, which is never in the game. Granted by default to everything. |
+| `anon` | The publishable key the game ships. This is the intended write path. |
+
+The last two look alarming and are not: holding the owner or service-role
+credential already means total control of the database, so EXECUTE on one
+function is the least of it. The only credential this repo ships is the
+publishable key, and that is `anon`.
+
+**`authenticated` is the one that should not be there.** If it is listed,
+re-run the migration, or just the revoke on its own:
 
 ```sql
 revoke execute on function public.submit_score(text,int,int,int,int) from authenticated;
