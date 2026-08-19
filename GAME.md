@@ -7,9 +7,9 @@ and holes. One session, no saves, score attack.
 ## The loop
 
 Food does not fall at random. A **spawn director** emits **formations**: a run
-of landing spots forming a shape — nineteen of them unlocking as the level
-rises, from sweeps and arcs to weaves, spirals, pincers, out-and-back
-boomerangs and dash-gated leaps. The route between them is drawn on the ground
+of landing spots forming a shape, drawn from a deck that unlocks as the level
+rises — sweeps and arcs to weaves, spirals, pincers, out-and-back boomerangs
+and dash-gated leaps. The route between them is drawn on the ground
 as a glowing ribbon the moment the shape appears. You read the whole route,
 plan one movement, and run it.
 
@@ -134,8 +134,9 @@ Every ~20s a set-piece interrupts the normal flow:
 - **Chilli missiles** — a volley of fast homing hazards to dodge.
 - **Watermelon feast** — a reward, but a routed one: one long continuous path is
   chosen from five (an S, a circuit, a figure of eight, a triangular weave, a
-  spiral), drawn on the ground, and every melon lands on it. Follow the trail and
-  you get all twenty. The steps are far slacker than a formation's — it is a
+  spiral), and every melon lands along it in order. No ribbon is drawn for it —
+  the melons and their landing rings are the trail. Follow it and you get all
+  twenty. The steps are far slacker than a formation's — it is a
   reward beat, not a test.
 - **Sinkholes** — telegraphed by a pulsing red ring, then the ground opens for
   5s. Walk in and you lose a life; dash over them freely.

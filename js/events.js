@@ -6,7 +6,6 @@ const evt = { active:null, last:null, t:0, dur:0, timer:20, queue:[] };
 function resetEvents(){
   evt.active = null; evt.last = null; evt.t = 0; evt.dur = 0; evt.queue.length = 0;
   evt.timer = 20;
-  disposeFeastPath();
 }
 
 /* power-ups arrive on their own timer, never during a missile volley */
@@ -51,10 +50,11 @@ function triggerEvent(){
   evt.active = kind; evt.t = 0; evt.queue.length = 0;
 
   if (kind === 'feast'){
-    /* A reward beat, but a routed one: every melon lands on one long path
-       drawn on the ground the moment the banner does (see startFeastRoute).
-       The old version dropped them at random x, which paid the same for
-       standing still — and quietly wasted the ones that fell out of reach. */
+    /* A reward beat, but a routed one: every melon lands in order along one
+       long continuous path (see startFeastRoute), so the melons themselves —
+       and the landing ring each one drops with — draw the line. The old
+       version dropped them at random x, which paid the same for standing
+       still, and quietly wasted the ones that fell out of reach. */
     showBanner('MELON FEAST!', '#ffe14d', 'melon');   // any longer overflows a phone
     Audio.feast();
     game.fovKick = 2.4;
@@ -89,7 +89,6 @@ function updateEvents(dt){
     evt.t += dt;
     while (evt.queue.length && evt.t >= evt.queue[0].at) evt.queue.shift().fn();
     if (!evt.queue.length && evt.t >= evt.dur){
-      if (evt.active === 'feast') disposeFeastPath();
       evt.active = null;
       evt.timer = Math.max(7, 17 - overtime() * 3) + Math.random() * 11;
     }
