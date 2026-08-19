@@ -193,17 +193,32 @@ const PITCH_ASPECT = { wide: 1.3, tall: 0.55 };
    down to whatever still leaves the near edge reachable within LIFT_REACH. */
 let touchLift = 90, touchReachX = 1, touchReachZ = 1, touchCX = 0, touchCY = 0;
 const THUMB_SPAN = { x: 185, z: 120 };   // px the arena should fit inside, per axis
-/* `?iso=1` drops the strain floor, which is the ONLY thing making the two axes
-   scale differently — reach alone lands both near 1.13. The floor exists for a
-   thumb, which pays for stretch; an index finger on the free hand does not pay
-   it at all, and play-testing says index finger is the better grip. So this is
-   the A/B: the harness cannot settle it, because the cost the floor buys off is
-   the one thing --touch does not model (it has slide speed, placement noise and
-   look latency, and no notion of stretch). What --touch CAN price is the cost
-   the floor charges — noise goes on the finger and is multiplied by these
-   scales — so for an index finger, which pays no strain, its verdict is the
-   whole answer. Default off until a phone says otherwise. */
-const ISO_TOUCH = /[?&]iso=1/.test(location.search);
+/* THE STRAIN FLOOR IS OFF. It bought one thing — an arena small enough on
+   screen that a thumb never stretched for a corner — and it was the only reason
+   the two axes ever scaled differently. It charged two, and the second is the
+   one that took longest to name:
+
+     ANGLE. At 1.96 across against 1.03 deep, a diagonal drag walked up to 18.1
+     degrees off the line it was aimed at. Straight lines still looked right,
+     which is why nothing ever appeared broken, and most shapes here are
+     diagonal traversals.
+
+     GAIN, which is what a player actually feels. Every pixel of finger travel
+     moved the capybara nearly TWICE as far sideways as the ground under the
+     finger, so a small correction was a big one and a twitch was a real move.
+     Play-tested, the words were "small movements could easily over adjust" and
+     "this one just goes where you point" — a 1:1 map has no such gap between
+     where you point and where it goes, and none of the aim is spent undoing
+     the amplification.
+
+   The harness never could settle this: --touch models slide speed, placement
+   noise and look latency, and has no notion of stretch, so it prices what the
+   floor charged and nothing it bought. What decided it was a phone. Off, it
+   reads more precise and clears more routes — and it costs reach, which is the
+   honest trade: the thumb box grows from 185px wide to about 320px on a 390px
+   screen, which an index finger on the free hand does not care about and a
+   one-handed thumb might. `?strain=1` puts the floor back for that comparison. */
+const STRAIN_FLOOR = /[?&]strain=1/.test(location.search);
 const TOUCH_MIN_PX = 11;                 // smallest thumb movement worth aiming with
 const REACH_CEIL = 2.2;                  // beyond here is guesswork, not evidence
 const LIFT_REACH = 1.35;                 // depth scale the lift may assume it can spend
@@ -303,8 +318,8 @@ function refreshTouchMap(){
   const fit = (need, strain, catchPx) => Math.min(REACH_CEIL,
     Math.max(1, need, Math.min(strain, (CATCH_R * catchPx) / TOUCH_MIN_PX)));
   // a strain of 0 drops out of the Math.min/Math.max above, leaving reach alone
-  const strainX = ISO_TOUCH ? 0 : (hx * 2) / THUMB_SPAN.x;
-  const strainZ = ISO_TOUCH ? 0 : (hNear + hFar) / THUMB_SPAN.z;
+  const strainX = STRAIN_FLOOR ? (hx * 2) / THUMB_SPAN.x : 0;
+  const strainZ = STRAIN_FLOOR ? (hNear + hFar) / THUMB_SPAN.z : 0;
   touchReachX = fit(hx / Math.max(1, W / 2 - EDGE), strainX, perX);
   touchReachZ = fit(Math.max(hNear / down, hFar / up), strainZ, perZ);
 }
