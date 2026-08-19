@@ -59,10 +59,12 @@ const DASH_REACH = 0.2;      // extra catch radius while dashing
 
 /* Quick Paws' landing shockwave: a ring thrown out where the burst ends that
    hoovers up food inside it. The multiplier is on the catch radius, so the
-   first pick already reaches three times as far as you can, and it widens from
-   there. At 1.5x it was barely wider than an ordinary catch and the perk read
-   as nothing happening. */
-const SHOCK_R = [0, 3.0, 4.0, 5.0];
+   a pick is a multiple of however far you can already reach, and it widens 20%
+   a pick from there. Halved from where it started: at 3x the first pick
+   swallowed most of a route's next beats in one go, which is less a perk than
+   an autoplay button — the ring should reward dashing well, not replace
+   walking the shape. */
+const SHOCK_R = [0, 1.5, 1.8, 2.16];
 const SHOCK_LIFE = 0.5;      // seconds the visual ring takes to expand and fade
 
 /* Phantombara's afterimage: how long a dash's ghost lingers. It catches on the
@@ -146,10 +148,10 @@ const POWERS = {
    Descriptions are sentences: capital letter, no full stop. */
 const UPGRADES = [
   { id:'reach',  icon:'reach', name:'Long Snout',
-    desc:'+0.22 reach for food, shown as an aura', max:4,
+    desc:'Reach further for food, shown as an aura', max:4,
     apply:u => u.reach += 0.22 },
   { id:'dash',   icon:'dash', name:'Quick Paws',
-    desc:'Dash cools 25% faster, and lands a food-catching shockwave', max:3,
+    desc:'Dash cools faster, and lands a food-catching shockwave', max:3,
     apply:u => { u.dashCD *= 0.75; u.shock++; },
     dead:g => g.run.sticky },                    // no dash, nothing to cool
   { id:'melon',  icon:'melon', name:'Melon Lover',

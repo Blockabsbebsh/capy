@@ -176,27 +176,39 @@ function disposePath(rec){
 
    Each segment records the beat it ARRIVES at, so formationItemResolved can
    take spent segments off the ground as the route is used up — see there. */
-/* How many steps ahead the CONNECTING LINES are drawn. The dots are the read —
-   see below — and the lines only say how consecutive beats join up, which is
-   information you need for the next few and not for the eighteenth. Drawn for
-   the whole route they are what this comment already warned about at five
-   beats: in an arena twice as wide as it is deep, a route that crosses it three
-   or four times lays every line over every other and the picture is a tangle.
-   Windowed, a long route draws exactly the same density of line as a short one
-   ever did, and the dots still show the whole thing. */
-const LINE_AHEAD = 6;
-/* The dots taper over the first TAPER beats and then hold at the floor, rather
-   than grading evenly from the first beat to the last. Even grading is right
-   for five beats and wrong for eighteen: spread that thin, no two neighbours
-   differ enough to say which comes first, and the tail ends up too faint to
-   see at all. Front-loaded, the near beats keep the strong size gradient that
-   answers "where do I go next" and everything past it sits at one readable
-   size that still says "and then all of this". */
-const TAPER = 7;
+/* THE RIBBON IS A WINDOW THAT SLIDES, not a picture drawn once. It shows the
+   next few steps brightly, the ones after that fading out, and nothing beyond —
+   and it slides forward every time a beat lands, so a route reveals itself as
+   you walk it. That is what makes a long route readable: by the time a later
+   segment appears, the earlier one it would have crossed is already gone, so
+   the crossings that survive route generation still never end up on screen at
+   the same moment.
+
+   Dots run further ahead than lines. A dot says "a thing lands here" and stays
+   legible however many there are; a line says "and these two join up", which is
+   only worth knowing for the next few and is what turns into spaghetti in an
+   arena twice as wide as it is deep. Neither is allowed to be drawn without the
+   other around it — a dot beyond the line window with no line reaching it is
+   the "dot in the middle of nowhere" this replaced. */
+const DOT_AHEAD = 9, LINE_AHEAD = 5;
+
+/* Show the part of the route still ahead of `done`, faded by how far off it is.
+   Called once at build and again on every beat that resolves — per beat, not
+   per frame. */
+function revealPath(g, done){
+  for (const m of g.children){
+    const ahead = m.userData.beat - done;
+    const span = m.userData.line ? LINE_AHEAD : DOT_AHEAD;
+    m.visible = ahead >= 0 && ahead <= span;
+    if (!m.visible) continue;
+    const u = ahead / span;             // 0 = next, 1 = the edge of the window
+    m.material.opacity = m.userData.base * (1 - 0.72 * u);
+    if (!m.userData.line) m.scale.setScalar(m.userData.baseScale * (1 - 0.42 * u));
+  }
+}
 
 function buildPath(pts, colour, opacity = 0.42, dots = false){
   const g = new THREE.Group();
-  const last = Math.max(1, pts.length - 2);
 
   /* The landing SPOTS, marked before anything is in the air, and graded largest
      and brightest first. This is what actually makes a route readable: the
@@ -208,13 +220,12 @@ function buildPath(pts, colour, opacity = 0.42, dots = false){
      Hazard beats are marked red, because "do not stand here" is part of the
      route and waiting for the item's own ring to say so is late. */
   if (dots) for (let i = 0; i < pts.length; i++){
-    const u = Math.min(1, i / Math.min(TAPER, Math.max(1, pts.length - 1)));
     const dot = new THREE.Mesh(fmtDotGeo, new THREE.MeshBasicMaterial({
-      color: pts[i].bad ? 0xff5a4a : colour, transparent:true,
-      opacity: (pts[i].bad ? 0.5 : 0.66) * (1 - 0.45 * u), depthWrite:false }));
+      color: pts[i].bad ? 0xff5a4a : colour, transparent:true, depthWrite:false }));
     dot.position.set(pts[i].x, 0.03, pts[i].z);
-    dot.scale.setScalar(0.44 - 0.16 * u);
     dot.userData.beat = i;
+    dot.userData.base = pts[i].bad ? 0.62 : 0.72;
+    dot.userData.baseScale = 0.44;
     g.add(dot);
   }
 
@@ -223,19 +234,19 @@ function buildPath(pts, colour, opacity = 0.42, dots = false){
     const dx = b.x - a.x, dz = b.z - a.z;
     const len = Math.hypot(dx, dz);
     if (len < 0.05) continue;
-    const u = Math.min(1, (i - 1) / Math.min(TAPER, last));   // 0 at the first step
     // wide and bright enough to read on a phone, where the whole arena is a
     // couple of hundred pixels across and a hairline simply disappears
     const seg = new THREE.Mesh(fmtPathGeo, new THREE.MeshBasicMaterial({
-      color: colour, transparent:true, opacity: opacity * (1 - 0.5 * u), depthWrite:false }));
+      color: colour, transparent:true, depthWrite:false }));
     seg.position.set((a.x + b.x) / 2, 0.035, (a.z + b.z) / 2);
     seg.rotation.y = -Math.atan2(dz, dx);
-    seg.scale.set(len, 1, 0.28 - 0.12 * u);
+    seg.scale.set(len, 1, 0.26);
     seg.userData.beat = i;
     seg.userData.line = true;
-    seg.visible = i <= LINE_AHEAD;
+    seg.userData.base = opacity;
     g.add(seg);
   }
+  revealPath(g, 0);
   scene.add(g);
   return g;
 }
@@ -287,9 +298,65 @@ function pickShape(){
    Capped at 18 food beats: past there the ribbon has more dots than the arena
    can separate, which is the same reason a feast draws no dots at all. The
    jitter is what makes late routes vary rather than all arriving at the cap. */
-const FOOD_CAP = 18, ROUTE_SEGS = 5;
-const routeBeats = () =>
-  Math.min(FOOD_CAP, (4.6 + game.level * 0.42) * (0.82 + Math.random() * 0.36));
+const FOOD_CAP = 18, ROUTE_SEGS = 5, ROUTE_TRIES = 14;
+
+/* Length is a DISTRIBUTION, not a curve. Scaling one length up with the level
+   meant short routes stopped existing, and a three-to-five beat route read at a
+   glance is the best-feeling thing in the game — it should never go away. So
+   every level rolls: a short route, or a long one. What climbs is the CHANCE of
+   a long one and how long it is allowed to be. */
+function routeBeats(){
+  const longest = Math.min(FOOD_CAP, 5 + game.level * 0.55);
+  const goLong = Math.random() < THREE.MathUtils.clamp((game.level - 5) / 22, 0, 0.65);
+  return goLong ? 5 + Math.random() * (longest - 5) : 3 + Math.random() * 3;
+}
+
+/* HOW LEGIBLE IS THIS ROUTE? Clearability has always been arithmetic here
+   rather than eyeballing; readability was left to the shapes being hand-drawn,
+   and that stopped being true the moment routes started chaining several of
+   them into one arena. Crossings grow with the SQUARE of the length — every new
+   segment can cross every earlier one — so a five-beat shape averaged 0.2 of
+   them and a fourteen-beat chain averaged 16, which is the "random noise" a
+   route should never look like.
+
+   Three things make a route hard to read, and none of them is length:
+     - a segment crossing another, so you cannot tell which line is next;
+     - a near-reversal, where the path doubles back over ground it just used;
+     - two beats almost on top of each other, which read as one dot.
+   Scored, not forbidden: a sharp angle is sometimes the good part, so this
+   picks the cleanest of several candidates rather than banning anything. */
+function crosses(a, b, c, d){
+  const s = (p, q, r) => Math.sign((q.x - p.x) * (r.z - p.z) - (q.z - p.z) * (r.x - p.x));
+  return s(a, b, c) * s(a, b, d) < 0 && s(c, d, a) * s(c, d, b) < 0;
+}
+const BEAT_APART = 1.2;                 // closer than this and two dots read as one
+
+/* Weighted by whether the two would ever be ON SCREEN TOGETHER, which is what
+   actually confuses a player: the ribbon only draws a window, so a route folding
+   back across ground it used ten beats ago is never ambiguous — that line is
+   long gone. A crossing inside the window is. Scoring the visible ones hard and
+   the rest barely at all is what lets a long route use the whole arena instead
+   of being pushed into a corner to avoid itself. */
+function routeNoise(p){
+  let noise = 0;
+  for (let i = 1; i < p.length; i++)
+    for (let j = i + 2; j < p.length; j++)
+      if (crosses(p[i-1], p[i], p[j-1], p[j]))
+        noise += (j - i <= LINE_AHEAD) ? 12 : 1;
+  for (let i = 1; i < p.length - 1; i++){
+    const ax = p[i].x - p[i-1].x, az = p[i].z - p[i-1].z;
+    const bx = p[i+1].x - p[i].x, bz = p[i+1].z - p[i].z;
+    const c = (ax*bx + az*bz) / (Math.hypot(ax,az) * Math.hypot(bx,bz) || 1);
+    // 0 is straight on, 180 is a full reversal
+    const turn = Math.acos(Math.max(-1, Math.min(1, c))) * 180 / Math.PI;
+    if (turn > 115) noise += 3 + (turn - 115) / 10;
+  }
+  for (let i = 0; i < p.length; i++)
+    for (let j = i + 2; j < p.length; j++)
+      if (Math.hypot(p[i].x - p[j].x, p[i].z - p[j].z) < BEAT_APART)
+        noise += (j - i <= DOT_AHEAD) ? 4 : 0.5;
+  return noise;
+}
 
 /* HAZARDS. Placed here rather than written into the shapes, so a route is not
    a hand you learn to recognise. Two rules, and the first is the player-facing
@@ -356,21 +423,17 @@ function placeHazards(food, at){
   return out;
 }
 
-function emitFormation(){
-  const reach = fmtReach(), speed = fmtSpeed();
+/* One candidate route: shapes chained until it is about `want` beats long, each
+   anchored where the last one ended so the join is an ordinary step. */
+function buildRoute(want){
   const spanZ = ARENA.halfZ * 0.62;
-
-  // chain shapes until the route is as long as this level asks for
   const segs = [];
-  const want = routeBeats();
   let n = 0;
   while (segs.length < ROUTE_SEGS){
     const shape = pickShape();
     const len = shape.beats.length;
     // nearest fit, not first-past-the-post: stopping short of `want` is better
-    // than overshooting it by most of another shape, and taking whichever is
-    // closer is what keeps a level-1 route to about five beats however the
-    // three- and seven-beat shapes happen to come up
+    // than overshooting it by most of another shape
     if (n && (n + len > FOOD_CAP || Math.abs(n + len - want) >= Math.abs(n - want))) break;
     segs.push(shape); n += len;
   }
@@ -400,6 +463,26 @@ function emitFormation(){
       });
     }
     fromX = food[food.length - 1].x;
+  }
+  food.name = segs.map(s => s.id).join('+');
+  return food;
+}
+
+function emitFormation(){
+  const reach = fmtReach(), speed = fmtSpeed();
+
+  /* Build several and walk the cleanest. Which shapes come up, which way each
+     is flipped and where it is anchored are all rolled per candidate, so this
+     is sampling the same generator rather than repairing one draw — and a route
+     that scores zero is taken immediately, which is most of them at short
+     lengths. Cheap: a few hundred comparisons against a frame's budget. */
+  const want = routeBeats();
+  let food = null, noise = Infinity;
+  for (let k = 0; k < ROUTE_TRIES; k++){
+    const cand = buildRoute(want);
+    const n = routeNoise(cand);
+    if (n < noise){ noise = n; food = cand; }
+    if (!noise) break;
   }
 
   /* The timeline is over the FOOD only. Each gap gets exactly the time needed
@@ -432,7 +515,7 @@ function emitFormation(){
   const gold = chainMul();
   const rec = { fid, total: pts.length, pending: pts.length, goods, caught: 0,
                 spoiled: false, blocked: false, gold,
-                name: segs.map(s => s.id).join('+'), pts,
+                name: food.name, pts,
                 path: buildPath(pts, gold > 1 ? 0xffe14d : 0xffd77a,
                                 gold > 1 ? 0.75 : 0.55, true) };
   fmt.live.set(fid, rec);
@@ -479,11 +562,7 @@ function formationItemResolved(it, caught){
      shape was hard to read halfway through: you were looking at the part you
      had already done as well as the part you had not. */
   const done = rec.total - rec.pending;
-  if (rec.path){
-    for (const seg of rec.path.children)
-      seg.visible = seg.userData.beat >= done &&
-                    (!seg.userData.line || seg.userData.beat <= done + LINE_AHEAD);
-  }
+  if (rec.path) revealPath(rec.path, done);
   if (rec.pending <= 0) completeFormation(rec);
 }
 
