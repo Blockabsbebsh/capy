@@ -23,122 +23,8 @@
    their own timer, so the sky still has some noise in it.
    ======================================================================= */
 
-/* Shapes are normalised: x and z run -1..1 inside the formation's own
-   footprint, which is sized and anchored in the arena at emit time. They are
-   listed in the order the items ARRIVE — every item falls at the same speed
-   from the same height, so emission order is landing order.
-
-   Every beat here is FOOD. Hazards used to be written in as `bad` beats, which
-   made them a property of the shape: the same two decoys in the same two
-   places every time gauntlet came up, learnable in a handful of sightings, and
-   the same two whether the route was five beats or twenty. They are placed at
-   emit time now — see placeHazards.
-
-   `dash` times that beat's gap against a dash-assisted run instead of a
-   walking one, so the step is only comfortable if you use the dash — and is
-   still always reachable.  `min` is the level the shape unlocks at. */
-const FMT_SHAPES = [
-  { id:'sweep', min:1, span:0.92, weight:3, beats:[
-    {x:-1,z:0}, {x:-0.5,z:0}, {x:0,z:0}, {x:0.5,z:0}, {x:1,z:0} ] },
-
-  { id:'cluster', min:1, span:0.16, weight:2, beats:[
-    {x:-1,z:0.5}, {x:1,z:-0.3}, {x:0,z:0.9} ] },
-
-  { id:'wave', min:2, span:0.9, weight:3, beats:[
-    {x:-1,z:0.2}, {x:-0.5,z:-0.9}, {x:0,z:0.2}, {x:0.5,z:-0.9}, {x:1,z:0.2} ] },
-
-  { id:'stairs', min:3, span:0.85, weight:2, beats:[
-    {x:-1,z:-0.9}, {x:-0.6,z:-0.45}, {x:-0.2,z:0}, {x:0.2,z:0.45}, {x:0.6,z:0.9} ] },
-
-  { id:'funnel', min:4, span:1.0, weight:2, beats:[
-    {x:-1,z:0}, {x:1,z:0.35}, {x:-0.55,z:-0.35}, {x:0.55,z:0.2}, {x:0,z:0} ] },
-
-  // the dash shape: long hops timed against a dash rather than a walk
-  { id:'leap', min:5, span:1.0, weight:2, beats:[
-    {x:-1,z:0.3}, {x:0.2,z:-0.4,dash:true}, {x:1,z:0.35,dash:true} ] },
-
-  // a run along the near edge with two reaches back into the far half
-  { id:'gauntlet', min:6, span:0.95, weight:3, beats:[
-    {x:-1,z:0.35}, {x:-0.45,z:-0.75}, {x:-0.1,z:0.35},
-    {x:0.45,z:-0.75}, {x:1,z:0.35} ] },
-
-  /* Every traversal gets its own z LANE, front to back. The swings used to sit
-     at z 0, 0.4, -0.4, 0.35, 0 — four end-to-end lines stacked into the same
-     shallow band, which drew as three overlapping streaks with no way to tell
-     which one came first. The arena is twice as wide as it is deep, so anything
-     that crosses it repeatedly has to step in z as it goes or it is unreadable
-     however it is drawn. The walk is the same; the picture is legible. */
-  { id:'pendulum', min:7, span:0.95, weight:2, beats:[
-    {x:-1,z:-0.9}, {x:0.9,z:-0.4}, {x:-0.7,z:0.15}, {x:0.7,z:0.6}, {x:0,z:0.95} ] },
-
-  /* min 11, not 9: the steps here are about the length of one dash, so at 9 a
-     player who dashes into them overshoots and the cooldown blocks the
-     correction — measured as losing the fifth beat 12 times out of 12, while
-     walking it cleared every run. By 11 it is robust either way. */
-  { id:'comb', min:11, span:0.9, weight:2, beats:[
-    {x:-1,z:-0.8}, {x:-0.7,z:0.7}, {x:-0.35,z:-0.8}, {x:0,z:0.7},
-    {x:0.35,z:-0.8}, {x:0.7,z:0.7}, {x:1,z:-0.8} ] },
-
-  /* ---- the second wave of shapes ------------------------------------------
-     Ten more, added because nine shapes — with the plain sweep thinned out past
-     level 8 — is a small enough deck that a long run started recognising hands
-     rather than reading routes. Nothing here is harder than what was already in: the gaps
-     still come out of stepTime, so variety is free — these are new PATHS, not
-     new demands. Each one has a distinct idea, since two shapes that walk the
-     same way are one shape as far as the player is concerned. */
-
-  // a plain V: in and out on the diagonal, the simplest depth-change there is
-  { id:'chevron', min:2, span:0.85, weight:2, beats:[
-    {x:-1,z:-0.85}, {x:-0.5,z:0.1}, {x:0,z:0.9}, {x:0.5,z:0.1}, {x:1,z:-0.85} ] },
-
-  // a smooth bow — the wave's curve without the reversals, so it walks as one
-  // continuous arc instead of five decisions
-  { id:'arc', min:3, span:0.9, weight:2, beats:[
-    {x:-1,z:0.55}, {x:-0.55,z:-0.35}, {x:0,z:-0.85}, {x:0.55,z:-0.35}, {x:1,z:0.55} ] },
-
-  // four beats, full depth each time: fewer, longer strides than the wave
-  { id:'ladder', min:4, span:0.8, weight:2, beats:[
-    {x:-0.95,z:0.85}, {x:-0.3,z:-0.85}, {x:0.3,z:0.85}, {x:0.95,z:-0.85} ] },
-
-  // runs out one way and returns, so the second half is walked backwards
-  // through ground you have already covered
-  { id:'boomerang', min:5, span:0.95, weight:2, beats:[
-    {x:-1,z:0.5}, {x:-0.2,z:-0.55}, {x:0.7,z:0.35}, {x:0,z:0.85}, {x:-0.75,z:-0.2} ] },
-
-  // both far corners first, then closing in on the middle — laned in z like the
-  // pendulum above, and unlike it the amplitude shrinks every step, so the
-  // picture is a funnel of crossings converging rather than parallel streaks
-  { id:'pincer', min:6, span:1.0, weight:2, beats:[
-    {x:-1,z:0.9}, {x:1,z:0.45}, {x:-0.55,z:0}, {x:0.5,z:-0.45}, {x:0,z:-0.9} ] },
-
-  // a near-edge run broken by two lifts into the far half
-  { id:'slalom', min:7, span:0.9, weight:3, beats:[
-    {x:-1,z:-0.55}, {x:-0.6,z:0.6}, {x:-0.3,z:-0.6}, {x:0.1,z:0.6},
-    {x:0.4,z:-0.6}, {x:0.85,z:-0.5} ] },
-
-  // a spiral inward — every step turns the same way, which reads very
-  // differently from anything that zig-zags
-  { id:'coil', min:8, span:0.95, weight:2, beats:[
-    {x:1,z:0.1}, {x:0.35,z:0.8}, {x:-0.55,z:0.5}, {x:-0.9,z:-0.4},
-    {x:0.05,z:-0.85}, {x:0.5,z:-0.25} ] },
-
-  // the second dash shape: one long committed hop across, then a short
-  // recovery back — the leap without the second dash in a row
-  { id:'hook', min:9, span:1.0, weight:2, beats:[
-    {x:-1,z:-0.6}, {x:-0.4,z:0.5}, {x:0.85,z:0.6,dash:true}, {x:0.5,z:-0.7} ] },
-
-  // peaks of uneven height off a shared baseline, so the rhythm is irregular
-  // where the wave's is metronomic
-  { id:'crown', min:10, span:0.92, weight:2, beats:[
-    {x:-1,z:-0.2}, {x:-0.6,z:0.85}, {x:-0.2,z:-0.2}, {x:0.15,z:0.55},
-    {x:0.5,z:-0.2}, {x:1,z:-0.2} ] },
-
-  // the long one: seven beats weaving the full width. A weave rarely takes a
-  // decoy — placeHazards needs a line to sit off of and this crosses its own
-  { id:'serpent', min:12, span:1.0, weight:2, beats:[
-    {x:-1,z:0.2}, {x:-0.62,z:-0.7}, {x:-0.25,z:0.55}, {x:0.1,z:-0.75},
-    {x:0.42,z:0.6}, {x:0.72,z:-0.5}, {x:1,z:0.35} ] },
-];
+/* The shape deck lives in js/shapes.js — FMT_SHAPES. It is data, and it is
+   what the route editor (`node tools/routes.js`) reads and writes. */
 
 /* A landing route drawn on the ground the moment the formation is emitted.
    This is the lead indicator that matters: the per-item rings only tell you
@@ -155,7 +41,6 @@ function resetFormations(){
   fmt.strayTimer = 2.5;
   for (const rec of fmt.live.values()) disposePath(rec);
   fmt.live.clear();
-  disposeFeastPath();
 }
 
 function disposePath(rec){
@@ -274,7 +159,16 @@ function stepTime(d, speed, reach, dash){
   return Math.max(0.3, t / reach);
 }
 
+/* ?shape=<id> pins the director to that one shape, ignoring its unlock level.
+   This is how the route editor's TEST button opens the game — a shape you have
+   just drawn is a shape you want to walk immediately, not one you want to wait
+   twelve levels and a dice roll for. Resolved once at load, and an id nobody
+   drew is ignored, so a typo plays a normal game rather than no game. */
+const FMT_ONLY = FMT_SHAPES.find(s =>
+  s.id === new URLSearchParams(location.search).get('shape')) || null;
+
 function pickShape(){
+  if (FMT_ONLY) return FMT_ONLY;
   const pool = [];
   for (const s of FMT_SHAPES){
     if (game.level < s.min) continue;
@@ -296,8 +190,9 @@ function pickShape(){
    were already proven walkable, rather than out of new demands inside one.
 
    Capped at 18 food beats: past there the ribbon has more dots than the arena
-   can separate, which is the same reason a feast draws no dots at all. The
-   jitter is what makes late routes vary rather than all arriving at the cap. */
+   can separate — which is the same crowding that took the ribbon off a feast
+   altogether. The jitter is what makes late routes vary rather than all
+   arriving at the cap. */
 const FOOD_CAP = 18, ROUTE_SEGS = 5, ROUTE_TRIES = 14;
 
 /* Length is a DISTRIBUTION, not a curve. Scaling one length up with the level
@@ -647,8 +542,9 @@ function updateFormations(dt){
    happen, and the ones that fell out of reach were nobody's fault.
 
    Now it is one long continuous path, chosen from five, with every melon on
-   it. Same reward, but you run it: the ribbon shows the whole line the moment
-   the banner lands, and following it is the entire ask.
+   it. Same reward, but you run it: the melons arrive in order along the curve,
+   each with its own landing ring, and following the trail is the entire ask.
+   Nothing is drawn on the ground for it — see the end of startFeastRoute.
 
    These are parametric rather than hand-placed beats — a feast route is
    sixteen-plus points long, and a curve you can read as one expression is much
@@ -673,16 +569,13 @@ const FEAST_ROUTES = [
                                    z: Math.sin(u * Math.PI * 3.4) * (1 - u * 0.8) * 0.92 }) },
 ];
 
-const feast = { path:null, route:null };
-
-/* Queue a whole feast onto evt.queue and draw its ribbon. Returns the seconds
-   of melons queued; events.js adds the tail for the last one to land.
+/* Queue a whole feast onto evt.queue. Returns the seconds of melons queued;
+   events.js adds the tail for the last one to land.
    `forceId` exists for the autopilot sweep in tools/shoot.js, which has to walk
    each route in turn rather than whichever one the dice picked. */
 function startFeastRoute(queue, forceId){
   const route = FEAST_ROUTES.find(r => r.id === forceId)
              || FEAST_ROUTES[(Math.random() * FEAST_ROUTES.length) | 0];
-  feast.route = route.id;
 
   const spanX = ARENA.halfX * 0.92, spanZ = ARENA.halfZ * 0.66;
   const flipZ = Math.random() < 0.5 ? 1 : -1;
@@ -714,19 +607,15 @@ function startFeastRoute(queue, forceId){
       spawnItem('watermelon', { targeted:false, straight:true, x:p.x, z:p.z }) });
   }
 
-  /* Brighter and more saturated than a formation's ribbon: this one is a
-     twenty-melon trail rather than five landing spots, it is the only thing on
-     the ground for the length of the set-piece, and at the formation ribbon's
-     0.42 the pale melon pink washed out to grey against grass. */
-  disposeFeastPath();
-  feast.path = buildPath(pts, 0xff5d73, 0.6);
+  /* NO RIBBON. A feast used to draw one, and it was the one place the sliding
+     window was wrong for the job: revealPath only ever shows LINE_AHEAD steps
+     of line, which on a five-beat formation is the whole route and on a
+     twenty-melon feast is the first third — so the trail visibly stopped
+     partway across the arena and never slid, because nothing here resolves
+     formation beats. It also never needed one. A feast is a dense continuous
+     line of melons falling in order; the items' own landing rings already draw
+     it, several beats ahead, and they are the indicator that keeps up.
+     Drawing the path is what is gone, not the routing: the melons still land
+     on the curve, in order, at slack-priced steps. */
   return t;
-}
-
-function disposeFeastPath(){
-  if (!feast.path) return;
-  scene.remove(feast.path);
-  feast.path.children.forEach(m => m.material.dispose());
-  feast.path = null;
-  feast.route = null;
 }
