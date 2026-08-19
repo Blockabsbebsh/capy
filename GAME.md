@@ -46,12 +46,12 @@ timer. That is the main skill expression.
 **Both pointers steer the same way: you name a place, not a speed.** The
 capybara moves faster the further it has to go and slows as it arrives, so
 parking on a landing ring is not a matter of letting go at the right instant.
-On a phone it stands a little *above* your fingertip, keeping your thumb off
-the ground you are reading, and the whole arena sits inside one comfortable
-thumb sweep well in from the screen edges — you should never have to stretch or
-lift your thumb. The arena is twice as wide as it is deep, so the sideways
-mapping is the one that gives; depth stays near 1:1, where it is needed. The
-keys are the one input that says a direction instead.
+On a phone it stands a little *above* your fingertip, keeping your finger off
+the ground you are reading, and the mapping is close to 1:1 — move a centimetre
+and the capybara moves a centimetre, so it goes where you point rather than
+somewhere amplified. That means using most of the screen, which suits an index
+finger better than a one-handed thumb. The keys are the one input that says a
+direction instead.
 
 Movement is a **velocity-target** model: input says what velocity you want and
 the capybara eases toward it. It stops quickly and does not coast.

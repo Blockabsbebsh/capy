@@ -602,7 +602,7 @@ const fail = [];
        CLAUDE.md's known-unfixed list is dead and should be deleted; well above
        it and the cause is named without anyone having touched the control law. */
     /* Judged on the ANGLE, not on the ratio: the ratio can fall below 1 as
-       easily as rise above it (?iso=1 lands at 0.74 in landscape), and a
+       easily as rise above it (landscape lands at 0.74), and a
        threshold like `k < 1.15` reads that as the axes agreeing when it is a
        third of a divergence the other way. The angle is signless and is the
        thing the player actually feels. */
@@ -610,8 +610,8 @@ const fail = [];
     console.log(`  --   worst anisotropy ${worst.k}x (${worst.skew}\u00b0) at ` +
                 `${worst.w}x${worst.h}: ` + (worst.skew < 5
       ? 'the axes agree — diagonal skew is NOT the finicky feel'
-      : 'diagonal skew is real and this is where it lives. ?iso=1 drops the ' +
-        'strain floor, which is the only thing pulling the two apart'));
+      : 'diagonal skew is real and this is where it lives. The strain floor ' +
+        'is the only thing that pulls the two apart — see ?strain=1'));
     await tp.setViewportSize({ width: 390, height: 844 });
     /* Asserted on the ITEM rate, not the clear rate. A route clear is all-or-
        nothing, so its rate falls off as p^n with route length — at 80% an item
