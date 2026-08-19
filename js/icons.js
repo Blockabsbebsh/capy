@@ -42,6 +42,8 @@ const ICON_SRC = {
   phantom:    'phantom.png',      // Phantombara — the afterimage capybara
   sticky:     'sticky.png',       // Sticky Feet — a paw stuck in the goo
   puzzler:    'puzzler.png',      // Puzzler — one piece
+  /* not a perk: the banner art for a hat unlock */
+  hat:        'hat.png',          // a capybara wearing one
   /* the three falling power-ups */
   magnet:     'magnet.png',
   shield:     'shield.png',      // the blue heart crest

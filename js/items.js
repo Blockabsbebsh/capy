@@ -150,7 +150,7 @@ function onCatch(it){
     if (game.combo > 0) game.comboTime = game.comboMax;
     if (gainLife(false)){
       popup(p, '+1 ♥', '#ff8fae');
-      showBanner('💖 EXTRA LIFE', '#ff8fae');
+      showBanner('EXTRA LIFE', '#ff8fae', 'life');
     } else {
       game.score += 250;
       popup(p, '+250', '#ff8fae');
@@ -446,7 +446,7 @@ function updateItems(dt){
       if (canHit){
         const dx = m.position.x - capPos.x;
         const dz = m.position.z - capPos.z;
-        const reach = catchReach() + it.def.radius + (capyState.dashT > 0 ? DASH_REACH : 0);
+        const reach = catchReach(it.def.good) + it.def.radius + (capyState.dashT > 0 ? DASH_REACH : 0);
         if (dx*dx + dz*dz < reach*reach){
           onCatch(it);
           continue;

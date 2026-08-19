@@ -146,7 +146,7 @@ const POWERS = {
    Descriptions are sentences: capital letter, no full stop. */
 const UPGRADES = [
   { id:'reach',  icon:'reach', name:'Long Snout',
-    desc:'+0.22 catch radius, shown as an aura', max:4,
+    desc:'+0.22 reach for food, shown as an aura', max:4,
     apply:u => u.reach += 0.22 },
   { id:'dash',   icon:'dash', name:'Quick Paws',
     desc:'Dash cools 25% faster, and lands a food-catching shockwave', max:3,

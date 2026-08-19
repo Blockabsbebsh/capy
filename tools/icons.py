@@ -63,6 +63,11 @@ SIZE, MARGIN, COLORS = 192, 0.05, 32
 ART = {
     'chain': {'holes': True},           # the gaps inside the two links
     'reach': {'frame': True, 'shadow': 60},  # a ring, an outer glow and a sealed-in shadow
+    # The white cross is a big block of near-white that eats palette entries the
+    # glint needed, so at 32 colours the highlight merged into the base red and
+    # this heart alone lost it. Its twin (`hearts`) keeps it because a green
+    # clover leaves the reds more of the palette to share.
+    'life':  {'colors': 48},
 }
 
 
@@ -180,9 +185,11 @@ def main():
             continue
         icon = name[:-4]
         rgb = np.asarray(Image.open(os.path.join(SRC, name)).convert('RGB'))
-        keep = cut(rgb, **ART.get(icon, {}))
+        art = dict(ART.get(icon, {}))
+        colors = art.pop('colors', COLORS)
+        keep = cut(rgb, **art)
         # FASTOCTREE is the one PIL quantiser that carries alpha through
-        im = fit(rgb, keep).quantize(colors=COLORS, method=Image.FASTOCTREE)
+        im = fit(rgb, keep).quantize(colors=colors, method=Image.FASTOCTREE)
         buf = io.BytesIO()
         im.save(buf, 'PNG', optimize=True)
         blob = buf.getvalue()
