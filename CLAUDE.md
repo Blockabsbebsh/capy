@@ -38,6 +38,8 @@ only grows, and every line of restated code comment dilutes the ones that bite.
 `assets/capybara.glb`, `assets/icons/src/` — art, the source of truth.
 `assets/icons/*.png`, `js/capymodel.js` — GENERATED. Do not hand-edit.
 `tools/icons.py`, `tools/glb2json.mjs` — the offline converters.
+`tools/routes.js` + `tools/routeeditor.*` — the route editor, which reads and
+writes `js/shapes.js`.
 `supabase/` — the score board schema, applied by Supabase and not by the game.
 
 Load order, which is also roughly the dependency order:
@@ -60,7 +62,8 @@ Load order, which is also roughly the dependency order:
 | `sinkholes.js` | Hole telegraph/open/close, `holeAt` |
 | `stack.js` | Hat mounting, the head food-stack, debris |
 | `state.js` | The `game` object, difficulty curve, hat unlocks, combo |
-| `formations.js` | The spawn director: shapes, the route ribbon, route-clear scoring |
+| `shapes.js` | `FMT_SHAPES` — the shape deck, as data. Edited by `tools/routes.js` |
+| `formations.js` | The spawn director: routes, the route ribbon, route-clear scoring |
 | `powers.js` | Shield bubble, `shieldUp`/`absorbHit`, Auto-Shield, power activation |
 | `hud.js` | `$`, `ui`, HUD rendering, the perk rail, `popup`, `showBanner`, `flash` |
 | `scores.js` | The high score board: `SCORE_API` transport, tag prompt, board panel |
@@ -91,6 +94,9 @@ node tools/shoot.js --biome hell,night       # screenshot biomes
 node tools/shoot.js --capy                   # capybara turnaround
 node tools/shoot.js --play                   # menu + gameplay + hat fit
 python3 tools/icons.py --check               # every icon PNG still matches its art
+node tools/routes.js --check                 # the shape deck parses and is valid
+node tools/routes.js --rewrite               # round-trip proof: `git diff` must be empty
+node tools/routes.js                         # the route editor, on :8766
 ```
 
 - **`--fmt` is the clearability proof.** Run it after touching a shape,
@@ -145,6 +151,39 @@ Operations, RLS proof and moderation SQL are in `supabase/README.md`.
   written by other players. `submit_score`'s regex and `esc()` are two locks and
   both should stay.
 
+## The route editor
+
+`node tools/routes.js` serves the editor and the game on one origin and writes
+`js/shapes.js` in place. Read the header of that file before changing it.
+
+- **`js/shapes.js` is the only copy of the deck, and the editor writes it
+  directly.** There is no export step and no second store to sync — git is the
+  undo, which is the whole reason the tool is allowed to write source.
+- **The writer owns the array body and nothing else.** Everything above
+  `const FMT_SHAPES = [` and below the closing `];` is preserved byte for byte,
+  and a `//` block directly above a shape — no blank line — is that shape's
+  note. Anything else inside the array is lost on the next save, so the file is
+  written in exactly one style. `--rewrite` plus an empty `git diff` is the
+  proof, and it is worth running after touching the writer.
+- **The editor page runs the GAME's arithmetic, never a copy of it.** It loads
+  `config.js`, `shapes.js` and `formations.js`, so `stepTime`, `fmtReach`,
+  `routeNoise`, `crosses` and `beside` are the director's own. A checker that
+  drifts from the game is worse than none, because it is believed.
+- **It cannot prove a shape is walkable and does not claim to.** Gaps come out
+  of `stepTime`, so a shape is clearable by construction; whether a PERSON can
+  read and walk it is what `node tools/shoot.js --fmt` answers. Run it before
+  keeping a new shape.
+- **A warning is a reading, not a rule.** Shipped shapes carry them — `funnel`
+  is the noisiest thing in the deck and trips the z-lane check — because a
+  sharp angle is sometimes the good part. Only the structural errors block a
+  save, and those are the ones the director has no error path for.
+- **`?shape=<id>` pins the director to one shape** and ignores its unlock
+  level, which is what the editor's TEST button opens. An unknown id plays a
+  normal game rather than no game.
+- **The deck's SIZE is not asserted any more.** `--check` asserts every shape in
+  it is emittable — unique lowercase id, two or more beats, all inside the
+  -1..1 footprint — because adding a shape is the point of the tool.
+
 ## UI rules
 
 - **Full-height overlays are sized in `svh`, never `vh`.** On iOS Safari `vh`
@@ -166,6 +205,13 @@ Operations, RLS proof and moderation SQL are in `supabase/README.md`.
 - **`--icons` parks the pointer at 1,1 first.** Clicking START leaves the mouse
   where the button was, a draft card opens under it and screenshots in
   `:hover` — reported as a bug in the perk tiers twice over.
+- **Running timers live in the top-right stack, not across the middle.** The
+  combo bar and the power-up bar are glances; centred above the dash button
+  they were drawn over the arena on a phone and over the ribbon on a desktop —
+  the two things that change every frame, on top of the thing you have to read.
+  Anything else with a countdown belongs in `#statusStack` with them, and it
+  has to stay last in that column: an idle timer is still laid out, because a
+  fade cannot use `display:none`.
 - **`showBanner` and `popup` take an icon id**, which is how the last emoji
   left the interface. Both write `innerHTML` when given one, and every caller
   passes a literal — player-written text would have to be escaped first.
@@ -277,6 +323,11 @@ Operations, RLS proof and moderation SQL are in `supabase/README.md`.
   there are and a line is what turns into spaghetti. Never draw one without the
   other around it: a dot past the line window is a "dot in the middle of
   nowhere", which is exactly what a fixed window shipped.
+- **A feast draws no ribbon, and that is deliberate.** `revealPath` only shows
+  `LINE_AHEAD` steps of line and slides on resolved formation beats — a feast
+  resolves none, so its twenty-melon trail stopped a third of the way across
+  and stayed there. The melons arrive in order with their own landing rings,
+  which is a trail that keeps up; the routing is untouched.
 - **Only one route is live at a time** (`fmt.live.size`). Two overlapping routes
   are unreadable, not twice the challenge — and a record that never resolves
   would wedge the director and stop food entirely, hence `rec.age`.
