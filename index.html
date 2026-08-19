@@ -267,7 +267,11 @@
     font-size:clamp(18px,4.6vw,32px); font-weight:bold; letter-spacing:2px; opacity:0;
     text-shadow:0 3px 0 rgba(0,0,0,.55), 0 0 26px currentColor;
     white-space:nowrap;
+    display:flex; align-items:center; justify-content:center; gap:10px;
   }
+  /* the banner art rides the cap height of its line rather than a fixed px, so
+     it tracks the clamp() above instead of shrinking away on a phone */
+  #banner .ico{width:1.15em; height:1.15em; flex:0 0 auto;}
   #banner.show{animation:bannerIn 2.6s cubic-bezier(.2,.8,.3,1) forwards;}
   @keyframes bannerIn{
     0%{opacity:0; transform:scale(.6) translateY(14px);}
@@ -304,7 +308,9 @@
     text-shadow:0 2px 0 rgba(0,0,0,.45), 0 0 14px rgba(0,0,0,.4);
     transform:translate(-50%,-50%); animation:pop 0.95s cubic-bezier(.2,.7,.3,1) forwards;
     white-space:nowrap;
+    display:flex; align-items:center; gap:5px;
   }
+  .popup .ico{width:1.05em; height:1.05em; flex:0 0 auto;}
   @keyframes pop{
     0%{opacity:0; transform:translate(-50%,-50%) scale(.5);}
     18%{opacity:1; transform:translate(-50%,-62%) scale(1.15);}

@@ -171,7 +171,7 @@ function ghostItemTest(it){
   const p = it.mesh.position;
   for (const g of [...ghosts]){
     const dx = p.x - g.obj.position.x, dz = p.z - g.obj.position.z;
-    const reach = catchReach() + it.def.radius;
+    const reach = catchReach(it.def.good) + it.def.radius;
     if (dx*dx + dz*dz > reach*reach) continue;
 
     /* Hearts and power-ups go through the ordinary onCatch: the whole point of
@@ -209,7 +209,7 @@ function ghostCatch(it){
   const gained = Math.round(it.def.points * multiplier() *
                             (it.type === 'watermelon' ? game.up.melon : 1));
   game.score += gained;
-  popup(p, '+' + gained + ' 👻', '#cdeeff');
+  popup(p, '+' + gained, '#cdeeff', 'phantom');
   burst(p, 14, it.type === 'watermelon' ? PAL.watermelon : PAL.burger,
         { spread: 4.0, up: 4.0, size: 0.11, life: 0.7 });
   Audio.chew();
@@ -258,7 +258,7 @@ function chainMul(){
 function chainCleared(){
   if (!game.up.chain) return;
   game.chain++;
-  showBanner('✨ GOLDEN ROUTE ×' + (game.chain + 1), '#ffe14d');
+  showBanner('GOLDEN ROUTE ×' + (game.chain + 1), '#ffe14d', 'chain');
 }
 function chainBroken(){
   if (!game.up.chain || game.chain === 0) return;
@@ -280,13 +280,13 @@ function puzzlerReward(cleared, blocked, failed){
   if (!cleared && !failed) return;      // nothing was actually dropped
   if (cleared){
     if (gainLife(true)){
-      popup(new THREE.Vector3(capyState.x, 2.6, capyState.z), '🧩 +1 ♥', '#ff8fae');
+      popup(new THREE.Vector3(capyState.x, 2.6, capyState.z), '+1 ♥', '#ff8fae', 'puzzler');
       Audio.heart();
     }
   } else if (blocked){
-    popup(new THREE.Vector3(capyState.x, 2.6, capyState.z), '🧩 SINKHOLE — NO PENALTY', '#ffcf5a');
+    popup(new THREE.Vector3(capyState.x, 2.6, capyState.z), 'SINKHOLE — NO PENALTY', '#ffcf5a', 'puzzler');
   } else {
-    popup(new THREE.Vector3(capyState.x, 2.6, capyState.z), '🧩 ROUTE LOST -1 ♥', '#ff6b5a');
+    popup(new THREE.Vector3(capyState.x, 2.6, capyState.z), 'ROUTE LOST -1 ♥', '#ff6b5a', 'puzzler');
     loseLife('route');
   }
   refreshHUD();

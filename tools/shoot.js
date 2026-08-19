@@ -533,6 +533,7 @@ const fail = [];
        invisible until you check the corners at a real phone size. */
     const REACH_MIN = 20;                       // px of screen a corner must spare
     const AIM_MIN = 10;                         // px of thumb per catch radius
+    const skews = [];
     for (const [w, h] of [[390, 844], [360, 640], [320, 568], [844, 390], [768, 1024]]) {
       await tp.setViewportSize({ width: w, height: h });
       await tp.waitForTimeout(350);
@@ -579,10 +580,52 @@ const fail = [];
       okT(`${w}x${h}: still aimable by thumb`, r.aimX >= AIM_MIN && r.aimZ >= AIM_MIN,
           `reach ${r.rx}/${r.rz}, lift ${r.lift}, thumb box ${r.boxW}x${r.boxH}px, ` +
           `catch radius ${r.aimX}x${r.aimZ}px of thumb`);
+      /* THE ANISOTROPY, reported rather than asserted, because today's value is
+         a known state and not a regression. The two scales are computed
+         independently — each the max of three constraints — so nothing forces
+         them to match, and when they diverge a diagonal drag lands at a
+         different angle than it was aimed at. Straight lines still look right,
+         which is why nothing ever appeared broken. The worst-case error over
+         all drag angles for a diagonal scaling by (rx, rz) is
+         |atan(sqrt(rz/rx)) - atan(sqrt(rx/rz))|, peaking near 54 degrees of
+         thumb angle — and most shapes here are diagonal traversals. */
+      const k = r.rx / r.rz;
+      const skew = Math.abs(Math.atan(Math.sqrt(1 / k)) - Math.atan(Math.sqrt(k)))
+                 * 180 / Math.PI;
+      skews.push({ w, h, k: +k.toFixed(2), skew: +skew.toFixed(1) });
+      console.log(`       anisotropy ${k.toFixed(2)}x -> up to ${skew.toFixed(1)}` +
+                  `\u00b0 between the angle aimed and the angle walked`);
     }
+    /* Reported, not asserted. This is a known state rather than a regression,
+       and a check that fails on every run is a check people learn to scroll
+       past. The verdict line is the whole point: near 1.0 and the hypothesis in
+       CLAUDE.md's known-unfixed list is dead and should be deleted; well above
+       it and the cause is named without anyone having touched the control law. */
+    /* Judged on the ANGLE, not on the ratio: the ratio can fall below 1 as
+       easily as rise above it (?iso=1 lands at 0.74 in landscape), and a
+       threshold like `k < 1.15` reads that as the axes agreeing when it is a
+       third of a divergence the other way. The angle is signless and is the
+       thing the player actually feels. */
+    const worst = skews.reduce((a, b) => b.skew > a.skew ? b : a);
+    console.log(`  --   worst anisotropy ${worst.k}x (${worst.skew}\u00b0) at ` +
+                `${worst.w}x${worst.h}: ` + (worst.skew < 5
+      ? 'the axes agree — diagonal skew is NOT the finicky feel'
+      : 'diagonal skew is real and this is where it lives. ?iso=1 drops the ' +
+        'strain floor, which is the only thing pulling the two apart'));
     await tp.setViewportSize({ width: 390, height: 844 });
-    okT('a thumb can still clear routes at all',
-        pct(at('pointing', 0.15)) > 30, `${pct(at('pointing', 0.15)).toFixed(0)}%`);
+    /* Asserted on the ITEM rate, not the clear rate. A route clear is all-or-
+       nothing, so its rate falls off as p^n with route length — at 80% an item
+       that is 33% of a five-beat route and 7% of a twelve-beat one. Once routes
+       started chaining, a threshold on clears was measuring how long a route is
+       at least as much as how well a thumb steers, and would have had to be
+       walked down every time routes grew. The item rate is what "can a thumb
+       play this" actually means, and it does not move with length. The clear
+       rate is still printed above, because it is the interesting number. */
+    const item = r => r.caught / r.goods * 100;
+    okT('a thumb still catches most of what it goes for',
+        item(at('pointing', 0.15)) > 70,
+        `${item(at('pointing', 0.15)).toFixed(0)}% of items, ` +
+        `${pct(at('pointing', 0.15)).toFixed(0)}% of routes cleared end to end`);
     /* The reason the thumbstick was replaced, kept as an assertion: pointing is
        what survives a player who is slow to look up. If this ever inverts, the
        scheme is no longer earning its place. */
@@ -946,6 +989,55 @@ const fail = [];
     ok('showPanel knows about the board panel', board.exclusive);
     ok('only a personal best is offered to the board',
        board.quietOnLoss && board.promptOnBest, JSON.stringify(board));
+
+    /* Route length and hazard density, sampled across the whole level range.
+       Both are player-facing promises — routes grow, and a route never becomes
+       something you mostly dodge — and both are emergent rather than written
+       down anywhere a reader could check: length comes out of chaining shapes
+       and the hazard allowance is derived from it. The clearance assertion is
+       the one that would fail silently: a decoy inside catch range of a beat
+       you have to stand on still looks like a decoy on the ribbon. */
+    const routes = await page.evaluate(() => {
+      game.state = 'playing'; game.devLock = true;
+      const seen = {};
+      let worstRatio = 0, tooClose = 0, shortest = 99, longest = 0;
+      for (const level of [1, 5, 10, 16, 24, 34, 48, 60]){
+        game.level = level;
+        resetUpgrades(); game.run.sticky = false; game.up.speed = 1;
+        applyDifficulty();
+        game.maxLives = game.lives = 3;
+        let food = 0, haz = 0, n = 0;
+        for (let r = 0; r < 60; r++){
+          clearItems(); resetFormations(); resetCapy();
+          fmt.strayTimer = 1e9;
+          emitFormation();
+          const rec = fmt.live.values().next().value;
+          const good = rec.pts.filter(p => !p.bad);
+          const bad  = rec.pts.filter(p => p.bad);
+          // the rule: never more than one hazard per six food items
+          worstRatio = Math.max(worstRatio, bad.length / Math.max(1, good.length / 6));
+          for (const b of bad)
+            for (const g of good)
+              if (Math.hypot(b.x - g.x, b.z - g.z) < 1.9) tooClose++;
+          food += good.length; haz += bad.length; n++;
+          shortest = Math.min(shortest, good.length);
+          longest = Math.max(longest, good.length);
+        }
+        seen[level] = { food: +(food / n).toFixed(1), haz: +(haz / n).toFixed(1) };
+      }
+      resetFormations(); clearItems();
+      return { seen, worstRatio: +worstRatio.toFixed(2), tooClose, shortest, longest };
+    });
+    const curve = Object.entries(routes.seen)
+      .map(([l, v]) => `L${l}:${v.food}+${v.haz}`).join(' ');
+    ok('routes grow from a few beats to a full-length one',
+       routes.seen[1].food <= 6 && routes.seen[60].food >= 15 &&
+       routes.shortest >= 3 && routes.longest <= 18, curve +
+       `  (${routes.shortest}-${routes.longest} beats)`);
+    ok('a route never carries more than one hazard per six food',
+       routes.worstRatio <= 1, `worst ${routes.worstRatio}x the allowance`);
+    ok('every hazard clears every beat the player must stand on',
+       routes.tooClose === 0, `${routes.tooClose} too close`);
 
     /* The icons are files now, so two things can go wrong that could not before:
        a perk can name an icon nobody drew, and a file can fail to arrive. An
