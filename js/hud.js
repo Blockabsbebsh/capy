@@ -148,11 +148,17 @@ function renderPerkRail(){
 
 // floating score popups projected from world space
 const _proj = new THREE.Vector3();
-function popup(worldPos, text, color){
+/* `art` is an icon id, drawn ahead of the text — the emoji these replaced were
+   a platform font's idea of a ghost or a puzzle piece, which is the same reason
+   nothing else in the interface is one. Both of these take innerHTML, and every
+   caller passes a string literal: anything player-written would have to be
+   escaped first, which is what scores.js does for the board. */
+function popup(worldPos, text, color, art){
   _proj.copy(worldPos).project(camera);
   const el = document.createElement('div');
   el.className = 'popup';
-  el.textContent = text;
+  if (art) el.innerHTML = icon(art, 22) + text;
+  else el.textContent = text;
   el.style.color = color;
   el.style.left = ((_proj.x * 0.5 + 0.5) * window.innerWidth) + 'px';
   el.style.top  = ((-_proj.y * 0.5 + 0.5) * window.innerHeight) + 'px';
@@ -178,9 +184,10 @@ function flash(color, strength){
   });
 }
 
-function showBanner(text, color){
+function showBanner(text, color, art){
   const el = ui.banner;
-  el.textContent = text;
+  if (art) el.innerHTML = icon(art, 34) + text;
+  else el.textContent = text;
   el.style.color = color;
   el.classList.remove('show');
   void el.offsetWidth;              // restart the CSS animation

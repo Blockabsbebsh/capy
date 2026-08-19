@@ -7,15 +7,23 @@ and holes. One session, no saves, score attack.
 ## The loop
 
 Food does not fall at random. A **spawn director** emits **formations**: a run
-of 3–7 landing spots forming a shape — nineteen of them unlocking as the level
+of landing spots forming a shape — nineteen of them unlocking as the level
 rises, from sweeps and arcs to weaves, spirals, pincers, out-and-back
 boomerangs and dash-gated leaps. The route between them is drawn on the ground
 as a glowing ribbon the moment the shape appears. You read the whole route,
 plan one movement, and run it.
 
+**Routes get longer as the game goes on.** Early ones are a single shape, about
+five items. Late ones chain several shapes end to end into one continuous walk
+of fifteen to twenty — which is where late difficulty actually comes from, since
+every step inside them is still timed to be walkable. The connecting lines are
+only drawn a few steps ahead; past that you read the dots, which is what they
+were always for.
+
 The ribbon is drawn to be read in order: a **dot on every landing spot**,
-largest and brightest at the first beat and tapering to the last, with hazard
-beats marked red so you can see what to walk around before it is in the air.
+largest and brightest at the next beat and tapering over the few after it, with
+hazard beats marked red so you can see what to walk around before it is in the
+air.
 Segments you have used **leave the ground** as their beats land, so what is
 drawn is always the part still ahead of you.
 
@@ -70,7 +78,11 @@ and it ends early if you hit a wall.
 
 Hazards **home in on you** while falling, capped so they stay dodgeable by
 moving. Inside a formation they are decoys placed off the walking line — missing
-one costs nothing, catching one spoils the route clear.
+one costs nothing, catching one spoils the route clear. Where they sit is
+decided fresh every time, so a shape is never a hand you learn, and a route
+never carries more than **one hazard per six food items**: a route you mostly
+dodge would be a shorter route with walking in between, and the catching is the
+point. Longer routes therefore carry more of them.
 
 Every falling item has a **landing ring** on the ground, visible from the moment
 it spawns and shrinking onto its exact footprint as the item arrives. The ring
@@ -135,7 +147,7 @@ Ordinary perks stack:
 
 | Perk | Effect | Max |
 |---|---|---|
-| Long Snout | +0.22 catch radius, drawn as an aura around you | 4 |
+| Long Snout | +0.22 reach for **food**, drawn as an aura around you. It never widens the circle that catches hazards | 4 |
 | Quick Paws | dash cooldown −25%, and the dash ends in a shockwave that catches food out to 3× your reach (then 4×, 5×) | 3 |
 | Melon Lover | watermelons pay +60% | 3 |
 | Second Wind | +1 max life, and one heart back | 3 |

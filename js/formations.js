@@ -28,9 +28,12 @@
    listed in the order the items ARRIVE — every item falls at the same speed
    from the same height, so emission order is landing order.
 
-   `bad` marks a beat as a hazard: a decoy to route around rather than a
-   thing to catch. Missing one costs nothing, so it is always fair — the
-   cost is only in accidentally eating it, which the red ring telegraphs.
+   Every beat here is FOOD. Hazards used to be written in as `bad` beats, which
+   made them a property of the shape: the same two decoys in the same two
+   places every time gauntlet came up, learnable in a handful of sightings, and
+   the same two whether the route was five beats or twenty. They are placed at
+   emit time now — see placeHazards.
+
    `dash` times that beat's gap against a dash-assisted run instead of a
    walking one, so the step is only comfortable if you use the dash — and is
    still always reachable.  `min` is the level the shape unlocks at. */
@@ -54,10 +57,10 @@ const FMT_SHAPES = [
   { id:'leap', min:5, span:1.0, weight:2, beats:[
     {x:-1,z:0.3}, {x:0.2,z:-0.4,dash:true}, {x:1,z:0.35,dash:true} ] },
 
-  // hazards sit OFF the walking line, in z, so there is always a way past
+  // a run along the near edge with two reaches back into the far half
   { id:'gauntlet', min:6, span:0.95, weight:3, beats:[
-    {x:-1,z:0.35}, {x:-0.45,z:-0.75,bad:true}, {x:-0.1,z:0.35},
-    {x:0.45,z:-0.75,bad:true}, {x:1,z:0.35} ] },
+    {x:-1,z:0.35}, {x:-0.45,z:-0.75}, {x:-0.1,z:0.35},
+    {x:0.45,z:-0.75}, {x:1,z:0.35} ] },
 
   /* Every traversal gets its own z LANE, front to back. The swings used to sit
      at z 0, 0.4, -0.4, 0.35, 0 — four end-to-end lines stacked into the same
@@ -73,7 +76,7 @@ const FMT_SHAPES = [
      correction — measured as losing the fifth beat 12 times out of 12, while
      walking it cleared every run. By 11 it is robust either way. */
   { id:'comb', min:11, span:0.9, weight:2, beats:[
-    {x:-1,z:-0.8}, {x:-0.7,z:0.7}, {x:-0.35,z:-0.8,bad:true}, {x:0,z:0.7},
+    {x:-1,z:-0.8}, {x:-0.7,z:0.7}, {x:-0.35,z:-0.8}, {x:0,z:0.7},
     {x:0.35,z:-0.8}, {x:0.7,z:0.7}, {x:1,z:-0.8} ] },
 
   /* ---- the second wave of shapes ------------------------------------------
@@ -108,10 +111,9 @@ const FMT_SHAPES = [
   { id:'pincer', min:6, span:1.0, weight:2, beats:[
     {x:-1,z:0.9}, {x:1,z:0.45}, {x:-0.55,z:0}, {x:0.5,z:-0.45}, {x:0,z:-0.9} ] },
 
-  // decoys strictly off the line, as ever: the food is a straight run along
-  // the near edge and the hazards hang above it
+  // a near-edge run broken by two lifts into the far half
   { id:'slalom', min:7, span:0.9, weight:3, beats:[
-    {x:-1,z:-0.55}, {x:-0.6,z:0.6,bad:true}, {x:-0.3,z:-0.6}, {x:0.1,z:0.6,bad:true},
+    {x:-1,z:-0.55}, {x:-0.6,z:0.6}, {x:-0.3,z:-0.6}, {x:0.1,z:0.6},
     {x:0.4,z:-0.6}, {x:0.85,z:-0.5} ] },
 
   // a spiral inward — every step turns the same way, which reads very
@@ -131,8 +133,8 @@ const FMT_SHAPES = [
     {x:-1,z:-0.2}, {x:-0.6,z:0.85}, {x:-0.2,z:-0.2}, {x:0.15,z:0.55},
     {x:0.5,z:-0.2}, {x:1,z:-0.2} ] },
 
-  // the long one: seven beats weaving the full width, no decoys — the length
-  // is the challenge and a hazard on a weave has no line to sit off of
+  // the long one: seven beats weaving the full width. A weave rarely takes a
+  // decoy — placeHazards needs a line to sit off of and this crosses its own
   { id:'serpent', min:12, span:1.0, weight:2, beats:[
     {x:-1,z:0.2}, {x:-0.62,z:-0.7}, {x:-0.25,z:0.55}, {x:0.1,z:-0.75},
     {x:0.42,z:0.6}, {x:0.72,z:-0.5}, {x:1,z:0.35} ] },
@@ -174,6 +176,24 @@ function disposePath(rec){
 
    Each segment records the beat it ARRIVES at, so formationItemResolved can
    take spent segments off the ground as the route is used up — see there. */
+/* How many steps ahead the CONNECTING LINES are drawn. The dots are the read —
+   see below — and the lines only say how consecutive beats join up, which is
+   information you need for the next few and not for the eighteenth. Drawn for
+   the whole route they are what this comment already warned about at five
+   beats: in an arena twice as wide as it is deep, a route that crosses it three
+   or four times lays every line over every other and the picture is a tangle.
+   Windowed, a long route draws exactly the same density of line as a short one
+   ever did, and the dots still show the whole thing. */
+const LINE_AHEAD = 6;
+/* The dots taper over the first TAPER beats and then hold at the floor, rather
+   than grading evenly from the first beat to the last. Even grading is right
+   for five beats and wrong for eighteen: spread that thin, no two neighbours
+   differ enough to say which comes first, and the tail ends up too faint to
+   see at all. Front-loaded, the near beats keep the strong size gradient that
+   answers "where do I go next" and everything past it sits at one readable
+   size that still says "and then all of this". */
+const TAPER = 7;
+
 function buildPath(pts, colour, opacity = 0.42, dots = false){
   const g = new THREE.Group();
   const last = Math.max(1, pts.length - 2);
@@ -188,7 +208,7 @@ function buildPath(pts, colour, opacity = 0.42, dots = false){
      Hazard beats are marked red, because "do not stand here" is part of the
      route and waiting for the item's own ring to say so is late. */
   if (dots) for (let i = 0; i < pts.length; i++){
-    const u = pts.length > 1 ? i / (pts.length - 1) : 0;
+    const u = Math.min(1, i / Math.min(TAPER, Math.max(1, pts.length - 1)));
     const dot = new THREE.Mesh(fmtDotGeo, new THREE.MeshBasicMaterial({
       color: pts[i].bad ? 0xff5a4a : colour, transparent:true,
       opacity: (pts[i].bad ? 0.5 : 0.66) * (1 - 0.45 * u), depthWrite:false }));
@@ -203,7 +223,7 @@ function buildPath(pts, colour, opacity = 0.42, dots = false){
     const dx = b.x - a.x, dz = b.z - a.z;
     const len = Math.hypot(dx, dz);
     if (len < 0.05) continue;
-    const u = Math.min(1, (i - 1) / last);          // 0 at the first step, 1 at the last
+    const u = Math.min(1, (i - 1) / Math.min(TAPER, last));   // 0 at the first step
     // wide and bright enough to read on a phone, where the whole arena is a
     // couple of hundred pixels across and a hairline simply disappears
     const seg = new THREE.Mesh(fmtPathGeo, new THREE.MeshBasicMaterial({
@@ -212,6 +232,8 @@ function buildPath(pts, colour, opacity = 0.42, dots = false){
     seg.rotation.y = -Math.atan2(dz, dx);
     seg.scale.set(len, 1, 0.28 - 0.12 * u);
     seg.userData.beat = i;
+    seg.userData.line = true;
+    seg.visible = i <= LINE_AHEAD;
     g.add(seg);
   }
   scene.add(g);
@@ -254,33 +276,151 @@ function pickShape(){
   return pool[(Math.random() * pool.length) | 0];
 }
 
+/* ROUTE LENGTH. One shape used to be the whole route, which stopped scaling
+   long before the difficulty did: three to seven beats is one decision, and by
+   the time a player reads routes fluently that is over before it starts. A
+   route is now several shapes walked back to back, each anchored where the last
+   one ended so the join is an ordinary step that stepTime prices like any
+   other. Nothing about a shape changes — the length grows out of shapes that
+   were already proven walkable, rather than out of new demands inside one.
+
+   Capped at 18 food beats: past there the ribbon has more dots than the arena
+   can separate, which is the same reason a feast draws no dots at all. The
+   jitter is what makes late routes vary rather than all arriving at the cap. */
+const FOOD_CAP = 18, ROUTE_SEGS = 5;
+const routeBeats = () =>
+  Math.min(FOOD_CAP, (4.6 + game.level * 0.42) * (0.82 + Math.random() * 0.36));
+
+/* HAZARDS. Placed here rather than written into the shapes, so a route is not
+   a hand you learn to recognise. Two rules, and the first is the player-facing
+   one: never more than one hazard per six food items. A route you mostly dodge
+   is not a harder route, it is a shorter one with walking in between — and the
+   whole point of a formation is the catching. The second is that a decoy has to
+   sit OFF the walking line, which is what made the old hand-placed ones fair;
+   `beside` enforces it by construction instead of by authoring care.
+
+   Density therefore climbs with LENGTH, which is where late-game difficulty
+   actually comes from: a five-beat route can carry none, an eighteen-beat one
+   carries three. */
+const HAZARD_CLEAR = 1.9;   // > CATCH_R + a hazard's radius: the line stays walkable
+
+/* A decoy needs a line to sit off of. Offset perpendicular to the step, on
+   whichever side has more room, and only where it clears every other beat —
+   a hazard inside catch range of a spot the player has to stand on is not a
+   decoy, it is a tax. Returns null when there is nowhere fair to put one,
+   which is how a weave ends up carrying fewer than a sweep does. */
+function beside(a, b, food){
+  const dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz);
+  if (d < 0.8) return null;                     // too short a step to have a side
+  const nx = -dz / d, nz = dx / d;
+  const mx = (a.x + b.x) / 2, mz = (a.z + b.z) / 2;
+  const order = Math.abs(mz + nz * HAZARD_CLEAR) <= Math.abs(mz - nz * HAZARD_CLEAR)
+              ? [1, -1] : [-1, 1];
+  for (const side of order){
+    const x = mx + nx * HAZARD_CLEAR * side, z = mz + nz * HAZARD_CLEAR * side;
+    if (Math.abs(x) > ARENA.halfX - 0.4 || Math.abs(z) > ARENA.halfZ - 0.4) continue;
+    if (food.some(p => Math.hypot(p.x - x, p.z - z) < HAZARD_CLEAR)) continue;
+    return { x, z, bad: true, dash: false };
+  }
+  return null;
+}
+
+function placeHazards(food, at){
+  const cap = Math.floor(food.length / 6);      // the 1 : 6 rule, and it is a cap
+  if (cap < 1) return [];
+  /* How much of the cap this level spends. Nothing before level 5, the full
+     allowance by 14 — and hazardMul carries overtime and the hearts the player
+     chose to bank, so those reach the top of it sooner rather than past it. */
+  const ramp = Math.min(1, Math.max(0, (game.level - 4) / 10) * hazardMul());
+  const n = Math.round(cap * ramp);
+  if (n < 1) return [];
+
+  /* Spread over the route rather than clustered: one per evenly spaced bucket
+     of steps, picked at random inside its bucket so the placement is not a
+     pattern of its own. */
+  const out = [];
+  for (let b = 0; b < n; b++){
+    const lo = 1 + Math.floor((food.length - 1) * b / n);
+    const hi = Math.max(lo, Math.floor((food.length - 1) * (b + 1) / n) - 1);
+    for (let tries = 0; tries < 4; tries++){
+      const i = lo + ((Math.random() * (hi - lo + 1)) | 0);
+      const h = beside(food[i - 1], food[i], food);
+      /* Halfway between its neighbours in TIME, not an extra beat in the
+         sequence: a decoy the route had to wait for would hand the player more
+         time than the shape was priced at, so dodging one would make the food
+         easier rather than harder. Mid-step is also exactly where the player is
+         when it lands, which is the whole idea. */
+      if (h){ h.at = (at[i - 1] + at[i]) / 2; out.push(h); break; }
+    }
+  }
+  return out;
+}
+
 function emitFormation(){
-  const shape = pickShape();
-  const flipX = Math.random() < 0.5, flipZ = Math.random() < 0.5;
   const reach = fmtReach(), speed = fmtSpeed();
-
-  // footprint, then an anchor that keeps the whole thing inside the arena
-  const spanX = ARENA.halfX * shape.span;
   const spanZ = ARENA.halfZ * 0.62;
-  const slackX = Math.max(0, ARENA.halfX - 0.6 - spanX);
-  /* Anchor so the OPENING beat lands near wherever the capybara already is.
-     Every gap inside a formation is sized to be walkable, but the step INTO
-     one was not: a shape anchored at random could open on the far side of
-     the arena from a player who had just finished the last one, which is a
-     dropped first item through no fault of theirs. Some jitter is kept so
-     formations do not all start underfoot. */
-  const firstX = (flipX ? -shape.beats[0].x : shape.beats[0].x) * spanX;
-  const ax = THREE.MathUtils.clamp(
-    capyState.x - firstX + (Math.random() * 2 - 1) * slackX * 0.4, -slackX, slackX);
 
-  const pts = shape.beats.map(b => ({
-    x: THREE.MathUtils.clamp(ax + (flipX ? -b.x : b.x) * spanX, -ARENA.halfX, ARENA.halfX),
-    z: THREE.MathUtils.clamp((flipZ ? -b.z : b.z) * spanZ, -ARENA.halfZ, ARENA.halfZ),
-    bad: !!b.bad, dash: !!b.dash,
-  }));
+  // chain shapes until the route is as long as this level asks for
+  const segs = [];
+  const want = routeBeats();
+  let n = 0;
+  while (segs.length < ROUTE_SEGS){
+    const shape = pickShape();
+    const len = shape.beats.length;
+    // nearest fit, not first-past-the-post: stopping short of `want` is better
+    // than overshooting it by most of another shape, and taking whichever is
+    // closer is what keeps a level-1 route to about five beats however the
+    // three- and seven-beat shapes happen to come up
+    if (n && (n + len > FOOD_CAP || Math.abs(n + len - want) >= Math.abs(n - want))) break;
+    segs.push(shape); n += len;
+  }
+
+  const food = [];
+  let fromX = capyState.x;
+  for (let si = 0; si < segs.length; si++){
+    const shape = segs[si];
+    const flipX = Math.random() < 0.5, flipZ = Math.random() < 0.5;
+    const spanX = ARENA.halfX * shape.span;
+    const slackX = Math.max(0, ARENA.halfX - 0.6 - spanX);
+    /* Anchor so the OPENING beat lands near wherever the walk already is — the
+       capybara for the first shape, the previous shape's last beat after that.
+       Every gap inside a shape is sized to be walkable, but the step INTO one
+       was not: anchored at random it could open on the far side of the arena
+       from a player who had just finished the last one, which is a dropped item
+       through no fault of theirs. The jitter is first-shape only, so
+       continuations stay continuations. */
+    const firstX = (flipX ? -shape.beats[0].x : shape.beats[0].x) * spanX;
+    const jitter = si === 0 ? (Math.random() * 2 - 1) * slackX * 0.4 : 0;
+    const ax = THREE.MathUtils.clamp(fromX - firstX + jitter, -slackX, slackX);
+    for (const b of shape.beats){
+      food.push({
+        x: THREE.MathUtils.clamp(ax + (flipX ? -b.x : b.x) * spanX, -ARENA.halfX, ARENA.halfX),
+        z: THREE.MathUtils.clamp((flipZ ? -b.z : b.z) * spanZ, -ARENA.halfZ, ARENA.halfZ),
+        bad: false, dash: !!b.dash,
+      });
+    }
+    fromX = food[food.length - 1].x;
+  }
+
+  /* The timeline is over the FOOD only. Each gap gets exactly the time needed
+     to walk it, floored so a tight shape cannot machine-gun. A `dash` beat is
+     timed against a dash-assisted run, which is SHORTER than the walk — so it
+     has to fall back to walking time for a player who has no dash. Sticky Feet
+     trades the dash away, and without this the leap and hook shapes would be
+     the one thing that perk makes literally unclearable rather than slower. */
+  const at = [0];
+  for (let i = 1; i < food.length; i++){
+    const p = food[i], q = food[i - 1];
+    at.push(at[i - 1] + stepTime(Math.hypot(p.x - q.x, p.z - q.z), speed, reach,
+                                 p.dash && !game.run.sticky));
+  }
+
+  const pts = food.map((p, i) => Object.assign({ at: at[i] }, p));
+  for (const h of placeHazards(food, at)) pts.push(h);
+  pts.sort((a, b) => a.at - b.at);
 
   const fid = ++fmt.nextId;
-  const goods = pts.filter(p => !p.bad).length;
+  const goods = food.length;
   /* `pts` is kept on the record because the ribbon is public information: it is
      what the player reads to plan the whole route. The autopilot sweep in
      tools/shoot.js reads it for the same reason — an autopilot that waits for
@@ -291,33 +431,19 @@ function emitFormation(){
      so the ribbon, the items and the payout cannot disagree. */
   const gold = chainMul();
   const rec = { fid, total: pts.length, pending: pts.length, goods, caught: 0,
-                spoiled: false, blocked: false, gold, name: shape.id, pts,
-                // dots on a formation, not on a feast: five landing spots are
-                // information, twenty are wallpaper over the trail itself
+                spoiled: false, blocked: false, gold,
+                name: segs.map(s => s.id).join('+'), pts,
                 path: buildPath(pts, gold > 1 ? 0xffe14d : 0xffd77a,
                                 gold > 1 ? 0.75 : 0.55, true) };
   fmt.live.set(fid, rec);
 
-  // Each gap gets exactly the time needed to walk it, floored so a tight
-  // shape cannot machine-gun. `rush` cuts below that on purpose.
-  let t = 0;
-  for (let i = 0; i < pts.length; i++){
-    const p = pts[i];
-    if (i > 0){
-      const q = pts[i-1];
-      /* A `dash` beat is timed against a dash-assisted run, which is SHORTER
-         than the walk — so it has to fall back to walking time for a player who
-         has no dash. Sticky Feet trades the dash away, and without this the
-         leap and hook shapes would be the one thing in the game that perk makes
-         literally unclearable rather than merely slower. */
-      t += stepTime(Math.hypot(p.x - q.x, p.z - q.z), speed, reach,
-                    p.dash && !game.run.sticky);
-    }
+  for (const p of pts){
     const type = p.bad ? (Math.random() < 0.55 ? 'chili' : 'soap')
                        : (Math.random() < 0.24 ? 'watermelon' : 'burger');
-    fmt.queue.push({ at: fmt.clock + t, fn: () =>
+    fmt.queue.push({ at: fmt.clock + p.at, fn: () =>
       spawnItem(type, { targeted:false, x:p.x, z:p.z, fid, gold }) });
   }
+  const t = pts[pts.length - 1].at;
   /* Deadline for the safety valve in updateFormations, measured rather than
      assumed: the last beat is emitted at `t` and then still has to fall, and
      Puzzler halves that fall speed. A flat 14s would have quietly binned long
@@ -354,7 +480,9 @@ function formationItemResolved(it, caught){
      had already done as well as the part you had not. */
   const done = rec.total - rec.pending;
   if (rec.path){
-    for (const seg of rec.path.children) seg.visible = seg.userData.beat >= done;
+    for (const seg of rec.path.children)
+      seg.visible = seg.userData.beat >= done &&
+                    (!seg.userData.line || seg.userData.beat <= done + LINE_AHEAD);
   }
   if (rec.pending <= 0) completeFormation(rec);
 }
