@@ -189,6 +189,30 @@ Operations, RLS proof and moderation SQL are in `supabase/README.md`.
 - **A steering scheme needs evidence, and `--touch` is where it goes.** Three
   have been removed for lack of it. `updateCapybara` and `tryDash` know nothing
   about input devices; keep it that way.
+- **The touch map is near 1:1, and the thumb-strain floor is OFF** (`?strain=1`
+  puts it back). It was the only thing scaling the two axes differently, and it
+  charged twice for the reach it bought: a diagonal walked up to **18.1° off the
+  line it was aimed at**, and — the part a player actually feels — every pixel
+  of finger travel moved the capybara nearly **twice as far sideways as the
+  ground under the finger**, so a small correction was a big one. Play-tested as
+  "small movements could easily over adjust" against "it just goes where you
+  point". `--touch` reports the anisotropy per viewport; it cannot price the
+  floor's *benefit*, since it models slide speed, noise and latency and has no
+  notion of stretch, which is why a phone had to settle it.
+- **What that costs is reach, and it is a real trade.** The thumb box grows from
+  185px wide to about 320px on a 390px screen. An index finger on the free hand
+  — play-tested as the better grip — does not care; a one-handed thumb might.
+  `--touch` still asserts every corner is reachable and aimable, which is the
+  floor under the trade.
+- **The skew is not zero everywhere, and the rest of it is not optional.** A
+  modern portrait phone lands at 1.13x (3.5°), which is the common case and the
+  one that was 18.1°. Small screens and landscape come out INVERTED and smaller
+  — 0.81x and 0.74x, 6-9° — because `touchReachZ` is held up by the depth reach
+  constraint (fitting the arena between the HUD and the DASH button) rather than
+  by strain. That floor cannot be dropped without losing a corner, so do not
+  chase the last few degrees there: judge on the ANGLE `--touch` prints, never
+  on the ratio, which passes through 1.0 and reads as agreement in both
+  directions.
 - **`game.up.speed` is the only thing that scales movement.** Sticky Feet halves
   it and `fmtSpeed` reads the same field, which is what keeps routes walkable at
   half speed. Anything else that changes speed times formations against a speed
@@ -306,21 +330,6 @@ asserts the rig contract for exactly that reason.
 - `updateThemeFX` advances the hell lava bubbles at a hardcoded `1/60` rather
   than the frame delta, so they animate at different speeds on different refresh
   rates. Not worth fixing. Not a bug to "discover" again.
-- **Touch steering is good, not perfect** — it reads as slightly finicky, and
-  the anisotropy is now the named cause rather than a suspect. `--touch` reports
-  it per viewport: the two reach scales are computed independently and land at
-  **1.90x on a 390x844 portrait, worth up to 18.1 degrees** between the angle
-  aimed and the angle walked, which is invisible on a straight line and is most
-  of what the shapes here ask for. The strain floor is its only source.
-- **`?iso=1` drops that floor — it is the A/B, and the harness cannot settle
-  it.** `--touch` models slide speed, placement noise and look latency, and has
-  no notion of stretch, which is precisely what the floor buys off. So it prices
-  the floor's cost and none of its benefit: iso comes out at 1.13x / 3.5°, the
-  same item rate, and 20% of routes cleared against 16%, for a thumb box that
-  grows 185px wide to 320px. For a thumb that width is the whole trade. **For an
-  index finger — play-tested as the better grip — there is no trade**, and the
-  harness's verdict is the entire answer. Still off by default: it wants a phone
-  to confirm it, which is the one thing nothing here can do.
 
 ## Tooling
 
