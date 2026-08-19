@@ -316,7 +316,6 @@ const fail = [];
         out.push({ kind: 'feast', id: route.id, level: 12, caught, goods: caught + goods,
                    secs: Math.round(total * 10) / 10 });
       }
-      disposeFeastPath();
       return out;
     });
 
@@ -750,17 +749,35 @@ const fail = [];
       const life3 = row.querySelectorAll('.heart').length + '/' +
                     (row.querySelector('.lifeplus') ? 'plus' : 'noplus');
       showPanel(null);                              // leave the page playable
+      /* The deck is a file a tool edits now (tools/routes.js), so its SIZE is
+         not a fact worth asserting — adding a shape is the point of that tool.
+         What has to hold is that everything in it is something the director can
+         emit and the ribbon can draw. Clearability is --fmt's job; this is the
+         contract that gets a shape as far as being walked at all. */
+      const ids = FMT_SHAPES.map(s => s.id);
+      const deckBad = FMT_SHAPES.filter(s =>
+        !/^[a-z][a-z0-9]*$/.test(s.id || '') ||
+        ids.indexOf(s.id) !== ids.lastIndexOf(s.id) ||
+        !Number.isInteger(s.min) || s.min < 1 ||
+        !Number.isInteger(s.weight) || s.weight < 1 ||
+        !(s.span > 0 && s.span <= 1) ||
+        !Array.isArray(s.beats) || s.beats.length < 2 ||
+        s.beats.some(b => !(Math.abs(b.x) <= 1) || !(Math.abs(b.z) <= 1))
+      ).map(s => s.id || '(no id)');
+
       return { themes, withGold, goldAfterTaken, life7, life3,
                hole: HOLE_LIFE, magnet: POWERS.magnet.dur, shapes: FMT_SHAPES.length,
-               feasts: FEAST_ROUTES.length, cardCount: 3 };
+               feasts: FEAST_ROUTES.length, cardCount: 3, deckBad };
     });
     ok('sinkholes close after 5s', bal.hole === 5, String(bal.hole));
     ok('magnet halved to 3.75s', Math.abs(bal.magnet - 3.75) < 1e-6, String(bal.magnet));
     ok('a biome every 10 levels',
        String(bal.themes) === 'Meadow,Meadow,Lily Pad Ponds,Lily Pad Ponds,Bubblegum,Night,Hell',
        String(bal.themes));
-    ok('19 formation shapes and 5 feast routes', bal.shapes === 19 && bal.feasts === 5,
-       `${bal.shapes} shapes, ${bal.feasts} routes`);
+    ok('every shape in the deck is emittable, and the five feasts are there',
+       bal.deckBad.length === 0 && bal.shapes >= 12 && bal.feasts === 5,
+       `${bal.shapes} shapes, ${bal.feasts} feast routes` +
+       (bal.deckBad.length ? ` — broken: ${bal.deckBad.join(', ')}` : ''));
     ok('draft is always 3 cards', bal.cardCount === 3, String(bal.cardCount));
     ok('gold perks appear on roughly half of drafts',
        bal.withGold > 150 && bal.withGold < 250, `${bal.withGold}/400`);

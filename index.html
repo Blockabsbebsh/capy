@@ -138,14 +138,22 @@
   }
   @keyframes heartPop{0%{transform:scale(1)}30%{transform:scale(1.6) rotate(-12deg)}100%{transform:scale(.75)}}
 
+  /* THE RUNNING TIMERS, top right under the lives — see #statusStack. They
+     used to sit centred just above the dash button, which is the middle of the
+     arena on a phone and directly over the ribbon on a desktop: the two things
+     that change every frame were drawn on top of the thing you have to read.
+     Up here they are a glance next to the other numbers, and the transform on
+     each stays vertical so a timer appearing never shoves the row sideways. */
   #comboWrap{
-    align-self:center; margin-bottom:6px; text-align:center;
+    text-align:right;
     transition:opacity .25s ease, transform .25s ease;
-    opacity:0; transform:translateY(10px) scale(.9);
+    opacity:0; transform:translateY(-8px) scale(.94);
   }
-  #comboWrap.on{opacity:1; transform:translateY(0) scale(1);}
-  #comboText{font-size:clamp(20px,5vw,30px); font-weight:bold; color:#ffd77a; text-shadow:0 2px 0 #8a4a12, 0 0 22px rgba(255,180,60,.55);}
-  #comboBarOuter{width:min(46vw,240px); height:8px; border-radius:6px; background:rgba(0,0,0,.45); margin:5px auto 0; overflow:hidden; border:1px solid rgba(255,255,255,.15);}
+  #comboWrap.on{opacity:1; transform:none;}
+  /* nowrap: the label is wider than its bar on a phone, and wrapping it moved
+     the bar down a line every time the multiplier gained a digit. */
+  #comboText{font-size:clamp(14px,3.4vw,19px); font-weight:bold; color:#ffd77a; letter-spacing:.5px; white-space:nowrap; text-shadow:0 2px 0 #8a4a12, 0 0 18px rgba(255,180,60,.5);}
+  #comboBarOuter{width:min(26vw,132px); height:7px; border-radius:6px; background:rgba(0,0,0,.45); margin:4px 0 0 auto; overflow:hidden; border:1px solid rgba(255,255,255,.15);}
   #comboBar{height:100%; width:0%; border-radius:6px; background:linear-gradient(90deg,#ffd07a,#ff7a3d); transition:width .1s linear;}
   #comboBar.urgent{background:linear-gradient(90deg,#ff8a5a,#ff3d3d); animation:urgentPulse .45s infinite alternate;}
   @keyframes urgentPulse{from{opacity:.55} to{opacity:1}}
@@ -169,20 +177,24 @@
   .testlevel-note{font-size:8.5px; color:#c9b199; text-align:center; margin-top:6px; line-height:1.25;}
   @media (max-width: 470px){ #testLevelPanel{top:88px; width:88px; padding:7px 7px 6px;} }
 
-  #midStack{align-self:center; display:flex; flex-direction:column; align-items:center; gap:8px; margin-bottom:6px;}
+  /* Right-aligned, and last in the column on purpose: an idle timer is still
+     laid out (it fades in and out, and `display:none` cannot be faded), so it
+     has to be the thing nothing sits below or the buttons would shift under it
+     every time a power-up starts. */
+  #statusStack{display:flex; flex-direction:column; align-items:flex-end; gap:7px;}
   #powerWrap{
-    text-align:center; opacity:0; transform:translateY(8px) scale(.9);
+    text-align:right; opacity:0; transform:translateY(-8px) scale(.94);
     transition:opacity .25s ease, transform .25s ease;
   }
   #powerWrap.on{opacity:1; transform:none;}
   #powerName{
-    font-size:clamp(13px,3vw,17px); font-weight:bold; letter-spacing:3px;
-    text-shadow:0 2px 5px rgba(0,0,0,.6), 0 0 18px currentColor;
-    display:flex; align-items:center; justify-content:center; gap:6px;
+    font-size:clamp(11px,2.6vw,14px); font-weight:bold; letter-spacing:2px; white-space:nowrap;
+    text-shadow:0 2px 5px rgba(0,0,0,.6), 0 0 16px currentColor;
+    display:flex; align-items:center; justify-content:flex-end; gap:6px;
   }
   #powerName .ico{width:19px; height:19px; flex:0 0 auto;}
-  #powerBarOuter{width:min(34vw,180px); height:6px; border-radius:5px; background:rgba(0,0,0,.5);
-    margin:4px auto 0; overflow:hidden; border:1px solid rgba(255,255,255,.18);}
+  #powerBarOuter{width:min(26vw,132px); height:6px; border-radius:5px; background:rgba(0,0,0,.5);
+    margin:4px 0 0 auto; overflow:hidden; border:1px solid rgba(255,255,255,.18);}
   #powerBar{height:100%; width:100%; border-radius:5px; transition:width .1s linear;}
   #hatPicker{display:flex; flex-wrap:wrap; gap:7px; justify-content:center; margin:14px 0 2px;}
   .hatbtn{
@@ -543,6 +555,19 @@
         <button id="btnPause">II</button>
         <button id="btnMute">&#128266;</button>
       </div>
+      <!-- every running timer — the combo decay bar and whichever power-up is
+           up — under the lives, not across the middle of the arena. Both are
+           glances, and a glance belongs with the other numbers. -->
+      <div id="statusStack">
+        <div id="powerWrap">
+          <div id="powerName">MAGNET</div>
+          <div id="powerBarOuter"><div id="powerBar"></div></div>
+        </div>
+        <div id="comboWrap">
+          <div id="comboText">x2</div>
+          <div id="comboBarOuter"><div id="comboBar"></div></div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -558,17 +583,6 @@
     <div class="label" style="margin-bottom:8px">Test Level</div>
     <div id="testLevelButtons"></div>
     <div class="testlevel-note">locks level<br>for testing</div>
-  </div>
-
-  <div id="midStack">
-    <div id="powerWrap">
-      <div id="powerName">MAGNET</div>
-      <div id="powerBarOuter"><div id="powerBar"></div></div>
-    </div>
-    <div id="comboWrap">
-      <div id="comboText">x2</div>
-      <div id="comboBarOuter"><div id="comboBar"></div></div>
-    </div>
   </div>
 
   <div class="bottom-row">
@@ -713,6 +727,7 @@
 <script src="js/perks.js"></script>
 <script src="js/input.js"></script>
 <script src="js/events.js"></script>
+<script src="js/shapes.js"></script>
 <script src="js/formations.js"></script>
 <script src="js/upgrades.js"></script>
 <script src="js/scores.js"></script>
