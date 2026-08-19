@@ -916,7 +916,8 @@ const fail = [];
     });
     ok('ghost lasts 5s', perks.ghostLife === 5, String(perks.ghostLife));
     ok('sinkholes close after 5s', perks.holeLife === 5, String(perks.holeLife));
-    ok('shockwave is 3x the catch radius at one pick', perks.shockR === 3.75,
+    ok('shockwave is 1.5x the catch radius at one pick, +20% a pick',
+       perks.shockR === 1.88 && perks.shockSteps === '0,1.5,1.8,2.16',
        `${perks.shockR} from ${perks.shockSteps}`);
     ok('Auto-Shield fires on a near hazard and absorbs it',
        perks.asFired && perks.asAbsorbed, `fired=${perks.asFired} absorbed=${perks.asAbsorbed}`);
@@ -932,6 +933,32 @@ const fail = [];
        Math.abs(perks.heartHazard - 1.4) < 0.09, `5 hearts = ${perks.heartHazard}x of 3`);
     ok('difficulty still climbing past the caps',
        perks.overtime[0] === 0 && perks.overtime[1] === 2, String(perks.overtime));
+    /* Both halves of "a draft can end without a pick". Declining is a real
+       answer — every perk is a trade, and Long Snout drags hazards into reach
+       as the game gets denser — and running the pool dry must not leave a
+       panel up with nothing on it. */
+    const draft = await page.evaluate(() => {
+      game.state = 'playing'; game.devLock = true; game.level = 4;
+      resetUpgrades();
+      const opened = offerUpgrades(11);
+      skipUpgrade();
+      const skipped = { opened, state: game.state, level: game.level,
+                        took: Object.keys(game.taken).length,
+                        up: !document.getElementById('upgradePanel').classList.contains('hidden') };
+      resetUpgrades();
+      for (const u of UPGRADES) game.taken[u.id] = u.max;
+      for (const u of RUN_PERKS) game.run[u.id] = true;
+      const drained = offerUpgrades(21);
+      return { skipped, drained, state: game.state,
+               up: !document.getElementById('upgradePanel').classList.contains('hidden') };
+    });
+    ok('SKIP ends the draft, takes nothing, and starts the level it was for',
+       draft.skipped.opened && draft.skipped.state === 'playing' &&
+       draft.skipped.level === 11 && draft.skipped.took === 0 && !draft.skipped.up,
+       JSON.stringify(draft.skipped));
+    ok('a draft with nothing left to offer never opens',
+       draft.drained === false && draft.state === 'playing' && !draft.up);
+
     ok('a dead perk is never offered', perks.deadOffered === 0,
        `${perks.deadOffered}/200 drafts`);
     ok('descriptions all start with a capital', perks.lowercase.length === 0,
@@ -1006,7 +1033,7 @@ const fail = [];
         resetUpgrades(); game.run.sticky = false; game.up.speed = 1;
         applyDifficulty();
         game.maxLives = game.lives = 3;
-        let food = 0, haz = 0, n = 0;
+        let food = 0, haz = 0, n = 0, long = 0;
         for (let r = 0; r < 60; r++){
           clearItems(); resetFormations(); resetCapy();
           fmt.strayTimer = 1e9;
@@ -1020,20 +1047,70 @@ const fail = [];
             for (const g of good)
               if (Math.hypot(b.x - g.x, b.z - g.z) < 1.9) tooClose++;
           food += good.length; haz += bad.length; n++;
+          if (good.length >= 10) long++;
           shortest = Math.min(shortest, good.length);
           longest = Math.max(longest, good.length);
         }
-        seen[level] = { food: +(food / n).toFixed(1), haz: +(haz / n).toFixed(1) };
+        seen[level] = { food: +(food / n).toFixed(1), haz: +(haz / n).toFixed(1),
+                        lng: Math.round(100 * long / n) };
       }
       resetFormations(); clearItems();
       return { seen, worstRatio: +worstRatio.toFixed(2), tooClose, shortest, longest };
     });
     const curve = Object.entries(routes.seen)
-      .map(([l, v]) => `L${l}:${v.food}+${v.haz}`).join(' ');
-    ok('routes grow from a few beats to a full-length one',
-       routes.seen[1].food <= 6 && routes.seen[60].food >= 15 &&
-       routes.shortest >= 3 && routes.longest <= 18, curve +
-       `  (${routes.shortest}-${routes.longest} beats)`);
+      .map(([l, v]) => `L${l}:${v.food}+${v.haz}/${v.lng}%`).join(' ');
+    /* What grows with the level is the LONG TAIL, not the mean. The mean stayed
+       low on purpose — a level where every route is fifteen beats has lost the
+       three-beat one that reads at a glance, and that is the best-feeling route
+       in the game. So: none long at the start, plenty long late, and nothing
+       outside the bounds either way. */
+    ok('the long tail grows with the level, without crowding short routes out',
+       routes.seen[1].lng === 0 && routes.seen[34].lng >= 25 &&
+       routes.shortest >= 3 && routes.longest <= 18,
+       curve + `  (${routes.shortest}-${routes.longest} beats, %>=10 beats)`);
+    /* READABILITY, measured the way clearability is. Chaining shapes into one
+       arena makes crossings grow with the SQUARE of the length — every new
+       segment can cross every earlier one — and at 14 beats that averaged 16 per
+       route, which is the "random noise" a route must never look like. What
+       matters is the ones that would be ON SCREEN TOGETHER, since the ribbon
+       only ever draws a window; those are asserted, the rest reported. */
+    const look = await page.evaluate(() => {
+      game.state = 'playing'; game.devLock = true;
+      let vis = 0, all = 0, tight = 0, n = 0, shortRoutes = 0, longest = 0;
+      for (const level of [1, 8, 16, 24, 34, 48, 60]){
+        game.level = level; resetUpgrades(); game.run.sticky = false; game.up.speed = 1;
+        applyDifficulty(); game.maxLives = game.lives = 3;
+        for (let r = 0; r < 80; r++){
+          clearItems(); resetFormations(); resetCapy(); fmt.strayTimer = 1e9;
+          emitFormation();
+          const g = fmt.live.values().next().value.pts.filter(q => !q.bad);
+          n++; longest = Math.max(longest, g.length);
+          if (g.length <= 6) shortRoutes++;
+          for (let i = 1; i < g.length; i++)
+            for (let j = i + 2; j < g.length; j++)
+              if (crosses(g[i-1], g[i], g[j-1], g[j])){ all++; if (j - i <= LINE_AHEAD) vis++; }
+          for (let i = 0; i < g.length; i++)
+            for (let j = i + 2; j < g.length; j++)
+              if (j - i <= DOT_AHEAD &&
+                  Math.hypot(g[i].x - g[j].x, g[i].z - g[j].z) < BEAT_APART) tight++;
+        }
+      }
+      resetFormations(); clearItems();
+      return { vis: vis / n, all: all / n, tight: tight / n,
+               shortPct: Math.round(100 * shortRoutes / n), longest };
+    });
+    ok('routes rarely cross themselves where you can see both lines',
+       look.vis < 1, `${look.vis.toFixed(2)}/route on screen together, ` +
+       `${look.all.toFixed(2)} counting the ones the window hides`);
+    ok('two beats never land close enough to read as one dot',
+       look.tight < 1, `${look.tight.toFixed(2)}/route`);
+    /* Short routes are the ones that read at a glance and they must never stop
+       appearing — length is a distribution whose long tail grows, not a curve
+       that drags the whole thing up with the level. */
+    ok('short routes keep appearing at every level, long ones stay possible',
+       look.shortPct >= 40 && look.longest >= 15,
+       `${look.shortPct}% are 6 beats or fewer, longest seen ${look.longest}`);
+
     ok('a route never carries more than one hazard per six food',
        routes.worstRatio <= 1, `worst ${routes.worstRatio}x the allowance`);
     ok('every hazard clears every beat the player must stand on',

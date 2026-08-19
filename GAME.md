@@ -13,19 +13,24 @@ boomerangs and dash-gated leaps. The route between them is drawn on the ground
 as a glowing ribbon the moment the shape appears. You read the whole route,
 plan one movement, and run it.
 
-**Routes get longer as the game goes on.** Early ones are a single shape, about
-five items. Late ones chain several shapes end to end into one continuous walk
-of fifteen to twenty — which is where late difficulty actually comes from, since
-every step inside them is still timed to be walkable. The connecting lines are
-only drawn a few steps ahead; past that you read the dots, which is what they
-were always for.
+**Long routes turn up more often as the game goes on.** A short route of three
+to five items is the one that reads at a glance, and those never stop appearing.
+What changes is that longer ones — several shapes walked end to end, up to
+eighteen items — start showing up alongside them, and get more common. That is
+where late difficulty comes from; every step inside them is still timed to be
+walkable.
 
-The ribbon is drawn to be read in order: a **dot on every landing spot**,
-largest and brightest at the next beat and tapering over the few after it, with
-hazard beats marked red so you can see what to walk around before it is in the
-air.
-Segments you have used **leave the ground** as their beats land, so what is
-drawn is always the part still ahead of you.
+The ribbon is a **window that slides**. It draws the next few steps brightly,
+the ones after that fading out, and moves forward every time an item lands — so
+a long route reveals itself as you walk it rather than arriving as a wall of
+lines. Dots run further ahead than the connecting lines: a dot says "something
+lands here", a line says "and these two join up", and only the next few of those
+are worth knowing. Hazard beats are marked red, so you see what to walk around
+before it is in the air.
+
+Routes are also **checked for legibility before they are used**. The director
+builds several and picks the one that crosses itself least, doubles back least,
+and never puts two landing spots close enough to read as one.
 
 Only one route is live at a time. After its last item lands there is a pause —
 long at low levels, almost none at high ones — before the next, with a thinner
@@ -141,14 +146,15 @@ Three lives. Every **10** levels the biome changes — Meadow, Lily Pad Ponds,
 Bubblegum, Night, Hell — each with its own lighting, ground, sky and **its own
 piece of music** (a marimba stroll, a kalimba drift over water drips, a chiptune
 sugar rush, a music-box waltz in 3/4, and a harmonic-minor circus). Each change
-pauses the run for a draft of three perks.
+pauses the run for a draft of three perks, which you can **skip** — every perk
+is a trade, and taking none is a real answer.
 
 Ordinary perks stack:
 
 | Perk | Effect | Max |
 |---|---|---|
-| Long Snout | +0.22 reach for **food**, drawn as an aura around you. It never widens the circle that catches hazards | 4 |
-| Quick Paws | dash cooldown −25%, and the dash ends in a shockwave that catches food out to 3× your reach (then 4×, 5×) | 3 |
+| Long Snout | Reach further for **food**, drawn as an aura around you. It never widens the circle that catches hazards | 4 |
+| Quick Paws | dash cools faster, and the dash ends in a shockwave that catches food a little beyond your reach, widening with each pick | 3 |
 | Melon Lover | watermelons pay +60% | 3 |
 | Second Wind | +1 max life, and one heart back | 3 |
 | Lucky Heart | a heart falls right away, and hearts drop twice as often | 2 |

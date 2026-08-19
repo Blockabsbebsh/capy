@@ -75,7 +75,7 @@ Load order, which is also roughly the dependency order:
 
 ## Testing
 
-No unit-test framework. The harness is `tools/shoot.js` (47 assertions) and
+No unit-test framework. The harness is `tools/shoot.js` (52 assertions) and
 `tools/music.js`, run against a real browser:
 
 ```sh
@@ -228,10 +228,26 @@ Operations, RLS proof and moderation SQL are in `supabase/README.md`.
 - **Every formation is provably clearable.** `stepTime()` computes each gap from
   distance and speed; gaps are never hand-authored. Difficulty raises `fmtReach`
   and shortens `fmtGap` — **not** fall speed, which caps at `FALL_CAP`.
-- **A route is several shapes chained, not one.** Length is how late difficulty
-  grows: ~5 food beats at level 1 to the `FOOD_CAP` of 18. Each shape is
-  anchored where the last one ended, so the join is an ordinary step `stepTime`
-  prices like any other and no shape had to be redesigned to be long.
+- **A route is several shapes chained, not one.** Each is anchored where the
+  last one ended, so the join is an ordinary step `stepTime` prices like any
+  other and no shape had to be redesigned to be long.
+- **Length is a DISTRIBUTION, not a curve.** What grows with the level is the
+  chance of a long route and how long it may be (`FOOD_CAP` 18) — never the
+  floor. A three-to-five beat route read at a glance is the best-feeling thing
+  in the game and must keep appearing at every level; scaling one length up
+  deleted it, which is what made level 11 feel relentless. `--check` asserts the
+  long tail grows AND that short routes are still most of the mix.
+- **Readability is measured, like clearability.** Chaining puts several shapes
+  in one arena, and crossings then grow with the SQUARE of the length — at 14
+  beats that averaged 16 a route, which is the "random noise" a route must never
+  look like. `routeNoise` scores crossings, near-reversals and beats too close
+  to tell apart; `emitFormation` builds `ROUTE_TRIES` candidates and walks the
+  cleanest. Scored, not forbidden — a sharp angle is sometimes the good part.
+- **Score what would be ON SCREEN TOGETHER, not everything.** The ribbon only
+  draws a window, so a route folding back over ground it used ten beats ago is
+  never ambiguous — that line is long gone. Weighting crossings inside the
+  window heavily and the rest barely is what lets a long route use the whole
+  arena instead of being pushed into a corner to avoid itself.
 - **Hazards are placed at emit time, never written into a shape.** A shape with
   baked-in decoys is a hand you learn, and it carried the same two whether the
   route was five beats or twenty. The cap is the player-facing rule — **one
@@ -252,11 +268,15 @@ Operations, RLS proof and moderation SQL are in `supabase/README.md`.
 - **A route is read off dots, not lines.** The arena is twice as wide as it is
   deep, so a shape that crosses it more than once draws near-parallel streaks in
   one band: traverse repeatedly and it must step in **z** as it goes (see
-  `pendulum`, `pincer`) or it is unreadable however it is drawn. Since routes
-  chain, the lines are only drawn `LINE_AHEAD` steps out — over eighteen beats
-  they lay over each other and the picture is a tangle — and the dot taper is
-  front-loaded over `TAPER`, because a gradient spread across eighteen beats
-  tells you nothing about which of two neighbours comes first.
+  `pendulum`, `pincer`) or it is unreadable however it is drawn.
+- **The ribbon is a window that SLIDES, not a picture drawn once** (`revealPath`).
+  It shows the next few steps brightly, the ones after fading, nothing beyond,
+  and it slides on every beat that lands — so a later segment only appears once
+  the earlier one it would have crossed is gone. Dots run further ahead than
+  lines (`DOT_AHEAD` vs `LINE_AHEAD`), because a dot stays legible however many
+  there are and a line is what turns into spaghetti. Never draw one without the
+  other around it: a dot past the line window is a "dot in the middle of
+  nowhere", which is exactly what a fixed window shipped.
 - **Only one route is live at a time** (`fmt.live.size`). Two overlapping routes
   are unreadable, not twice the challenge — and a record that never resolves
   would wedge the director and stop food entirely, hence `rec.age`.
@@ -267,6 +287,13 @@ Operations, RLS proof and moderation SQL are in `supabase/README.md`.
   `game.shield` directly.
 - **One run perk per run, total.** The gold slot closes as soon as *any*
   `RUN_PERK` is taken — they are balanced as a single trade.
+- **A draft can end without a pick.** SKIP is a real answer, since every perk is
+  a trade; `skipUpgrade` and `takeUpgrade` share `closeDraft`, because whichever
+  way a draft ends the level it was for still has to start. `offerUpgrades`
+  returns false rather than opening an empty panel when the pool is dry.
+- **A perk shows a number only where the player can see its effect.** Melon
+  Lover's +60% lands on a score they read; Long Snout's +0.22 and Quick Paws'
+  −25% are unverifiable from play and were noise on the card.
 - **A perk made pointless by this run is never offered** (`dead(game)`).
   Offering a dead perk wastes one of three slots, which is worse than nothing.
 - **A countdown that goes NaN never expires.** `activatePower` once multiplied

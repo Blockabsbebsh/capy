@@ -82,6 +82,7 @@ function offerUpgrades(level){
     if (!dead) b.addEventListener('click', () => takeUpgrade(u));
     box.appendChild(b);
   }
+  $('btnSkipPerk').onclick = () => { Audio.jump(); skipUpgrade(); };
   showPanel($('upgradePanel'));
   return true;
 }
@@ -121,8 +122,25 @@ function takeUpgrade(u){
     game.up.speed = 0.5;
   }
 
+  closeDraft();
+  showBanner(u.name.toUpperCase(), '#ffd77a');   // the banner is text; the card had the icon
+  refreshHUD();
+}
+
+/* Take nothing and get on with it. Every perk is a trade — Long Snout drags
+   hazards into reach as the game gets denser, Second Wind buys the hazard rate
+   up with it — so "none of these" is a real answer to a draft, and without this
+   the only way to decline was to take the least bad one. Shares the whole tail
+   below with takeUpgrade: whichever way a draft ends, the level it was for has
+   to actually start. */
+function skipUpgrade(){
+  closeDraft();
+  refreshHUD();
+}
+
+function closeDraft(){
   // the level this draft was for hasn't actually started yet — kick it
-  // off now that a pick has been made, so the new theme/sky/music land
+  // off now that the draft is settled, so the new theme/sky/music land
   // right as play resumes instead of a beat later
   const startingLevel = game.pendingLevel;
   game.pendingLevel = null;
@@ -149,7 +167,5 @@ function takeUpgrade(u){
   Audio.duck(0.55);
   game.state = 'playing';
   clock.getDelta();                     // swallow the paused time
-  showBanner(u.name.toUpperCase(), '#ffd77a');   // the banner is text; the card had the icon
-  refreshHUD();
 }
 
