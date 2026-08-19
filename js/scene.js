@@ -193,6 +193,17 @@ const PITCH_ASPECT = { wide: 1.3, tall: 0.55 };
    down to whatever still leaves the near edge reachable within LIFT_REACH. */
 let touchLift = 90, touchReachX = 1, touchReachZ = 1, touchCX = 0, touchCY = 0;
 const THUMB_SPAN = { x: 185, z: 120 };   // px the arena should fit inside, per axis
+/* `?iso=1` drops the strain floor, which is the ONLY thing making the two axes
+   scale differently — reach alone lands both near 1.13. The floor exists for a
+   thumb, which pays for stretch; an index finger on the free hand does not pay
+   it at all, and play-testing says index finger is the better grip. So this is
+   the A/B: the harness cannot settle it, because the cost the floor buys off is
+   the one thing --touch does not model (it has slide speed, placement noise and
+   look latency, and no notion of stretch). What --touch CAN price is the cost
+   the floor charges — noise goes on the finger and is multiplied by these
+   scales — so for an index finger, which pays no strain, its verdict is the
+   whole answer. Default off until a phone says otherwise. */
+const ISO_TOUCH = /[?&]iso=1/.test(location.search);
 const TOUCH_MIN_PX = 11;                 // smallest thumb movement worth aiming with
 const REACH_CEIL = 2.2;                  // beyond here is guesswork, not evidence
 const LIFT_REACH = 1.35;                 // depth scale the lift may assume it can spend
@@ -291,9 +302,11 @@ function refreshTouchMap(){
      under all of it. */
   const fit = (need, strain, catchPx) => Math.min(REACH_CEIL,
     Math.max(1, need, Math.min(strain, (CATCH_R * catchPx) / TOUCH_MIN_PX)));
-  touchReachX = fit(hx / Math.max(1, W / 2 - EDGE), (hx * 2) / THUMB_SPAN.x, perX);
-  touchReachZ = fit(Math.max(hNear / down, hFar / up),
-                    (hNear + hFar) / THUMB_SPAN.z, perZ);
+  // a strain of 0 drops out of the Math.min/Math.max above, leaving reach alone
+  const strainX = ISO_TOUCH ? 0 : (hx * 2) / THUMB_SPAN.x;
+  const strainZ = ISO_TOUCH ? 0 : (hNear + hFar) / THUMB_SPAN.z;
+  touchReachX = fit(hx / Math.max(1, W / 2 - EDGE), strainX, perX);
+  touchReachZ = fit(Math.max(hNear / down, hFar / up), strainZ, perZ);
 }
 
 /* Repaint the sky for the current theme, framing and viewport. Cheap enough

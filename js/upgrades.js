@@ -112,7 +112,7 @@ function takeUpgrade(u){
        happen more often, later" is the least satisfying pick on the card; one
        heart on the way down turns it into a reward you can see. */
     spawnItem('heart');
-    showBanner('💖 HEART FALLING', '#ff8fae');
+    showBanner('HEART FALLING', '#ff8fae', 'life');
   }
   if (u.id === 'sticky'){
     // game.up.speed is the one place movement is scaled, and formations.js

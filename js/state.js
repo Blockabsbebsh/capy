@@ -53,7 +53,13 @@ function resetUpgrades(){
   game.maxLives = START_LIVES;
 }
 
-const catchReach = () => CATCH_R + game.up.reach;
+/* Long Snout only reaches for FOOD. Applied to everything, the perk got worse
+   the more you took: hazard density climbs with level and with every heart
+   banked, so a wider circle around the capybara eventually swept up more
+   chillies than burgers and the aura was drawn round a liability. Every catch
+   test passes what it is testing, so the drawn aura (which passes true) is the
+   good-item radius it has always looked like. */
+const catchReach = (good = true) => CATCH_R + (good ? game.up.reach : 0);
 
 /* One run perk per run, total — see the gold slot in offerUpgrades. */
 const hasRunPerk = () => RUN_PERKS.some(p => game.run[p.id]);
@@ -81,7 +87,7 @@ function checkHatUnlocks(){
     if (h.score > 0 && !game.unlocked[h.id] && game.score >= h.score){
       game.unlocked[h.id] = true;
       try { localStorage.setItem('capyHats', JSON.stringify(game.unlocked)); } catch(e){}
-      showBanner('🎩 HAT UNLOCKED — ' + h.name.toUpperCase(), '#ffd77a');
+      showBanner('HAT UNLOCKED — ' + h.name.toUpperCase(), '#ffd77a', 'hat');
       Audio.levelUp();
     }
   }

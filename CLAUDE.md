@@ -75,7 +75,7 @@ Load order, which is also roughly the dependency order:
 
 ## Testing
 
-No unit-test framework. The harness is `tools/shoot.js` (44 assertions) and
+No unit-test framework. The harness is `tools/shoot.js` (47 assertions) and
 `tools/music.js`, run against a real browser:
 
 ```sh
@@ -166,6 +166,9 @@ Operations, RLS proof and moderation SQL are in `supabase/README.md`.
 - **`--icons` parks the pointer at 1,1 first.** Clicking START leaves the mouse
   where the button was, a draft card opens under it and screenshots in
   `:hover` — reported as a bug in the perk tiers twice over.
+- **`showBanner` and `popup` take an icon id**, which is how the last emoji
+  left the interface. Both write `innerHTML` when given one, and every caller
+  passes a literal — player-written text would have to be escaped first.
 - **`refreshHUD` runs every frame, so it writes only what changed.** Use
   `setText`/`setHTML`/`setStyle`; a bare `textContent =` is a DOM mutation even
   when the string is identical. The perk rail rebuilds only when the SET of
@@ -201,6 +204,21 @@ Operations, RLS proof and moderation SQL are in `supabase/README.md`.
 - **Every formation is provably clearable.** `stepTime()` computes each gap from
   distance and speed; gaps are never hand-authored. Difficulty raises `fmtReach`
   and shortens `fmtGap` — **not** fall speed, which caps at `FALL_CAP`.
+- **A route is several shapes chained, not one.** Length is how late difficulty
+  grows: ~5 food beats at level 1 to the `FOOD_CAP` of 18. Each shape is
+  anchored where the last one ended, so the join is an ordinary step `stepTime`
+  prices like any other and no shape had to be redesigned to be long.
+- **Hazards are placed at emit time, never written into a shape.** A shape with
+  baked-in decoys is a hand you learn, and it carried the same two whether the
+  route was five beats or twenty. The cap is the player-facing rule — **one
+  hazard per six food items** — and `beside()` puts each one off the walking
+  line by `HAZARD_CLEAR`, clear of every beat, or does not place it at all.
+  `--check` asserts the ratio and the clearance; both would fail silently,
+  since a decoy inside catch range still looks like a decoy on the ribbon.
+- **Long Snout reaches for FOOD only** — `catchReach(good)`. Applied to
+  everything the perk got worse the more you took, because hazard density
+  climbs with level and with every heart banked. Hazard clearance is therefore
+  a fixed distance, which is what lets `HAZARD_CLEAR` be one number.
 - **A `dash` beat falls back to walking time when the player has no dash.** Dash
   timing is *shorter*, so it is the one thing Sticky Feet could make literally
   unclearable rather than merely slower (`!game.run.sticky` in `emitFormation`).
@@ -210,7 +228,11 @@ Operations, RLS proof and moderation SQL are in `supabase/README.md`.
 - **A route is read off dots, not lines.** The arena is twice as wide as it is
   deep, so a shape that crosses it more than once draws near-parallel streaks in
   one band: traverse repeatedly and it must step in **z** as it goes (see
-  `pendulum`, `pincer`) or it is unreadable however it is drawn.
+  `pendulum`, `pincer`) or it is unreadable however it is drawn. Since routes
+  chain, the lines are only drawn `LINE_AHEAD` steps out — over eighteen beats
+  they lay over each other and the picture is a tangle — and the dot taper is
+  front-loaded over `TAPER`, because a gradient spread across eighteen beats
+  tells you nothing about which of two neighbours comes first.
 - **Only one route is live at a time** (`fmt.live.size`). Two overlapping routes
   are unreadable, not twice the challenge — and a record that never resolves
   would wedge the director and stop food entirely, hence `rec.age`.
@@ -284,13 +306,21 @@ asserts the rig contract for exactly that reason.
 - `updateThemeFX` advances the hell lava bubbles at a hardcoded `1/60` rather
   than the frame delta, so they animate at different speeds on different refresh
   rates. Not worth fixing. Not a bug to "discover" again.
-- **Touch steering is good, not perfect.** Play-tested on a real phone: routes
-  clear and the game is properly playable, but it reads as slightly finicky in a
-  way nobody has pinned to a cause. Do not change the control law on that report
-  alone — it is the one thing here with measurements behind it. Untested
-  suspects, cheapest first: the finger map's anisotropy (worst in portrait,
-  which is the common case), `DRAG_GAIN` at 11, `MOVE_T_TURN` at 0.07. Each is
-  a one-line experiment and `--touch` will price it.
+- **Touch steering is good, not perfect** — it reads as slightly finicky, and
+  the anisotropy is now the named cause rather than a suspect. `--touch` reports
+  it per viewport: the two reach scales are computed independently and land at
+  **1.90x on a 390x844 portrait, worth up to 18.1 degrees** between the angle
+  aimed and the angle walked, which is invisible on a straight line and is most
+  of what the shapes here ask for. The strain floor is its only source.
+- **`?iso=1` drops that floor — it is the A/B, and the harness cannot settle
+  it.** `--touch` models slide speed, placement noise and look latency, and has
+  no notion of stretch, which is precisely what the floor buys off. So it prices
+  the floor's cost and none of its benefit: iso comes out at 1.13x / 3.5°, the
+  same item rate, and 20% of routes cleared against 16%, for a thumb box that
+  grows 185px wide to 320px. For a thumb that width is the whole trade. **For an
+  index finger — play-tested as the better grip — there is no trade**, and the
+  harness's verdict is the entire answer. Still off by default: it wants a phone
+  to confirm it, which is the one thing nothing here can do.
 
 ## Tooling
 

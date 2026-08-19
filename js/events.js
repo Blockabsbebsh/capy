@@ -29,7 +29,7 @@ function updateHeartSpawns(dt){
   game.heartTimer -= dt * (1 + game.up.heartRate);
   if (game.heartTimer <= 0){
     spawnItem('heart');
-    showBanner('💖 HEART FALLING', '#ff8fae');
+    showBanner('HEART FALLING', '#ff8fae', 'life');
     game.heartTimer = 46 + Math.random() * 26;
   }
 }
@@ -55,7 +55,7 @@ function triggerEvent(){
        drawn on the ground the moment the banner does (see startFeastRoute).
        The old version dropped them at random x, which paid the same for
        standing still — and quietly wasted the ones that fell out of reach. */
-    showBanner('🍉 MELON FEAST!', '#ffe14d');   // any longer overflows a phone
+    showBanner('MELON FEAST!', '#ffe14d', 'melon');   // any longer overflows a phone
     Audio.feast();
     game.fovKick = 2.4;
     // + the last melon's fall, + a beat before normal service resumes
@@ -68,7 +68,7 @@ function triggerEvent(){
 
   if (kind === 'missiles'){
     const n = Math.min(11, 3 + Math.floor(game.level / 3) + Math.floor(overtime() * 2));
-    showBanner('⚠ CHILI MISSILES — DODGE!', '#ff7a5a');
+    showBanner('CHILI MISSILES — DODGE!', '#ff7a5a');
     for (let i = 0; i < n; i++){
       evt.queue.push({ at: 1.1 + i * 0.52, fn: () => spawnItem('chili', { missile:true }) });
     }
@@ -76,7 +76,7 @@ function triggerEvent(){
   } else {
     const n = 2 + Math.floor(Math.random() * 2) + (game.level >= 8 ? 1 : 0)
             + Math.floor(overtime());
-    showBanner('⚠ SINKHOLES — MIND YOUR FEET!', '#ffcf5a');
+    showBanner('SINKHOLES — MIND YOUR FEET!', '#ffcf5a');
     for (let i = 0; i < n; i++){
       evt.queue.push({ at: i * 0.4, fn: spawnHoleSafe });
     }
