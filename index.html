@@ -364,6 +364,15 @@
 
   /* ---------- level-up upgrade draft ---------- */
   #upgradeCards{display:flex; flex-direction:column; gap:10px; margin:16px 0 4px;}
+  /* Quieter than the cards on purpose: declining is a real choice, not the
+     obvious one, so it reads as a way out rather than a fourth option. */
+  #btnSkipPerk{
+    margin:10px 0 0; padding:9px 22px; font-size:12px; letter-spacing:2px;
+    background:rgba(255,255,255,.07); color:var(--cream); opacity:.62;
+    border:1.5px solid rgba(255,205,140,.22); border-radius:11px; box-shadow:none;
+  }
+  #btnSkipPerk:hover{opacity:1; border-color:rgba(255,205,140,.5);}
+  #btnSkipPerk:active{transform:translateY(1px); box-shadow:none;}
   .upcard{
     margin:0; padding:13px 16px; text-align:left; border-radius:14px; font-size:15px;
     background:linear-gradient(180deg, rgba(255,255,255,.11), rgba(255,255,255,.05));
@@ -632,6 +641,7 @@
     <h2 id="upgradeTitle">Level 5</h2>
     <p class="sub" id="upgradeSub">Pick a snack perk.</p>
     <div id="upgradeCards"></div>
+    <button id="btnSkipPerk">SKIP</button>
   </div>
 </div>
 
