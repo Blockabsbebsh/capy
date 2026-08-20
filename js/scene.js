@@ -283,8 +283,9 @@ function fitCamera(){
        reading up the screen: an arena you cannot aim at is not a fix for a
        hand in the way. On a phone this costs nothing, since the shift alone
        pays for the band. */
+    if (!TOUCH) return true;
     const b = thumbBand();
-    return !TOUCH || b.need <= b.room || catchPx() <= CATCH_MIN_PX;
+    return b.need <= b.room || catchPx() <= CATCH_MIN_PX;
   };
 
   let lo = 0.45, hi = 4.0;
@@ -342,10 +343,19 @@ function fitCamera(){
    px of frame shift; `room` is what the HUD band leaves to shift into. One
    function so the two readers cannot drift: raiseFrame spends the one on the
    other, and fitCamera makes the platform smaller when they do not meet. */
+/* HOW MUCH OF THE FIELD THE HAND MAY STILL COVER. At zero — a band as tall as
+   the arena's whole image — the platform framed too high: it pinned the far
+   rim under the HUD and left the bottom 45% of a phone as bare foreground,
+   play-tested as "a bit too high". A quarter of the depth drops the platform
+   66px on a 390x844 and hands back the nearest 24px of it, 9% of the field, at
+   the rim furthest from where a route is being read. What is being bought off
+   is a hand over a large part of the screen, not the last pixel of it. */
+const HAND_TOLERANCE = 0.25;
 function thumbBand(){
   const cy = groundY(0, 0);
   const hNear = groundY(0, ARENA.r) - cy, hFar = cy - groundY(0, -ARENA.r);
-  return { need: cy + hNear / LIFT_REACH + (hNear + hFar) + LIFT_GAP - thumbFloor(),
+  const band = (hNear + hFar) * (1 - HAND_TOLERANCE) + LIFT_GAP;
+  return { need: cy + hNear / LIFT_REACH + band - thumbFloor(),
            room: groundY(0, -PATCH_R) - window.innerHeight * FIT_TOP };
 }
 // the catch radius as it reads UP the screen, which is what a smaller platform
