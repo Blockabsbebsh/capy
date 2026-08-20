@@ -397,6 +397,13 @@ Operations, RLS proof and moderation SQL are in `supabase/README.md`.
   by its step every pass, measured as a field a sixth smaller than it needed to
   be. Monotone in zoom, so twenty halvings land exactly, and it runs on resize
   only. `touchLift` is recomputed in the same pass.
+- **On touch the whole frame rides UP so the thumb gets a band below the field**
+  (`raiseFrame`). It is a lens shift, which translates the projection rigidly
+  and leaves the size the fit just chose alone; sliding the rig back raises the
+  image by moving further away and pays for it in platform depth. Where the HUD
+  band cannot cover the shift the platform gives way too, but only down to
+  `CATCH_MIN_PX`. Anything that reframes a phone has to leave `most >= ideal` in
+  `refreshTouchMap` true, or the hand covers the near half of the arena again.
 - **The sky is a strip, not a screen**: 3.2% of screen height on desktop, 16.5%
   on a phone, painted by `makeSkyTexture` and sized by `skyBand()`. Do not put
   sky ornaments in `skyRig` as 3D objects — everything there projects to NDC y
