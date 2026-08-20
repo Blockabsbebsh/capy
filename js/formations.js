@@ -195,6 +195,14 @@ function pickShape(){
    arriving at the cap. */
 const FOOD_CAP = 18, ROUTE_SEGS = 5, ROUTE_TRIES = 14;
 
+/* How deep a shape reaches when it does not say. A shape's `span` scales it in
+   x; `depth` is the same knob in z, and this is the value every shape used to
+   be pinned to. It is an inset, not a fit: the arena is 8.4 deep and the
+   default footprint is 5.2 of it, which keeps an ordinary shape off the near
+   and far rims where perspective is doing the most compressing. A shape that
+   wants the whole arena says so — see `depth` in shapes.js. */
+const FMT_DEPTH = 0.62;
+
 /* Length is a DISTRIBUTION, not a curve. Scaling one length up with the level
    meant short routes stopped existing, and a three-to-five beat route read at a
    glance is the best-feeling thing in the game — it should never go away. So
@@ -321,7 +329,6 @@ function placeHazards(food, at){
 /* One candidate route: shapes chained until it is about `want` beats long, each
    anchored where the last one ended so the join is an ordinary step. */
 function buildRoute(want){
-  const spanZ = ARENA.halfZ * 0.62;
   const segs = [];
   let n = 0;
   while (segs.length < ROUTE_SEGS){
@@ -339,6 +346,7 @@ function buildRoute(want){
     const shape = segs[si];
     const flipX = Math.random() < 0.5, flipZ = Math.random() < 0.5;
     const spanX = ARENA.halfX * shape.span;
+    const spanZ = ARENA.halfZ * (shape.depth || FMT_DEPTH);
     const slackX = Math.max(0, ARENA.halfX - 0.6 - spanX);
     /* Anchor so the OPENING beat lands near wherever the walk already is — the
        capybara for the first shape, the previous shape's last beat after that.

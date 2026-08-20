@@ -11,9 +11,14 @@
    note in the editor. Keep both of those true and the round trip is lossless.
 
    Shapes are normalised: x and z run -1..1 inside the formation's own
-   footprint, which is sized and anchored in the arena at emit time. They are
-   listed in the order the items ARRIVE — every item falls at the same speed
-   from the same height, so emission order is landing order.
+   footprint, which is sized and anchored in the arena at emit time. `span`
+   sizes that footprint in x and `depth` sizes it in z, both as a fraction of
+   the arena; `depth` is optional and defaults to FMT_DEPTH, which is where
+   every shape sat when z was not adjustable at all. Raise it for a shape that
+   wants the near and far rims, and read the note on FMT_DEPTH first — the
+   default is an inset for a reason. They are listed in the order the items
+   ARRIVE — every item falls at the same speed from the same height, so
+   emission order is landing order.
 
    Every beat here is FOOD. Hazards used to be written in as `bad` beats, which
    made them a property of the shape: the same two decoys in the same two
