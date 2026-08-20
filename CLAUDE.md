@@ -402,8 +402,10 @@ Operations, RLS proof and moderation SQL are in `supabase/README.md`.
   and leaves the size the fit just chose alone; sliding the rig back raises the
   image by moving further away and pays for it in platform depth. Where the HUD
   band cannot cover the shift the platform gives way too, but only down to
-  `CATCH_MIN_PX`. Anything that reframes a phone has to leave `most >= ideal` in
-  `refreshTouchMap` true, or the hand covers the near half of the arena again.
+  `CATCH_MIN_PX`. The band asked for is a `HAND_TOLERANCE` short of the whole
+  field — at the full depth the platform framed too high. Anything that reframes
+  a phone has to keep `most` within that of `ideal` in `refreshTouchMap`, or the
+  hand covers the near half of the arena again.
 - **The sky is a strip, not a screen**: 3.2% of screen height on desktop, 16.5%
   on a phone, painted by `makeSkyTexture` and sized by `skyBand()`. Do not put
   sky ornaments in `skyRig` as 3D objects — everything there projects to NDC y
