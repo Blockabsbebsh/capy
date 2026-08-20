@@ -1,14 +1,15 @@
 #!/usr/bin/env node
 /* =======================================================================
-   ROUTE EDITOR — the shape library, editable
+   ROUTE EDITOR — the route library, editable
 
-   `js/shapes.js` is the deck the spawn director chains routes out of, and it
-   is plain data: nineteen shapes of two to seven normalised beats. Editing it
-   by hand means holding an arena in your head, which is exactly the thing a
-   picture is for — every shape in this file was drawn on graph paper first.
+   `js/routes.js` is the deck the spawn director emits from, and it is plain
+   data: routes of three to fourteen beats in a unit disc. Editing it by hand
+   means holding an arena in your head, which is exactly the thing a picture is
+   for — and now that a route lands exactly as drawn, the picture is the whole
+   contract rather than an approximation of one.
 
    So: this serves the repo AND an editor over the same origin, reads the real
-   `js/shapes.js`, and writes it straight back. There is no separate copy of
+   `js/routes.js`, and writes it straight back. There is no separate copy of
    the data and no build step — the game loads the same file it always did, so
    a saved shape is live on the next reload. The editor page runs the GAME's
    own arithmetic for its checks (it loads config.js and formations.js), so
@@ -21,10 +22,10 @@
                                        # come out empty, which is the round-trip
                                        # proof for the writer below
 
-   THE ROUND TRIP IS THE WHOLE CONTRACT. Everything above `const FMT_SHAPES = [`
+   THE ROUND TRIP IS THE WHOLE CONTRACT. Everything above `const ROUTES = [`
    and below the closing `];` is preserved byte for byte; only the array body is
-   regenerated. A `//` comment block sitting directly above a shape — no blank
-   line between — is that shape's note, and comes back as a comment. Anything
+   regenerated. A `//` comment block sitting directly above a route — no blank
+   line between — is that route's note, and comes back as a comment. Anything
    else inside the array (a stray block comment, a note under a blank line) is
    NOT preserved, which is why the file is written in exactly one style.
    ======================================================================= */
@@ -32,7 +33,7 @@
 const fs = require('fs'), path = require('path'), http = require('http');
 
 const ROOT = path.resolve(__dirname, '..');
-const FILE = path.join(ROOT, 'js', 'shapes.js');
+const FILE = path.join(ROOT, 'js', 'routes.js');
 
 /* ------------------------------------------------------------------ read -
    The array is evaluated rather than parsed: it is a JS literal in a file we
@@ -42,13 +43,13 @@ const FILE = path.join(ROOT, 'js', 'shapes.js');
 function readShapes(){
   const src = fs.readFileSync(FILE, 'utf8');
   const lines = src.split('\n');
-  const start = lines.findIndex(l => /^const FMT_SHAPES = \[/.test(l));
+  const start = lines.findIndex(l => /^const ROUTES = \[/.test(l));
   const end = lines.findIndex((l, i) => i > start && /^\];/.test(l));
   if (start < 0 || end < 0)
-    throw new Error(`${FILE}: no "const FMT_SHAPES = [ … ];" block at column 0`);
+    throw new Error(`${FILE}: no "const ROUTES = [ … ];" block at column 0`);
 
   const body = lines.slice(start, end + 1).join('\n');
-  const shapes = new Function(body.replace(/^const /, 'var ') + '\nreturn FMT_SHAPES;')();
+  const shapes = new Function(body.replace(/^const /, 'var ') + '\nreturn ROUTES;')();
 
   /* Notes: `//` lines run together directly above a `{ id:'…'` line. A blank
      line breaks the run, so a comment that belongs to the array rather than to
@@ -67,17 +68,12 @@ function readShapes(){
 }
 
 /* ----------------------------------------------------------------- write -
-   Two decimals and no trailing zeros for a coordinate, one kept for `span`
-   because it is a fraction of the arena and reads as one. The file's own
+   Two decimals and no trailing zeros for a coordinate. The file's own
    formatting is whatever comes out of here — it was canonicalised the first
    time this ran, which is what makes `--rewrite` + an empty `git diff` a real
    proof rather than a comparison against hand-wrapped lines nobody can
    reproduce. */
 const num = v => String(Math.round(v * 100) / 100);
-const spanText = v => {
-  const t = (Math.round(v * 100) / 100).toFixed(2).replace(/0$/, '');
-  return t.endsWith('.') ? t + '0' : t;
-};
 
 /* One shape: its note as a `//` block, the fields on one line, then the beats
    wrapped at the width the rest of the repo is written to. */
@@ -87,9 +83,7 @@ function shapeText(s){
   const out = [];
   for (const line of String(s.note || '').split('\n'))
     if (line.trim()) out.push('  // ' + line.trim());
-  out.push(`  { id:'${s.id}', min:${s.min}, span:${spanText(s.span)}, ` +
-           (s.depth != null ? `depth:${spanText(s.depth)}, ` : '') +
-           `weight:${s.weight}, beats:[`);
+  out.push(`  { id:'${s.id}', min:${s.min}, weight:${s.weight}, beats:[`);
 
   const beats = s.beats.map(b =>
     `{x:${num(b.x)},z:${num(b.z)}${b.dash ? ',dash:true' : ''}}`);
@@ -115,14 +109,17 @@ function writeShapes(shapes){
 }
 
 /* ------------------------------------------------------------ validation -
-   Structure only. Whether a shape READS well is geometry, and the editor page
-   answers that with the game's own routeNoise rather than a second copy of it
-   living here — but nothing that would break the director at parse or emit
-   time is allowed onto disk, since the game has no error path for it. */
+   Structure only. Whether a route READS well is geometry, and the editor page
+   answers that with a drawing rather than a rule living here — but nothing
+   that would break the director at parse or emit time is allowed onto disk,
+   since the game has no error path for it. The disc check is the one that
+   carries weight: a beat inside the unit disc is inside the arena at every
+   rotation, and that promise is what lets a route be dropped at any angle. */
 const ID_RE = /^[a-z][a-z0-9]*$/;
+const MAX_BEATS = 18;
 function validate(shapes){
   const errs = [];
-  const bad = (i, msg) => errs.push(`shape ${i + 1}${shapes[i] && shapes[i].id ?
+  const bad = (i, msg) => errs.push(`route ${i + 1}${shapes[i] && shapes[i].id ?
                                      ` (${shapes[i].id})` : ''}: ${msg}`);
   if (!Array.isArray(shapes) || !shapes.length) return ['the library is empty'];
   const seen = new Set();
@@ -132,19 +129,22 @@ function validate(shapes){
     else if (seen.has(s.id)) bad(i, `duplicate id ${s.id}`);
     seen.add(s.id);
     if (!Number.isInteger(s.min) || s.min < 1 || s.min > 99) bad(i, 'min must be 1-99');
-    if (!(s.span > 0.05 && s.span <= 1)) bad(i, 'span must be 0.05-1');
-    // depth is optional — absent means FMT_DEPTH, which is where every shape
-    // sat before z was adjustable. The editor omits it when it matches, so the
-    // default lives in formations.js only and cannot drift into this file.
-    if (s.depth != null && !(s.depth > 0.05 && s.depth <= 1))
-      bad(i, 'depth must be 0.05-1, or absent for the default');
     if (!Number.isInteger(s.weight) || s.weight < 1 || s.weight > 6) bad(i, 'weight must be 1-6');
     if (!Array.isArray(s.beats) || s.beats.length < 2) bad(i, 'needs at least 2 beats');
-    else if (s.beats.length > 12) bad(i, 'more than 12 beats — FOOD_CAP is 18 for a whole route');
+    /* One length limit, in one place, and it is the ribbon's: past about
+       eighteen beats a route has more dots than the field can separate. There
+       is nothing else to keep it in step with — the old deck carried three
+       different numbers for this because a route was assembled at runtime out
+       of pieces and each stage guessed at its own ceiling. */
+    else if (s.beats.length > MAX_BEATS) bad(i, `more than ${MAX_BEATS} beats`);
     else s.beats.forEach((b, j) => {
       for (const k of ['x', 'z'])
-        if (!Number.isFinite(b[k]) || Math.abs(b[k]) > 1)
-          bad(i, `beat ${j + 1}: ${k} must be a number in -1..1`);
+        if (!Number.isFinite(b[k])) return bad(i, `beat ${j + 1}: ${k} must be a number`);
+      /* THE UNIT DISC is the contract with the game: a beat inside it is a beat
+         inside the arena at every rotation, which is what lets a route be
+         dropped at any angle without being clamped into a different figure. */
+      if (Math.hypot(b.x, b.z) > 1.0001)
+        bad(i, `beat ${j + 1}: outside the disc (${Math.hypot(b.x, b.z).toFixed(2)} > 1)`);
     });
     if (s.note != null && typeof s.note !== 'string') bad(i, 'note must be text');
   });
@@ -157,9 +157,6 @@ function clean(shapes){
   return shapes.map(s => ({
     id: String(s.id || '').trim(),
     min: Math.round(Number(s.min)),
-    span: Math.round(Number(s.span) * 100) / 100,
-    ...(Number.isFinite(Number(s.depth))
-        ? { depth: Math.round(Number(s.depth) * 100) / 100 } : {}),
     weight: Math.round(Number(s.weight)),
     note: String(s.note || '').replace(/\r/g, ''),
     beats: (Array.isArray(s.beats) ? s.beats : []).map(b => {
@@ -199,24 +196,24 @@ function serve(port){
     const url = new URL(req.url, 'http://localhost');
     const p = decodeURIComponent(url.pathname);
 
-    if (p === '/api/shapes' && req.method === 'GET'){
-      try { return sendJSON(res, 200, { shapes: readShapes().shapes, file: 'js/shapes.js' }); }
+    if (p === '/api/routes' && req.method === 'GET'){
+      try { return sendJSON(res, 200, { routes: readShapes().shapes, file: 'js/routes.js' }); }
       catch (e){ return sendJSON(res, 500, { error: String(e.message) }); }
     }
-    if (p === '/api/shapes' && req.method === 'PUT'){
+    if (p === '/api/routes' && req.method === 'PUT'){
       let body = '';
       req.on('data', c => { body += c; if (body.length > 1e6) req.destroy(); });
       req.on('end', () => {
         let shapes;
-        try { shapes = clean(JSON.parse(body).shapes); }
+        try { shapes = clean(JSON.parse(body).routes); }
         catch (e){ return sendJSON(res, 400, { error: 'bad JSON: ' + e.message }); }
         const errs = validate(shapes);
         if (errs.length) return sendJSON(res, 400, { error: errs.join('\n'), errors: errs });
         try { writeShapes(shapes); }
         catch (e){ return sendJSON(res, 500, { error: String(e.message) }); }
-        console.log(`  wrote js/shapes.js — ${shapes.length} shapes`);
+        console.log(`  wrote js/routes.js — ${shapes.length} routes`);
         // read back, so the page ends up holding exactly what is on disk
-        return sendJSON(res, 200, { ok: true, shapes: readShapes().shapes });
+        return sendJSON(res, 200, { ok: true, routes: readShapes().shapes });
       });
       return;
     }
@@ -248,17 +245,15 @@ if (argv.includes('--check') || argv.includes('--rewrite')){
   const errs = validate(shapes);
   for (const s of shapes){
     const dash = s.beats.filter(b => b.dash).length;
-    console.log(`  ${s.id.padEnd(10)} min ${String(s.min).padStart(2)}  ` +
-                `weight ${s.weight}  span ${s.span}` +
-                (s.depth != null ? `  depth ${s.depth}` : '') +
-                `  ${s.beats.length} beats` +
+    console.log(`  ${s.id.padEnd(12)} min ${String(s.min).padStart(2)}  ` +
+                `weight ${s.weight}  ${String(s.beats.length).padStart(2)} beats` +
                 (dash ? `  ${dash} dash` : ''));
   }
-  console.log(`  ${shapes.length} shapes`);
+  console.log(`  ${shapes.length} routes`);
   if (errs.length){ console.error('FAIL\n  ' + errs.join('\n  ')); process.exit(1); }
   if (argv.includes('--rewrite')){
     writeShapes(shapes);
-    console.log('  rewritten — `git diff js/shapes.js` should be empty');
+    console.log('  rewritten — `git diff js/routes.js` should be empty');
   }
   console.log('ok');
 } else {

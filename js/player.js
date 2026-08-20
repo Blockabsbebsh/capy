@@ -98,8 +98,8 @@ function fallInHole(h){
 function respawnCapy(){
   let bx = 0, bz = 1.0, best = -1;
   for (let i = 0; i < 60; i++){
-    const x = i === 0 ? 0 : (Math.random()*2 - 1) * (ARENA.halfX - 1);
-    const z = i === 0 ? 1.0 : (Math.random()*2 - 1) * (ARENA.halfZ - 0.6);
+    const spot = i === 0 ? { x:0, z:1.0 } : arenaRandom(1.0);
+    const x = spot.x, z = spot.z;
     let d = Infinity;
     for (const h of holes) d = Math.min(d, Math.hypot(x - h.x, z - h.z) - h.r);
     if (d > best){ best = d; bx = x; bz = z; }
@@ -257,16 +257,30 @@ function updateCapybara(dt){
   capyState.x += capyState.vx * dt;
   capyState.z += capyState.vz * dt;
 
-  // One arena shape for every biome: the rectangular ARENA bounds. The pond
-  // used to clamp to an ellipse of its own instead, which is what made it the
-  // only level where you slid along a curved wall and could not reach the
-  // corners — the lily rim is dressing on the same play field as everywhere
-  // else, not a different one.
+  /* THE RIM. One arena shape for every biome, and the reason this is four
+     lines instead of a reflection: a curved wall is only unpleasant if it
+     fights you on it.
+
+     The old rectangle flipped the axis velocity (`*= -0.25`), which on a
+     circle is a bounce off a tangent — you get shoved sideways by a wall you
+     walked into straight, and repeatedly, which is the saw-tooth. So only the
+     OUTWARD component is removed here. What is left is the part along the rim:
+     walk into the edge at an angle and you glide around it, walk into it
+     square and you simply stop. Nothing is ever added to your velocity.
+
+     This is the safety net rather than the mechanism. Both pointers clamp
+     their TARGET into the field before the controller ever sees it (see
+     steerTo), so ordinary steering never presses on the wall at all — what
+     reaches here is the keys, a dash, and being thrown out of a sinkhole. */
   let hitWall = false;
-  if (capyState.x < -ARENA.halfX){ capyState.x = -ARENA.halfX; capyState.vx *= -0.25; hitWall = true; }
-  if (capyState.x >  ARENA.halfX){ capyState.x =  ARENA.halfX; capyState.vx *= -0.25; hitWall = true; }
-  if (capyState.z < -ARENA.halfZ){ capyState.z = -ARENA.halfZ; capyState.vz *= -0.25; hitWall = true; }
-  if (capyState.z >  ARENA.halfZ){ capyState.z =  ARENA.halfZ; capyState.vz *= -0.25; hitWall = true; }
+  const rim = Math.hypot(capyState.x, capyState.z);
+  if (rim > ARENA.r){
+    const nx = capyState.x / rim, nz = capyState.z / rim;
+    capyState.x = nx * ARENA.r; capyState.z = nz * ARENA.r;
+    const out = capyState.vx * nx + capyState.vz * nz;
+    if (out > 0){ capyState.vx -= out * nx; capyState.vz -= out * nz; }
+    hitWall = true;
+  }
   // a dash into the wall ends there rather than grinding along it for the
   // rest of its duration, which is what re-applying the burst every frame
   // would otherwise do
@@ -314,8 +328,8 @@ function updateCapybara(dt){
         const away = new THREE.Vector2(capyState.x - h.x, capyState.z - h.z);
         if (away.lengthSq() < 0.001) away.set(1, 0);
         away.normalize().multiplyScalar(h.r * 1.35);
-        capyState.x = THREE.MathUtils.clamp(h.x + away.x, -ARENA.halfX, ARENA.halfX);
-        capyState.z = THREE.MathUtils.clamp(h.z + away.y, -ARENA.halfZ, ARENA.halfZ);
+        const out = arenaClamp(h.x + away.x, h.z + away.y);
+        capyState.x = out.x; capyState.z = out.z;
         popUp(7.5);
         capyState.invuln = 0.7;
       } else {

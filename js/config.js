@@ -1,7 +1,59 @@
 /* =======================================================================
    CONSTANTS / TUNING
    ======================================================================= */
-const ARENA = { halfX: 8.6, halfZ: 4.2 };      // capybara movement bounds
+/* THE ARENA IS A CIRCLE, and that is a route decision as much as a movement
+   one. A route is authored in a unit disc and dropped in at any angle: on a
+   circle a rotation is exact — every distance, angle and proportion survives
+   it — so one authored route is 360 different-looking routes and none of them
+   can fall outside the field. On the old rectangle (and on any ellipse) a
+   rotation shears the shape and has to be clamped back in, which is a
+   different figure at every angle and provably nothing.
+
+   It reads as an ellipse because the camera looks down the field at an angle,
+   which is the only reason the arena ever WAS an ellipse — that shape was
+   being drawn in the world and then flattened again by perspective.
+
+   `r` is the walkable radius and `pad` is the dressing beyond it: the grass
+   you can see but not stand on, which is now a rim rather than the 2.6x of
+   unreachable field the rectangle-in-an-ellipse used to leave. */
+/* The radius is the old rectangle's AREA, made round: 17.2 x 8.4 was 144.5
+   square units, and a circle of 6.78 is the same. Keeping the area is what
+   keeps every number tuned against it — step distances, fmtSpeed, the catch
+   radius, the difficulty curve — inside the range they were proven in.
+
+   It is also what pays for the depth. The field is as deep as it is wide now,
+   and fitCamera has to fit both (it only ever fitted width, because a
+   rectangle's depth never ran out first). Fitting depth on a 16:9 screen costs
+   pixels-per-unit, and shrinking the world radius is what buys them back: the
+   catch radius is a fixed 1.25 units, so a smaller field draws it BIGGER on
+   screen. At 8.6 a phone read it at 24px; at 6.8, 30px. */
+const ARENA = { r: 6.8, pad: 0.55 };
+const PATCH_R = ARENA.r + ARENA.pad;
+
+/* Nearest point inside the field. Every "keep this in the arena" in the game
+   goes through here, so the arena has ONE definition — the old rectangle was
+   open-coded at a dozen call sites and the drawn floor agreed with none of
+   them. `margin` keeps a thing that has size clear of the rim. */
+const _arenaPt = { x:0, z:0 };
+function arenaClamp(x, z, margin = 0){
+  const R = Math.max(0, ARENA.r - margin);
+  const d = Math.hypot(x, z);
+  if (d <= R || d === 0){ _arenaPt.x = x; _arenaPt.z = z; }
+  else { _arenaPt.x = x / d * R; _arenaPt.z = z / d * R; }
+  return _arenaPt;
+}
+function insideArena(x, z, margin = 0){
+  const R = Math.max(0, ARENA.r - margin);
+  return x * x + z * z <= R * R;
+}
+/* A random point in the field, uniform by AREA — sqrt(u) rather than u, or
+   everything scattered this way piles into the middle. */
+function arenaRandom(margin = 0){
+  const R = Math.max(0, ARENA.r - margin);
+  const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * R;
+  _arenaPt.x = Math.cos(a) * d; _arenaPt.z = Math.sin(a) * d;
+  return _arenaPt;
+}
 const SPAWN_Y = 15;
 const CATCH_Y = 1.35;                           // mouth height
 const CATCH_R = 1.25;                           // horizontal catch radius
