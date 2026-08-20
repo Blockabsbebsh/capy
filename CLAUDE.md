@@ -39,7 +39,7 @@ only grows, and every line of restated code comment dilutes the ones that bite.
 `assets/icons/*.png`, `js/capymodel.js` — GENERATED. Do not hand-edit.
 `tools/icons.py`, `tools/glb2json.mjs` — the offline converters.
 `tools/routes.js` + `tools/routeeditor.*` — the route editor, which reads and
-writes `js/shapes.js`.
+writes `js/routes.js`.
 `supabase/` — the score board schema, applied by Supabase and not by the game.
 
 Load order, which is also roughly the dependency order:
@@ -62,8 +62,8 @@ Load order, which is also roughly the dependency order:
 | `sinkholes.js` | Hole telegraph/open/close, `holeAt` |
 | `stack.js` | Hat mounting, the head food-stack, debris |
 | `state.js` | The `game` object, difficulty curve, hat unlocks, combo |
-| `shapes.js` | `FMT_SHAPES` — the shape deck, as data. Edited by `tools/routes.js` |
-| `formations.js` | The spawn director: routes, the route ribbon, route-clear scoring |
+| `routes.js` | `ROUTES` — the route library, as data. Edited by `tools/routes.js` |
+| `formations.js` | The spawn director: placing a route, the ribbon, route-clear scoring |
 | `powers.js` | Shield bubble, `shieldUp`/`absorbHit`, Auto-Shield, power activation |
 | `hud.js` | `$`, `ui`, HUD rendering, the perk rail, `popup`, `showBanner`, `flash` |
 | `scores.js` | The high score board: `SCORE_API` transport, tag prompt, board panel |
@@ -87,19 +87,19 @@ pip install pillow numpy scipy # only for tools/icons.py
 python3 -m http.server 8765 &
 node tools/shoot.js --check                  # assertions, non-zero on failure
 node tools/music.js --wav                    # the five themes; also run --level 6+
-node tools/shoot.js --fmt                    # autopilot-walks every shape + feast route
+node tools/shoot.js --fmt                    # autopilot-walks every route + feast route
 node tools/shoot.js --touch                  # touch steering against a modelled thumb
 node tools/shoot.js --icons                  # every icon at the size it is drawn at
 node tools/shoot.js --biome hell,night       # screenshot biomes
 node tools/shoot.js --capy                   # capybara turnaround
 node tools/shoot.js --play                   # menu + gameplay + hat fit
 python3 tools/icons.py --check               # every icon PNG still matches its art
-node tools/routes.js --check                 # the shape deck parses and is valid
+node tools/routes.js --check                 # the route library parses and is valid
 node tools/routes.js --rewrite               # round-trip proof: `git diff` must be empty
 node tools/routes.js                         # the route editor, on :8766
 ```
 
-- **`--fmt` is the clearability proof.** Run it after touching a shape,
+- **`--fmt` is the clearability proof.** Run it after touching a route,
   `stepTime`, movement, or anything that scales speed. Why its autopilot is
   written the way it is, is at the top of that block in `shoot.js`.
 - **Read screenshots back**, and take the one where the bug could not hide.
@@ -154,35 +154,40 @@ Operations, RLS proof and moderation SQL are in `supabase/README.md`.
 ## The route editor
 
 `node tools/routes.js` serves the editor and the game on one origin and writes
-`js/shapes.js` in place. Read the header of that file before changing it.
+`js/routes.js` in place. Read the header of that file before changing it.
 
-- **`js/shapes.js` is the only copy of the deck, and the editor writes it
+- **`js/routes.js` is the only copy of the library, and the editor writes it
   directly.** There is no export step and no second store to sync — git is the
   undo, which is the whole reason the tool is allowed to write source.
 - **The writer owns the array body and nothing else.** Everything above
-  `const FMT_SHAPES = [` and below the closing `];` is preserved byte for byte,
-  and a `//` block directly above a shape — no blank line — is that shape's
+  `const ROUTES = [` and below the closing `];` is preserved byte for byte,
+  and a `//` block directly above a route — no blank line — is that route's
   note. Anything else inside the array is lost on the next save, so the file is
   written in exactly one style. `--rewrite` plus an empty `git diff` is the
   proof, and it is worth running after touching the writer.
-- **The editor page runs the GAME's arithmetic, never a copy of it.** It loads
-  `config.js`, `shapes.js` and `formations.js`, so `stepTime`, `fmtReach`,
-  `routeNoise`, `crosses` and `beside` are the director's own. A checker that
-  drifts from the game is worse than none, because it is believed.
-- **It cannot prove a shape is walkable and does not claim to.** Gaps come out
-  of `stepTime`, so a shape is clearable by construction; whether a PERSON can
+- **What is drawn is what lands.** The game adds a rotation and a scale to the
+  arena radius and nothing else, so the editor's picture is the contract rather
+  than an approximation of one. That is new: the tool this replaced drew shapes
+  that the director then chained, anchored and re-scaled.
+- **The editor page runs the GAME's arithmetic for anything the game computes**
+  — `stepTime`, `fmtReach`, `fmtSpeed`, `beside`, `REVEAL_AHEAD` — because a
+  checker that drifts from the game is worse than none, since it is believed.
+  Its readability findings are the editor's OWN, deliberately: the game no
+  longer scores routes at all, so there is nothing to be in step with.
+- **It cannot prove a route is walkable and does not claim to.** Gaps come out
+  of `stepTime`, so a route is clearable by construction; whether a PERSON can
   read and walk it is what `node tools/shoot.js --fmt` answers. Run it before
-  keeping a new shape.
-- **A warning is a reading, not a rule.** Shipped shapes carry them — `funnel`
-  is the noisiest thing in the deck and trips the z-lane check — because a
-  sharp angle is sometimes the good part. Only the structural errors block a
-  save, and those are the ones the director has no error path for.
-- **`?shape=<id>` pins the director to one shape** and ignores its unlock
+  keeping a new route.
+- **A warning is a reading, not a rule.** Shipped routes carry them — a weave
+  trips the near-reversal check at every beat, because that IS the weave. Only
+  the structural errors block a save, and those are the ones the director has
+  no error path for.
+- **`?route=<id>` pins the director to one route** and ignores its unlock
   level, which is what the editor's TEST button opens. An unknown id plays a
   normal game rather than no game.
-- **The deck's SIZE is not asserted any more.** `--check` asserts every shape in
-  it is emittable — unique lowercase id, two or more beats, all inside the
-  -1..1 footprint — because adding a shape is the point of the tool.
+- **ROTATE is a preview and is never saved.** The game rolls a fresh angle
+  every emit, so "how does this read turned 140°" is a question the author has
+  to be able to ask — it is the one thing about a route that is not in the data.
 
 ## UI rules
 
@@ -232,9 +237,26 @@ Operations, RLS proof and moderation SQL are in `supabase/README.md`.
   capybara stands ABOVE the fingertip, and the finger map is derived from the
   projected arena, never dialled in — the constraint order and the measurements
   behind all of it are in `input.js` and `refreshTouchMap`.
+- **Both pointers clamp their TARGET into the field, and that is what makes a
+  round rim pleasant.** Point past the edge and you ask for the nearest point
+  ON the edge, so the capybara arrives and stops; without it the controller
+  drives into the wall and holds there. The rim code in `updateCapybara` is
+  then only a safety net for the keys, a dash and a sinkhole bounce — and it
+  removes only the OUTWARD component of velocity. Do not reflect it: on a
+  circle a reflection is a bounce off a tangent, which shoves you sideways
+  along a wall you walked into straight. That is the saw-tooth.
 - **A steering scheme needs evidence, and `--touch` is where it goes.** Three
   have been removed for lack of it. `updateCapybara` and `tryDash` know nothing
   about input devices; keep it that way.
+- **ONE reach for both axes.** They were fitted separately, and the reason was
+  that the arena was 2:1 and only its width strained. A circular field is as
+  deep as it is wide, and fitted apart they came out 1 and 1.35 — a 0.74x skew,
+  worse than anything the rectangle produced. Taking the larger satisfies both
+  constraints and makes the skew exactly **zero**, measured, at every viewport.
+- **`LIFT_REACH` is 1, not 1.35.** The lift used to take screen room on the
+  promise of a 1.35 depth scale, which left too little below the finger for the
+  near rim, which forced the scale to actually BE 1.35. A true 1:1 is what
+  `input.js` calls load-bearing; the lift should not be the thing spending it.
 - **The touch map is near 1:1, and the thumb-strain floor is OFF** (`?strain=1`
   puts it back). It was the only thing scaling the two axes differently, and it
   charged twice for the reach it bought: a diagonal walked up to **18.1° off the
@@ -250,15 +272,9 @@ Operations, RLS proof and moderation SQL are in `supabase/README.md`.
   — play-tested as the better grip — does not care; a one-handed thumb might.
   `--touch` still asserts every corner is reachable and aimable, which is the
   floor under the trade.
-- **The skew is not zero everywhere, and the rest of it is not optional.** A
-  modern portrait phone lands at 1.13x (3.5°), which is the common case and the
-  one that was 18.1°. Small screens and landscape come out INVERTED and smaller
-  — 0.81x and 0.74x, 6-9° — because `touchReachZ` is held up by the depth reach
-  constraint (fitting the arena between the HUD and the DASH button) rather than
-  by strain. That floor cannot be dropped without losing a corner, so do not
-  chase the last few degrees there: judge on the ANGLE `--touch` prints, never
-  on the ratio, which passes through 1.0 and reads as agreement in both
-  directions.
+- **Judge steering on the ANGLE `--touch` prints, never on the ratio**, which
+  passes through 1.0 and reads as agreement in both directions. It is 0° now on
+  every viewport; if it moves off zero, something took the two axes apart again.
 - **`game.up.speed` is the only thing that scales movement.** Sticky Feet halves
   it and `fmtSpeed` reads the same field, which is what keeps routes walkable at
   half speed. Anything else that changes speed times formations against a speed
@@ -274,27 +290,42 @@ Operations, RLS proof and moderation SQL are in `supabase/README.md`.
 - **Every formation is provably clearable.** `stepTime()` computes each gap from
   distance and speed; gaps are never hand-authored. Difficulty raises `fmtReach`
   and shortens `fmtGap` — **not** fall speed, which caps at `FALL_CAP`.
-- **A route is several shapes chained, not one.** Each is anchored where the
-  last one ended, so the join is an ordinary step `stepTime` prices like any
-  other and no shape had to be redesigned to be long.
-- **Length is a DISTRIBUTION, not a curve.** What grows with the level is the
-  chance of a long route and how long it may be (`FOOD_CAP` 18) — never the
-  floor. A three-to-five beat route read at a glance is the best-feeling thing
-  in the game and must keep appearing at every level; scaling one length up
-  deleted it, which is what made level 11 feel relentless. `--check` asserts the
-  long tail grows AND that short routes are still most of the mix.
-- **Readability is measured, like clearability.** Chaining puts several shapes
-  in one arena, and crossings then grow with the SQUARE of the length — at 14
-  beats that averaged 16 a route, which is the "random noise" a route must never
-  look like. `routeNoise` scores crossings, near-reversals and beats too close
-  to tell apart; `emitFormation` builds `ROUTE_TRIES` candidates and walks the
-  cleanest. Scored, not forbidden — a sharp angle is sometimes the good part.
-- **Score what would be ON SCREEN TOGETHER, not everything.** The ribbon only
-  draws a window, so a route folding back over ground it used ten beats ago is
-  never ambiguous — that line is long gone. Weighting crossings inside the
-  window heavily and the rest barely is what lets a long route use the whole
-  arena instead of being pushed into a corner to avoid itself.
-- **Hazards are placed at emit time, never written into a shape.** A shape with
+- **A route is emitted exactly as it was drawn.** The library in `js/routes.js`
+  is the whole deck; the director picks one, rotates it to a random angle,
+  scales it to `ARENA.r` and prices the steps. There is no runtime
+  construction. What that replaced chained two to five smaller shapes per
+  route, and it measured badly: the joins averaged a **105° turn against 65°
+  inside a shape**, and **46% of them exceeded the system's own near-reversal
+  threshold against 2% inside a shape**. The randomness a player saw was the
+  seams. It also bought little — 60% of late-game routes were a single shape
+  anyway. Do not reintroduce it without measuring the joins first.
+- **Routes are authored in a UNIT DISC, and that is why the arena is a circle.**
+  A rotation on a circle is exact: every distance, angle and proportion
+  survives, so one authored route is 360 that all still fit and none has to be
+  clamped, squashed or redrawn. On a rectangle — or any ellipse — a rotation
+  shears the figure and has to be clamped back in, which is a different route
+  at every angle and provably nothing. `--check` asserts every route stays
+  inside the field at 24 angles apiece.
+- **Length is AUTHORED, paced by `min`.** Short routes early, longer ones
+  layered on top, and nothing is ever taken out of the pool — so a three-beat
+  route still comes up at level 60, which is the best-feeling thing in the game
+  and what made level 11 relentless when it went missing. There is no
+  distribution to tune. `--check` asserts nothing long early, long available
+  late, and short routes still most of the mix.
+- **The approach to the first beat is priced like any other step.** `at[0]` is
+  `stepTime` from wherever the capybara is, less the fall time, so a route may
+  be dropped at any angle without anchoring. The old chainer slid each shape
+  sideways to meet the walk instead — which worked for 8 of 19 shapes and
+  pinned the other 11 to the middle of the arena, since `slackX` came out zero
+  for anything wider than `span 0.93`.
+- **Readability is authored, not searched.** The game used to score each route
+  and walk the cleanest of fourteen candidates, because chaining made them
+  noisy. Drawn routes do not need it: crossings fell from 0.46 a route to 0.11
+  and dot-crowding to 0.00. `--check` keeps both as regression checks, plus the
+  one that matters — **no route ever retraces its own line** (worst turn under
+  155°). A weave turning hard at every beat is the route, not a fault; a turn
+  near 180° draws one stroke for two steps and is never readable.
+- **Hazards are placed at emit time, never written into a route.** A route with
   baked-in decoys is a hand you learn, and it carried the same two whether the
   route was five beats or twenty. The cap is the player-facing rule — **one
   hazard per six food items** — and `beside()` puts each one off the walking
@@ -311,20 +342,18 @@ Operations, RLS proof and moderation SQL are in `supabase/README.md`.
 - **Overtime difficulty is spent on density, never on speed.** Every curve caps
   by about level 24; `overtime()` climbs past it into hazard rate, set-piece
   size and cadence. A route that cannot be read, or walked, is not difficulty.
-- **A route is read off dots, not lines.** The arena is twice as wide as it is
-  deep, so a shape that crosses it more than once draws near-parallel streaks in
-  one band: traverse repeatedly and it must step in **z** as it goes (see
-  `pendulum`, `pincer`) or it is unreadable however it is drawn.
-- **The ribbon is a window that SLIDES, not a picture drawn once** (`revealPath`).
-  It shows the next few steps brightly, the ones after fading, nothing beyond,
-  and it slides on every beat that lands — so a later segment only appears once
-  the earlier one it would have crossed is gone. Dots run further ahead than
-  lines (`DOT_AHEAD` vs `LINE_AHEAD`), because a dot stays legible however many
-  there are and a line is what turns into spaghetti. Never draw one without the
-  other around it: a dot past the line window is a "dot in the middle of
-  nowhere", which is exactly what a fixed window shipped.
-- **A feast draws no ribbon, and that is deliberate.** `revealPath` only shows
-  `LINE_AHEAD` steps of line and slides on resolved formation beats — a feast
+- **The ribbon is a window that SLIDES, not a picture drawn once** (`revealPath`
+  sets targets, `updatePaths` eases toward them every frame). Nearest beats
+  brightest, the far edge of the window dimmer, nothing beyond, and it slides
+  on every beat that lands.
+- **Dots and lines share ONE window, and nothing cuts in or out.** They used to
+  run to different depths (9 and 5), which drew dots hanging several beats past
+  any line — "random dots in the distance" while you were still on the first
+  few. And every piece was switched rather than faded, so the window slid like
+  a shutter. Both are asserted by `--check`, driven at a fixed 1/60 because a
+  fade cannot be seen at the harness's five frames a second.
+- **A feast draws no ribbon, and that is deliberate.** The window only shows
+  `REVEAL_AHEAD` beats and slides on resolved formation beats — a feast
   resolves none, so its twenty-melon trail stopped a third of the way across
   and stayed there. The melons arrive in order with their own landing rings,
   which is a trail that keeps up; the routing is untouched.
@@ -358,11 +387,16 @@ Operations, RLS proof and moderation SQL are in `supabase/README.md`.
 
 - `animate()` rewrites `camera.position` every frame from `camFit`/`CAM_LOOK`.
   To move the camera, mutate those — not the camera.
-- **`fitCamera` fits the arena's WIDTH, and on a tall screen also pitches.** The
-  width fit alone left a portrait phone a 371x92px strip, putting the catch
-  radius at 14px up the screen. The pitch interpolates on aspect and the wide
-  end reproduces the original pose exactly, so desktop framing is byte-identical
-  — do not make it unconditional. `touchLift` is recomputed in the same pass.
+- **`fitCamera` fits the WHOLE platform — width AND depth — as large as both
+  allow.** It used to fit width only and floor the zoom at 1, which was right
+  for a field two units wide for every one deep: depth never ran out first, so
+  it was never checked, and the floor kept desktop framing byte-identical. On a
+  circle depth is what runs out first, and unchecked the near rim landed BELOW
+  the bottom of the window with the opening beats of a route off screen. It
+  bisects on zoom rather than stepping up until it fits — stepping overshoots
+  by its step every pass, measured as a field a sixth smaller than it needed to
+  be. Monotone in zoom, so twenty halvings land exactly, and it runs on resize
+  only. `touchLift` is recomputed in the same pass.
 - **The sky is a strip, not a screen**: 3.2% of screen height on desktop, 16.5%
   on a phone, painted by `makeSkyTexture` and sized by `skyBand()`. Do not put
   sky ornaments in `skyRig` as 3D objects — everything there projects to NDC y
@@ -370,6 +404,12 @@ Operations, RLS proof and moderation SQL are in `supabase/README.md`.
 - `patch.material` **is** `mat.grassDark`. Mutating it in
   `refreshThemeEnvironment` fights the per-frame lerp in `updateThemeMix`, which
   is why that lerp is meadow-only.
+- **The drawn floor and the playable field are the same circle**, `PATCH_R`
+  being `ARENA.r` plus a rim of `ARENA.pad`. They used to be a rectangle inside
+  an ellipse of 2.6x the area, whose corners stuck out of the grass — so
+  "clear of the arena" meant three different things and a prop could hide in
+  the gap. Everything that keeps a thing inside the field goes through
+  `arenaClamp`/`insideArena`/`arenaRandom` in config.js; do not open-code it.
 - **Hell's slab is not raised** — the lava field is lowered by `HELL_LAVA_DROP`,
   with `hellSkirt` filling the step. Anything at lava level needs the same
   offset *and* `outsidePatch`.

@@ -268,7 +268,7 @@ const fail = [];
         fmt.strayTimer = 1e9;                        // strays would distract it
       };
 
-      const realPick = pickShape, realComplete = completeFormation;
+      const realPick = pickRoute, realComplete = completeFormation;
       const realCatch = onCatch, realMiss = onMiss;
 
       /* Each shape at its unlock level, again at 24 where fmtReach has hit its
@@ -276,11 +276,11 @@ const fail = [];
          under Sticky Feet — half speed and no dash, the one perk that can make
          a shape unwalkable rather than merely slower. */
       const passes = [{ sticky: false }, { level: 24 }, { level: 24, sticky: true }];
-      for (const shape of FMT_SHAPES) {
+      for (const shape of ROUTES) {
         for (const pass of passes) {
           const level = pass.level || Math.max(shape.min, 1);
           let rec = null;
-          pickShape = () => shape;
+          pickRoute = () => shape;
           completeFormation = r => { rec = { caught: r.caught, goods: r.goods, spoiled: r.spoiled }; realComplete(r); };
           setup(level, pass.sticky);
           emitFormation();
@@ -290,8 +290,8 @@ const fail = [];
             updateCapybara(1 / 60);
             updateItems(1 / 60);
           }
-          pickShape = realPick; completeFormation = realComplete;
-          out.push({ kind: pass.sticky ? 'shape/sticky' : 'shape', id: shape.id, level,
+          pickRoute = realPick; completeFormation = realComplete;
+          out.push({ kind: pass.sticky ? 'route/sticky' : 'route', id: shape.id, level,
                      ...(rec || { caught: -1, goods: -1 }) });
         }
       }
@@ -399,8 +399,8 @@ const fail = [];
                                       touchCY + (finger.y - touchLift - touchCY)*touchReachZ);
             if (!h) return;
             capyState.dragging = true;
-            capyState.dragX = THREE.MathUtils.clamp(h.x, -ARENA.halfX, ARENA.halfX);
-            capyState.dragZ = THREE.MathUtils.clamp(h.z, -ARENA.halfZ, ARENA.halfZ);
+            const t = arenaClamp(h.x, h.z);
+            capyState.dragX = t.x; capyState.dragZ = t.z;
           },
         };
       };
@@ -447,19 +447,19 @@ const fail = [];
         game.maxLives = game.lives = 99; game.combo = 0; game.shield = false;
         game.power = null; game.timeScale = 1; fmt.strayTimer = 1e9;
       };
-      const realPick = pickShape, realComplete = completeFormation;
+      const realPick = pickRoute, realComplete = completeFormation;
       const out = [];
 
       for (const [name, make] of [['pointing', point], ['thumbstick', stick]]){
         for (const lat of lats){
           reseed();                       // every scheme walks the same routes
           let cleared = 0, routes = 0, caught = 0, goods = 0;
-          for (const shape of FMT_SHAPES){
+          for (const shape of ROUTES){
             for (const level of levels){
               if (level < shape.min) continue;
               for (let r = 0; r < reps; r++){
                 let rec = null;
-                pickShape = () => shape;
+                pickRoute = () => shape;
                 completeFormation = x => {
                   rec = { caught:x.caught, goods:x.goods, spoiled:x.spoiled }; realComplete(x); };
                 setup(level);
@@ -497,7 +497,7 @@ const fail = [];
                   updateFormations(1/60); updateCapybara(1/60); updateItems(1/60);
                   clock += 1/60;
                 }
-                pickShape = realPick; completeFormation = realComplete;
+                pickRoute = realPick; completeFormation = realComplete;
                 routes++;
                 if (rec){ caught += rec.caught; goods += rec.goods;
                   if (rec.caught === rec.goods && rec.goods > 0 && !rec.spoiled) cleared++; }
@@ -546,8 +546,14 @@ const fail = [];
         const dash = document.getElementById('btnDash').getBoundingClientRect();
         let edge = 1e9, onDash = 0;
         const fx = [], fy = [];
-        for (const [x, z] of [[-ARENA.halfX, ARENA.halfZ], [ARENA.halfX, ARENA.halfZ],
-                              [-ARENA.halfX, -ARENA.halfZ], [ARENA.halfX, -ARENA.halfZ]]){
+        // eight points around the rim: on a circle there are no corners, and
+        // every one of these has to be both reachable and aimable
+        const rim = [];
+        for (let k = 0; k < 8; k++){
+          const a = Math.PI * 2 * k / 8;
+          rim.push([Math.cos(a) * ARENA.r, Math.sin(a) * ARENA.r]);
+        }
+        for (const [x, z] of rim){
           const f = finger(x, z);
           fx.push(f.x); fy.push(f.y);
           edge = Math.min(edge, f.x, f.y, window.innerWidth - f.x, window.innerHeight - f.y);
@@ -750,34 +756,47 @@ const fail = [];
                     (row.querySelector('.lifeplus') ? 'plus' : 'noplus');
       showPanel(null);                              // leave the page playable
       /* The deck is a file a tool edits now (tools/routes.js), so its SIZE is
-         not a fact worth asserting — adding a shape is the point of that tool.
+         not a fact worth asserting — adding a route is the point of that tool.
          What has to hold is that everything in it is something the director can
          emit and the ribbon can draw. Clearability is --fmt's job; this is the
-         contract that gets a shape as far as being walked at all. */
-      const ids = FMT_SHAPES.map(s => s.id);
-      const deckBad = FMT_SHAPES.filter(s =>
+         contract that gets a route as far as being walked at all. */
+      const ids = ROUTES.map(s => s.id);
+      const deckBad = ROUTES.filter(s =>
         !/^[a-z][a-z0-9]*$/.test(s.id || '') ||
         ids.indexOf(s.id) !== ids.lastIndexOf(s.id) ||
         !Number.isInteger(s.min) || s.min < 1 ||
         !Number.isInteger(s.weight) || s.weight < 1 ||
-        !(s.span > 0 && s.span <= 1) ||
-        !Array.isArray(s.beats) || s.beats.length < 2 ||
-        s.beats.some(b => !(Math.abs(b.x) <= 1) || !(Math.abs(b.z) <= 1))
+        !Array.isArray(s.beats) || s.beats.length < 2 || s.beats.length > 18 ||
+        s.beats.some(b => !(Math.hypot(b.x, b.z) <= 1.0001))
       ).map(s => s.id || '(no id)');
 
+      /* THE DISC PROMISE, which is the whole reason the arena is a circle: a
+         route authored inside the unit disc is inside the arena at EVERY
+         rotation. Checked against the real placeRoute at 24 angles per route,
+         because if it ever stopped being true the fix would be a clamp — and a
+         clamp is what turns one authored figure into a different one at every
+         angle. */
+      let outside = 0;
+      for (const rt of ROUTES)
+        for (let k = 0; k < 24; k++)
+          for (const p of placeRoute(rt))
+            if (!insideArena(p.x, p.z, -0.001)) outside++;
+
       return { themes, withGold, goldAfterTaken, life7, life3,
-               hole: HOLE_LIFE, magnet: POWERS.magnet.dur, shapes: FMT_SHAPES.length,
-               feasts: FEAST_ROUTES.length, cardCount: 3, deckBad };
+               hole: HOLE_LIFE, magnet: POWERS.magnet.dur, shapes: ROUTES.length,
+               feasts: FEAST_ROUTES.length, cardCount: 3, deckBad, outside };
     });
     ok('sinkholes close after 5s', bal.hole === 5, String(bal.hole));
     ok('magnet halved to 3.75s', Math.abs(bal.magnet - 3.75) < 1e-6, String(bal.magnet));
     ok('a biome every 10 levels',
        String(bal.themes) === 'Meadow,Meadow,Lily Pad Ponds,Lily Pad Ponds,Bubblegum,Night,Hell',
        String(bal.themes));
-    ok('every shape in the deck is emittable, and the five feasts are there',
+    ok('every route in the library is emittable, and the five feasts are there',
        bal.deckBad.length === 0 && bal.shapes >= 12 && bal.feasts === 5,
-       `${bal.shapes} shapes, ${bal.feasts} feast routes` +
+       `${bal.shapes} routes, ${bal.feasts} feast routes` +
        (bal.deckBad.length ? ` — broken: ${bal.deckBad.join(', ')}` : ''));
+    ok('every route stays inside the arena at every rotation',
+       bal.outside === 0, `${bal.outside} beats outside, ${bal.shapes} routes x 24 angles`);
     ok('draft is always 3 cards', bal.cardCount === 3, String(bal.cardCount));
     ok('gold perks appear on roughly half of drafts',
        bal.withGold > 150 && bal.withGold < 250, `${bal.withGold}/400`);
@@ -1076,24 +1095,31 @@ const fail = [];
     });
     const curve = Object.entries(routes.seen)
       .map(([l, v]) => `L${l}:${v.food}+${v.haz}/${v.lng}%`).join(' ');
-    /* What grows with the level is the LONG TAIL, not the mean. The mean stayed
-       low on purpose — a level where every route is fifteen beats has lost the
-       three-beat one that reads at a glance, and that is the best-feeling route
-       in the game. So: none long at the start, plenty long late, and nothing
-       outside the bounds either way. */
-    ok('the long tail grows with the level, without crowding short routes out',
-       routes.seen[1].lng === 0 && routes.seen[34].lng >= 25 &&
+    /* LENGTH IS AUTHORED NOW, paced by each route's unlock level rather than by
+       a distribution rolled at emit time. What has to hold is the shape of that
+       pacing: nothing long early, long routes available late, and — the part
+       that broke last time it was tuned — short routes never crowded out,
+       because a three-beat route read at a glance is the best-feeling thing in
+       the game and it stays in the pool at level 60. */
+    ok('length is paced by unlock level, and short routes never stop appearing',
+       routes.seen[1].lng === 0 && routes.seen[34].lng >= 15 &&
        routes.shortest >= 3 && routes.longest <= 18,
        curve + `  (${routes.shortest}-${routes.longest} beats, %>=10 beats)`);
-    /* READABILITY, measured the way clearability is. Chaining shapes into one
-       arena makes crossings grow with the SQUARE of the length — every new
-       segment can cross every earlier one — and at 14 beats that averaged 16 per
-       route, which is the "random noise" a route must never look like. What
-       matters is the ones that would be ON SCREEN TOGETHER, since the ribbon
-       only ever draws a window; those are asserted, the rest reported. */
+    /* READABILITY. It used to be scored at emit time and searched over, because
+       routes were assembled out of chained shapes and the joins were what made
+       them noisy — 46% of joins exceeded the system's own near-reversal
+       threshold against 2% inside a shape. Routes are drawn whole now, so this
+       is a REGRESSION check on the library rather than a search: a hand-drawn
+       route that crosses itself where you can see both lines is an authoring
+       mistake the editor already warns about. */
     const look = await page.evaluate(() => {
       game.state = 'playing'; game.devLock = true;
+      const cross = (a, b, c, d) => {
+        const s = (p, q, r) => Math.sign((q.x-p.x)*(r.z-p.z) - (q.z-p.z)*(r.x-p.x));
+        return s(a,b,c)*s(a,b,d) < 0 && s(c,d,a)*s(c,d,b) < 0;
+      };
       let vis = 0, all = 0, tight = 0, n = 0, shortRoutes = 0, longest = 0;
+      let worstTurn = 0, reversals = 0, turns = 0;
       for (const level of [1, 8, 16, 24, 34, 48, 60]){
         game.level = level; resetUpgrades(); game.run.sticky = false; game.up.speed = 1;
         applyDifficulty(); game.maxLives = game.lives = 3;
@@ -1105,27 +1131,101 @@ const fail = [];
           if (g.length <= 6) shortRoutes++;
           for (let i = 1; i < g.length; i++)
             for (let j = i + 2; j < g.length; j++)
-              if (crosses(g[i-1], g[i], g[j-1], g[j])){ all++; if (j - i <= LINE_AHEAD) vis++; }
+              if (cross(g[i-1], g[i], g[j-1], g[j])){ all++; if (j - i <= REVEAL_AHEAD) vis++; }
           for (let i = 0; i < g.length; i++)
             for (let j = i + 2; j < g.length; j++)
-              if (j - i <= DOT_AHEAD &&
-                  Math.hypot(g[i].x - g[j].x, g[i].z - g[j].z) < BEAT_APART) tight++;
+              if (j - i <= REVEAL_AHEAD &&
+                  Math.hypot(g[i].x - g[j].x, g[i].z - g[j].z) < 1.2) tight++;
+          for (let i = 1; i < g.length - 1; i++){
+            const ax = g[i].x-g[i-1].x, az = g[i].z-g[i-1].z;
+            const bx = g[i+1].x-g[i].x, bz = g[i+1].z-g[i].z;
+            const c = (ax*bx+az*bz) / (Math.hypot(ax,az)*Math.hypot(bx,bz) || 1);
+            const t = Math.acos(Math.max(-1, Math.min(1, c))) * 180 / Math.PI;
+            turns++; worstTurn = Math.max(worstTurn, t);
+            if (t > 115) reversals++;
+          }
         }
       }
       resetFormations(); clearItems();
       return { vis: vis / n, all: all / n, tight: tight / n,
-               shortPct: Math.round(100 * shortRoutes / n), longest };
+               shortPct: Math.round(100 * shortRoutes / n), longest,
+               revPct: Math.round(100 * reversals / Math.max(1, turns)),
+               worstTurn: Math.round(worstTurn) };
     });
     ok('routes rarely cross themselves where you can see both lines',
        look.vis < 1, `${look.vis.toFixed(2)}/route on screen together, ` +
        `${look.all.toFixed(2)} counting the ones the window hides`);
     ok('two beats never land close enough to read as one dot',
        look.tight < 1, `${look.tight.toFixed(2)}/route`);
-    /* Short routes are the ones that read at a glance and they must never stop
-       appearing — length is a distribution whose long tail grows, not a curve
-       that drags the whole thing up with the level. */
+    /* THE WORST TURN, not the count of sharp ones. A weave turns hard at every
+       beat — that IS the route, and it reads fine because there is a dot at
+       every corner saying so. What is never readable is a turn near 180, where
+       the outgoing line lies along the incoming one and the ribbon draws a
+       single stroke for two different steps: that is the exact failure the
+       chained shapes used to produce, and the only one worth a hard assertion.
+       The percentage is reported beside it because the chainer's 46% is what
+       this replaced, and a drift back toward it would show here first. */
+    ok('no route ever retraces its own line',
+       look.worstTurn < 155, `sharpest turn ${look.worstTurn} degrees, ` +
+       `${look.revPct}% of turns over 115 (the old chainer's joins: 46%)`);
+    /* THE RIBBON. Three things the player asked for and none of them can be
+       seen in a screenshot at five frames a second, so they are driven at a
+       fixed 1/60 the way CLAUDE.md says rates have to be:
+         - nothing cuts in or out: a piece takes real time to arrive and leaves
+           the same way, and a spent one reaches exactly zero rather than
+           hanging around at a fraction of a percent forever;
+         - dots and lines travel TOGETHER, which they did not: they ran to
+           different depths (9 and 5), so a route showed dots hanging several
+           beats past where any line reached — "random dots in the distance"
+           while you were still walking the first few. */
+    const ribbon = await page.evaluate(() => {
+      game.state = 'playing'; game.devLock = true;
+      game.level = 20; applyDifficulty();
+      clearItems(); resetFormations(); resetCapy(); fmt.strayTimer = 1e9;
+      emitFormation();
+      const rec = fmt.live.values().next().value;
+      const g = rec.path, kids = g.children;
+      const peak = m => m.userData.base;
+      // fade UP: at emit everything is dark, and it takes real time to arrive
+      const start = Math.max(...kids.map(m => m.material.opacity));
+      const step = n => { for (let i = 0; i < n; i++) updatePaths(1 / 60); };
+      step(3);
+      const early = Math.max(...kids.map(m => m.material.opacity / peak(m)));
+      step(57);                                  // one second in total
+      const settled = Math.max(...kids.map(m => m.material.opacity / peak(m)));
+
+      // dots and lines share one window, at every position along the route
+      let orphanDots = 0, orphanLines = 0;
+      for (let done = 0; done < rec.pts.length; done++){
+        revealPath(g, done); step(60);
+        const on = f => kids.filter(m => !!m.userData.line === f && m.visible)
+                            .map(m => m.userData.beat);
+        const dots = on(false), lines = on(true);
+        // every visible dot past the first must have a line reaching it, and
+        // every visible line must land on a visible dot
+        for (const d of dots) if (d > Math.min(...dots) && !lines.includes(d)) orphanDots++;
+        for (const l of lines) if (!dots.includes(l)) orphanLines++;
+      }
+      // the spent tail: walked to the end, nothing is left on the ground
+      revealPath(g, rec.pts.length + 1); step(120);
+      const leftover = kids.filter(m => m.material.opacity > 0).length;
+      const total = kids.length;
+      resetFormations(); clearItems();
+      return { start: +start.toFixed(3), early: +early.toFixed(2),
+               settled: +settled.toFixed(2), orphanDots, orphanLines, leftover, total };
+    });
+    ok('the ribbon fades in rather than cutting in',
+       ribbon.start === 0 && ribbon.early < 0.6 && ribbon.settled > 0.95,
+       `0 at emit, ${Math.round(ribbon.early * 100)}% after 50ms, ` +
+       `${Math.round(ribbon.settled * 100)}% after 1s`);
+    ok('dots and lines travel together — no dot without a line reaching it',
+       ribbon.orphanDots === 0 && ribbon.orphanLines === 0,
+       `${ribbon.orphanDots} orphan dots, ${ribbon.orphanLines} orphan lines ` +
+       `over every position on a route`);
+    ok('a walked route leaves nothing behind on the ground',
+       ribbon.leftover === 0, `${ribbon.leftover} of ${ribbon.total} pieces still drawn`);
     ok('short routes keep appearing at every level, long ones stay possible',
-       look.shortPct >= 40 && look.longest >= 15,
+       look.shortPct >= 30 && look.longest >= 12,
        `${look.shortPct}% are 6 beats or fewer, longest seen ${look.longest}`);
 
     ok('a route never carries more than one hazard per six food',

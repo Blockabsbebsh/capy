@@ -10,10 +10,13 @@ ground.rotation.x = -Math.PI/2;
 ground.receiveShadow = true;
 world.add(ground);
 
-// the play "meadow" patch — slightly lighter, reads as the arena floor
+/* The play patch. Scaled UNIFORMLY now: the floor is the field, so the grass
+   you can see is the grass you can stand on plus a rim of ARENA.pad. It used to
+   be an ellipse 2.6x the area of the rectangle the player was actually confined
+   to, which is most of why a route looked like it was cowering in the middle. */
 const patch = new THREE.Mesh(new THREE.CircleGeometry(1, 64), mat.grassDark);
 patch.rotation.x = -Math.PI/2;
-patch.scale.set(ARENA.halfX + 2.4, ARENA.halfZ + 2.4, 1);
+patch.scale.set(PATCH_R, PATCH_R, 1);
 patch.position.y = 0.012;
 patch.receiveShadow = true;
 world.add(patch);
@@ -21,7 +24,7 @@ world.add(patch);
 // sandy border ring around the play area
 const border = new THREE.Mesh(new THREE.RingGeometry(0.965, 1.0, 96), mat.dirt);
 border.rotation.x = -Math.PI/2;
-border.scale.set(ARENA.halfX + 2.6, ARENA.halfZ + 2.6, 1);
+border.scale.set(PATCH_R + 0.2, PATCH_R + 0.2, 1);
 border.position.y = 0.02;
 border.receiveShadow = true;
 world.add(border);

@@ -68,10 +68,16 @@ function steerTo(clientX, clientY){
                       touchCY + (clientY - touchLift - touchCY) * touchReachZ)
     : pointerToGround(clientX, clientY, bodyPlane);
   if (!h) return;                       // pointing at the sky: keep the last target
-  // Clamping matters on touch and not on a mouse: the finger has to be able to
-  // ask for the arena's near and far edges without landing exactly on them.
-  capyState.dragX = TOUCH ? THREE.MathUtils.clamp(h.x, -ARENA.halfX, ARENA.halfX) : h.x;
-  capyState.dragZ = TOUCH ? THREE.MathUtils.clamp(h.z, -ARENA.halfZ, ARENA.halfZ) : h.z;
+  /* Both devices clamp now, and on a round field that is what keeps the rim
+     pleasant rather than a nicety. The controller drives toward the place you
+     named; name a place outside the field and it drives into the wall and
+     holds there. Clamping to the NEAREST point inside means pointing past the
+     edge asks for the edge — the capybara arrives and stops, and the rim code
+     in updateCapybara never has to do anything. The rectangle only needed this
+     on touch because a mouse outside a box still resolves to a sensible axis. */
+  const t = arenaClamp(h.x, h.z);
+  capyState.dragX = t.x;
+  capyState.dragZ = t.z;
 }
 function endSteer(){
   steerId = null;
