@@ -192,6 +192,8 @@ const PITCH_ASPECT = { wide: 1.3, tall: 0.55 };
    the arena sits low and there is no room for both: the lift gives way first,
    down to whatever still leaves the near edge reachable within LIFT_REACH. */
 let touchLift = 90, touchReachX = 1, touchReachZ = 1, touchCX = 0, touchCY = 0;
+let frameLift = 0;                       // px the whole frame is shifted up by
+const LIFT_GAP = 34;                     // clear air between the play field and the thumb
 const THUMB_SPAN = { x: 185, z: 120 };   // px the arena should fit inside, per axis
 /* THE STRAIN FLOOR IS OFF. It bought one thing — an arena small enough on
    screen that a thumb never stretched for a corner — and it was the only reason
@@ -266,12 +268,23 @@ function fitCamera(){
   const aspect = window.innerWidth / window.innerHeight;
   const W = window.innerWidth, H = window.innerHeight;
   const top = H * FIT_TOP, bottom = H * FIT_BOTTOM, side = W * FIT_SIDE;
+  frameLift = 0; applyFrameLift();       // the fit measures the unshifted frame
 
   const fits = zoom => {
     poseAt(zoom, aspect);
     if (groundY(0, PATCH_R) > bottom) return false;      // near rim below the band
     if (groundY(0, -PATCH_R) < top) return false;        // far rim above it
-    return Math.abs(groundX(PATCH_R, 0) - groundX(0, 0)) <= W / 2 - side;
+    if (Math.abs(groundX(PATCH_R, 0) - groundX(0, 0)) > W / 2 - side) return false;
+    /* On touch the platform is not the only thing that has to fit. The thumb
+       needs a band as tall as the arena's own image below it (see raiseFrame),
+       and shifting the frame up only buys what the HUD band leaves — a 1024px
+       tablet ran 291px short of it with the frame as high as it would go. So
+       the platform gives way too, but only down to where a catch radius stops
+       reading up the screen: an arena you cannot aim at is not a fix for a
+       hand in the way. On a phone this costs nothing, since the shift alone
+       pays for the band. */
+    const b = thumbBand();
+    return !TOUCH || b.need <= b.room || catchPx() <= CATCH_MIN_PX;
   };
 
   let lo = 0.45, hi = 4.0;
@@ -282,8 +295,77 @@ function fitCamera(){
     if (fits(mid)) hi = mid; else lo = mid;
   }
   poseAt(hi, aspect);
+  raiseFrame();
   refreshTouchMap();
   refreshSky();
+}
+
+/* HOW HIGH THE PLATFORM RIDES — a screen shift, on touch only.
+
+   The lift below promises the thumb sits entirely BELOW the play field, and a
+   circular arena stopped paying for it: the field is as deep as it is wide
+   now, so on a 390x844 phone the platform reached to within 108px of the DASH
+   button, `most` came out 108 against an `ideal` of 299, and the hand covered
+   the bottom 148px of a 265px arena — the near half of the field, which is
+   where the next beats of a route are read from. Play-tested as the hand
+   covering half the screen.
+
+   The band a thumb needs is as tall as the arena's own image, because the map
+   is 1:1 and nothing may buy that back with a gain (see the strain note
+   above). So the platform has to move UP the screen, and there is room: on
+   that phone it sat 238px below the HUD band with nothing but scenery in the
+   gap.
+
+   It moves as a LENS SHIFT rather than a camera move. An off-axis frustum
+   shifts top and bottom together, which drops out of ndc y as a constant, so
+   the projection translates RIGIDLY: every world point lands exactly
+   `frameLift` px higher and the arena keeps the size, shape and perspective
+   the fit just chose for it. Sliding the rig back does raise the image too,
+   but it raises it by moving further away — measured, 5 units of slide bought
+   115px of raise and spent 18% of the platform's depth doing it, which is the
+   opposite of the trade being asked for. Nothing else has to know: raycasting
+   unprojects through the same matrix, the probe mirrors it, and so
+   groundX/groundY, the touch map and the HUD projections all read the shifted
+   screen.
+
+   What it costs is at the TOP of the frame. Food spawns at SPAWN_Y and now
+   enters the window `frameLift` px later down its fall — over the far rim
+   that is the last ~7 units of a 15-unit drop rather than all 15. The ribbon
+   and the landing rings are the read on a phone anyway, and both are on the
+   ground, where the shift puts them fully in the clear.
+
+   The clamp is the HUD band: the platform never rides above FIT_TOP. Where
+   that clamps the shift short — a 320x568, or a landscape phone with the DASH
+   button eating the bottom third — the thumb keeps whatever band is left,
+   which is still more than it had. */
+/* `need` is exactly what refreshTouchMap's `most` is short of its `ideal`, in
+   px of frame shift; `room` is what the HUD band leaves to shift into. One
+   function so the two readers cannot drift: raiseFrame spends the one on the
+   other, and fitCamera makes the platform smaller when they do not meet. */
+function thumbBand(){
+  const cy = groundY(0, 0);
+  const hNear = groundY(0, ARENA.r) - cy, hFar = cy - groundY(0, -ARENA.r);
+  return { need: cy + hNear / LIFT_REACH + (hNear + hFar) + LIFT_GAP - thumbFloor(),
+           room: groundY(0, -PATCH_R) - window.innerHeight * FIT_TOP };
+}
+// the catch radius as it reads UP the screen, which is what a smaller platform
+// spends. 14px was measured as "you cannot see whether you are on the dot".
+const CATCH_MIN_PX = 18;
+function catchPx(){
+  return CATCH_R * Math.hypot(groundX(0, 1) - groundX(0, 0),
+                              groundY(0, 1) - groundY(0, 0));
+}
+function applyFrameLift(){
+  const W = window.innerWidth, H = window.innerHeight;
+  if (frameLift > 0.5) camera.setViewOffset(W, H, 0, frameLift, W, H);
+  else camera.clearViewOffset();
+}
+function raiseFrame(){
+  frameLift = 0; applyFrameLift();       // measure the frame the fit chose
+  if (!TOUCH) return;
+  const b = thumbBand();
+  frameLift = THREE.MathUtils.clamp(b.need, 0, Math.max(0, b.room));
+  applyFrameLift();
 }
 
 /* A scratch camera posed at camFit rather than the live one, because animate()
@@ -299,6 +381,12 @@ function poseProbe(){
   _skyProbe.position.set(camFit.x, camFit.y, camFit.z);
   _skyProbe.lookAt(CAM_LOOK);
   _skyProbe.updateMatrixWorld(true);
+  // the same lens shift the real camera carries, or every px this measures is
+  // one the player is not looking at
+  if (frameLift > 0.5)
+    _skyProbe.setViewOffset(window.innerWidth, window.innerHeight, 0, frameLift,
+                            window.innerWidth, window.innerHeight);
+  else _skyProbe.clearViewOffset();
   _skyProbe.updateProjectionMatrix();
   return _skyProbe;
 }
@@ -319,24 +407,31 @@ function skyBand(){
   const p = _probePt.set(0, 0, -r).project(poseProbe());
   return THREE.MathUtils.clamp((1 - p.y) / 2, 0.03, 0.6);
 }
+/* The lowest y a steering finger may be asked to reach: the bottom margin
+   belongs to the home indicator, and the DASH button is a harder edge than any
+   margin because it eats the touch outright. It sits bottom-right, the arena
+   spans nearly the full width, so on a short screen the arena's near-right
+   corner lands squarely on it and that corner simply cannot be steered to.
+   Measured off the live button rather than assumed, so it keeps up with the
+   CSS; hidden on desktop, where the rect is empty. Shared with raiseFrame,
+   which is deciding how much room this leaves for the thumb. */
+function thumbFloor(){
+  const H = window.innerHeight;
+  let bottom = H - THREE.MathUtils.clamp(H * 0.06, 30, 64);
+  const dash = document.getElementById('btnDash')?.getBoundingClientRect();
+  // the field's near-right is at 45 degrees on a circle, not at a corner
+  const diag = ARENA.r * Math.SQRT1_2;
+  const arenaRight = groundX(diag, diag);
+  if (dash && dash.height > 0 && arenaRight > dash.left) bottom = Math.min(bottom, dash.top - 10);
+  return bottom;
+}
 function refreshTouchMap(){
   const W = window.innerWidth, H = window.innerHeight;
   // margins the finger should never have to cross: the sides belong to the
   // OS edge gestures, the bottom to the home indicator, the top to the HUD
   const EDGE = THREE.MathUtils.clamp(W * 0.09, 24, 48);
   const TOP  = THREE.MathUtils.clamp(H * 0.08, 44, 110);
-  let bottom = H - THREE.MathUtils.clamp(H * 0.06, 30, 64);
-  /* The DASH button is the other thing the finger must not have to reach, and
-     it is a harder edge than any margin: it eats the touch outright. It sits
-     bottom-right, the arena spans nearly the full width, so on a short screen
-     the arena's near-right corner lands squarely on it and that corner simply
-     cannot be steered to. Measured off the live button rather than assumed, so
-     it keeps up with the CSS; hidden on desktop, where the rect is empty. */
-  const dash = document.getElementById('btnDash')?.getBoundingClientRect();
-  // the field's near-right is at 45 degrees on a circle, not at a corner
-  const diag = ARENA.r * Math.SQRT1_2;
-  const arenaRight = groundX(diag, diag);
-  if (dash && dash.height > 0 && arenaRight > dash.left) bottom = Math.min(bottom, dash.top - 10);
+  const bottom = thumbFloor();
 
   touchCX = groundX(0, 0);
   touchCY = groundY(0, 0);
@@ -347,11 +442,19 @@ function refreshTouchMap(){
   const hNear = groundY(0, ARENA.r) - touchCY;
   const hFar  = touchCY - groundY(0, -ARENA.r);
 
-  // as much lift as the room below allows, once the near edge is guaranteed
-  // reachable within the depth scale the lift is allowed to spend
-  const ideal = (hNear + hFar) + 34;
+  /* As much lift as the room below allows, once the near edge is guaranteed
+     reachable within the depth scale the lift is allowed to spend. `ideal` is
+     the whole play field plus clear air, which is what puts the hand below it;
+     raiseFrame has already shifted the frame up so that `most` can pay for it,
+     as far as the HUD band allows. */
+  const ideal = (hNear + hFar) + LIFT_GAP;
   const most  = bottom - touchCY - hNear / LIFT_REACH;
-  touchLift = THREE.MathUtils.clamp(Math.min(ideal, most), 30, 240);
+  /* No ceiling: it was 240px, and once the frame started riding high enough to
+     pay for `ideal` that ceiling was the only thing still putting the hand on
+     the field — 240 against an ideal of 299 left the top of the thumb 17px
+     inside the near rim. `ideal` is the ceiling, and it is the amount that
+     buys exactly the separation being asked for and no more. */
+  touchLift = Math.max(30, Math.min(ideal, most));
 
   const down = Math.max(1, bottom - (touchCY + touchLift));
   const up   = Math.max(1, (touchCY + touchLift) - TOP);
