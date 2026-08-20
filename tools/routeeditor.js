@@ -24,8 +24,8 @@ const $ = id => document.getElementById(id);
    own `span`. Anchored at x 0 here: the director slides that along to meet the
    walk, which moves a shape but never changes its picture. */
 const spanX = sh => ARENA.halfX * sh.span;
-const spanZ = () => ARENA.halfZ * 0.62;
-const world = (sh, b) => ({ x: b.x * spanX(sh), z: b.z * spanZ(), dash: !!b.dash });
+const spanZ = sh => ARENA.halfZ * (sh.depth || FMT_DEPTH);
+const world = (sh, b) => ({ x: b.x * spanX(sh), z: b.z * spanZ(sh), dash: !!b.dash });
 const worldPts = sh => sh.beats.map(b => world(sh, b));
 
 /* ------------------------------------------------------------ drawing --- */
@@ -58,8 +58,8 @@ function drawShape(cv, sh, opts = {}){
                m.r(ARENA.halfX * 2), m.pz(ARENA.halfZ) - m.pz(-ARENA.halfZ));
   if (big){
     g.setLineDash([4, 5]); g.strokeStyle = 'rgba(255,205,140,.22)';
-    g.strokeRect(m.px(-spanX(sh)), m.pz(-spanZ()),
-                 m.r(spanX(sh) * 2), m.pz(spanZ()) - m.pz(-spanZ()));
+    g.strokeRect(m.px(-spanX(sh)), m.pz(-spanZ(sh)),
+                 m.r(spanX(sh) * 2), m.pz(spanZ(sh)) - m.pz(-spanZ(sh)));
     g.beginPath();
     g.moveTo(m.px(0), m.pz(-ARENA.halfZ)); g.lineTo(m.px(0), m.pz(ARENA.halfZ));
     g.moveTo(m.px(-ARENA.halfX), m.pz(0)); g.lineTo(m.px(ARENA.halfX), m.pz(0));
@@ -155,6 +155,7 @@ function select(i){
   if (sh){
     $('fId').value = sh.id; $('fMin').value = sh.min;
     $('fWeight').value = sh.weight; $('fSpan').value = sh.span;
+    $('fDepth').value = sh.depth || FMT_DEPTH;
     $('fNote').value = sh.note || '';
     if (!$('fLevel').dataset.touched) $('fLevel').value = sh.min;
   }
@@ -349,7 +350,7 @@ function hit(sh, e){
     const d = Math.hypot(m.px(p.x) - px, m.pz(p.z) - pz);
     if (d < bd){ bd = d; best = i; }
   });
-  return { i: best, x: m.ux(px) / spanX(sh), z: m.uz(pz) / spanZ() };
+  return { i: best, x: m.ux(px) / spanX(sh), z: m.uz(pz) / spanZ(sh) };
 }
 
 const snap = (v, free) => Math.max(-1, Math.min(1, free ? Math.round(v * 100) / 100
@@ -398,6 +399,10 @@ bind('fId', (sh, v) => sh.id = v.trim());
 bind('fMin', (sh, v) => sh.min = Math.max(1, Math.round(Number(v) || 1)));
 bind('fWeight', (sh, v) => sh.weight = Math.max(1, Math.min(6, Math.round(Number(v) || 1))));
 bind('fSpan', (sh, v) => sh.span = Math.max(0.06, Math.min(1, Number(v) || 1)));
+/* Held as a plain number here and dropped on the way out when it matches the
+   default — see save(). The deck reads better with one field per shape that
+   has an opinion about depth than with `depth:0.62` on all nineteen. */
+bind('fDepth', (sh, v) => sh.depth = Math.max(0.06, Math.min(1, Number(v) || FMT_DEPTH)));
 bind('fNote', (sh, v) => sh.note = v);
 $('fLevel').addEventListener('input', () => { $('fLevel').dataset.touched = '1'; renderCheck(); });
 
@@ -432,7 +437,9 @@ async function save(){
   try {
     const r = await fetch('/api/shapes', { method:'PUT',
       headers:{ 'content-type':'application/json' },
-      body: JSON.stringify({ shapes: S.shapes }) });
+      body: JSON.stringify({ shapes: S.shapes.map(s =>
+        Math.abs((s.depth || FMT_DEPTH) - FMT_DEPTH) < 1e-9
+          ? Object.assign({}, s, { depth: undefined }) : s) }) });
     const j = await r.json();
     if (!r.ok){ toast('NOT saved:\n' + j.error, true); return false; }
     S.shapes = j.shapes; S.dirty = false;

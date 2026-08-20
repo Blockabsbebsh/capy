@@ -88,6 +88,7 @@ function shapeText(s){
   for (const line of String(s.note || '').split('\n'))
     if (line.trim()) out.push('  // ' + line.trim());
   out.push(`  { id:'${s.id}', min:${s.min}, span:${spanText(s.span)}, ` +
+           (s.depth != null ? `depth:${spanText(s.depth)}, ` : '') +
            `weight:${s.weight}, beats:[`);
 
   const beats = s.beats.map(b =>
@@ -132,6 +133,11 @@ function validate(shapes){
     seen.add(s.id);
     if (!Number.isInteger(s.min) || s.min < 1 || s.min > 99) bad(i, 'min must be 1-99');
     if (!(s.span > 0.05 && s.span <= 1)) bad(i, 'span must be 0.05-1');
+    // depth is optional — absent means FMT_DEPTH, which is where every shape
+    // sat before z was adjustable. The editor omits it when it matches, so the
+    // default lives in formations.js only and cannot drift into this file.
+    if (s.depth != null && !(s.depth > 0.05 && s.depth <= 1))
+      bad(i, 'depth must be 0.05-1, or absent for the default');
     if (!Number.isInteger(s.weight) || s.weight < 1 || s.weight > 6) bad(i, 'weight must be 1-6');
     if (!Array.isArray(s.beats) || s.beats.length < 2) bad(i, 'needs at least 2 beats');
     else if (s.beats.length > 12) bad(i, 'more than 12 beats — FOOD_CAP is 18 for a whole route');
@@ -152,6 +158,8 @@ function clean(shapes){
     id: String(s.id || '').trim(),
     min: Math.round(Number(s.min)),
     span: Math.round(Number(s.span) * 100) / 100,
+    ...(Number.isFinite(Number(s.depth))
+        ? { depth: Math.round(Number(s.depth) * 100) / 100 } : {}),
     weight: Math.round(Number(s.weight)),
     note: String(s.note || '').replace(/\r/g, ''),
     beats: (Array.isArray(s.beats) ? s.beats : []).map(b => {
@@ -241,7 +249,9 @@ if (argv.includes('--check') || argv.includes('--rewrite')){
   for (const s of shapes){
     const dash = s.beats.filter(b => b.dash).length;
     console.log(`  ${s.id.padEnd(10)} min ${String(s.min).padStart(2)}  ` +
-                `weight ${s.weight}  span ${s.span}  ${s.beats.length} beats` +
+                `weight ${s.weight}  span ${s.span}` +
+                (s.depth != null ? `  depth ${s.depth}` : '') +
+                `  ${s.beats.length} beats` +
                 (dash ? `  ${dash} dash` : ''));
   }
   console.log(`  ${shapes.length} shapes`);
