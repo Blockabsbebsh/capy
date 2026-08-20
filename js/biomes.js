@@ -179,7 +179,7 @@ const lilyRim = new THREE.Group();
   lip.position.y = h;
   lip.castShadow = true;
   lilyRim.add(lip);
-  lilyRim.scale.set(ARENA.halfX + 2.4, 1, ARENA.halfZ + 2.4);   // matches `patch`
+  lilyRim.scale.set(PATCH_R, 1, PATCH_R);   // matches `patch`
   lilyRim.visible = false;
   world.add(lilyRim);
 }
@@ -189,10 +189,10 @@ const lilyRim = new THREE.Group();
    lands inside it grows out of the arena floor instead of out of the field
    beyond, which the pond already had to guard against and which the raised
    hell slab below now shows up too. */
-const PATCH_RX = ARENA.halfX + 2.4, PATCH_RZ = ARENA.halfZ + 2.4;
+// one radius, because the drawn floor is a circle now — this was an ellipse
+// test with two half-axes that are the same number
 function outsidePatch(x, z, margin = 0){
-  const rx = PATCH_RX + margin, rz = PATCH_RZ + margin;
-  return (x*x)/(rx*rx) + (z*z)/(rz*rz) > 1;
+  return Math.hypot(x, z) > PATCH_R + margin;
 }
 
 /* Hell's basalt slab sat exactly level with the lava field around it, so it
@@ -234,7 +234,7 @@ const hellSkirt = new THREE.Group();
     ring.position.y = -HELL_LAVA_DROP + 0.012;
     hellSkirt.add(ring);
   }
-  hellSkirt.scale.set(PATCH_RX, 1, PATCH_RZ);   // matches `patch`
+  hellSkirt.scale.set(PATCH_R, 1, PATCH_R);   // matches `patch`
   hellSkirt.visible = false;
   world.add(hellSkirt);
 }
@@ -755,14 +755,14 @@ function refreshThemeEnvironment(th){
   sceneryGroup.visible = mode==='meadow' || mode==='night';   // hidden for pond/candy/hell, which supply their own dressing
   if (themeFxState.stars) themeFxState.stars.visible = mode==='night';
 
-  // helper: true if (x,z) lands outside the *playable* arena, with a
-  // margin — used so background decorations never spawn on top of you.
-  // Every biome plays on the rectangular ARENA bounds (see updateCapybara);
-  // the two that need clearance from the visible arena floor as well test
-  // against the patch ellipse instead, which is the larger of the two.
+  // helper: true if (x,z) lands outside the arena, with a margin — used so
+  // background decorations never spawn on top of you. One circle for every
+  // biome now: the drawn floor and the playable field are the same shape, so
+  // "clear of the field" and "clear of the grass" differ only by ARENA.pad and
+  // there is no longer a larger ellipse for a prop to hide inside.
   function outsideArena(x, z, margin = 1.4){
     if (mode === 'pond' || mode === 'hell'){
-      // match the ACTUAL visible patch size (ARENA.halfX/halfZ + 2.4, same
+      // match the ACTUAL visible patch size (PATCH_R, same
       // as every other biome now — see the uniform-scale fix), not the
       // older, smaller collision-only ellipse. Using the smaller ellipse
       // here let lily pads spawn in the gap between it and the larger
@@ -773,7 +773,7 @@ function refreshThemeEnvironment(th){
       // planted at lava level inside the slab's footprint punches through it.
       return outsidePatch(x, z, margin);
     }
-    return Math.abs(x) > ARENA.halfX + margin || Math.abs(z) > ARENA.halfZ + margin;
+    return Math.hypot(x, z) > PATCH_R + margin;
   }
   function randomOutside(rx, rz, margin){
     let x, z, tries = 0;
@@ -798,7 +798,7 @@ function refreshThemeEnvironment(th){
     // uniform across all 5 biomes now instead of each one having its own
     // slightly different scale, which made the arenas look inconsistent
     // in size from level to level
-    patch.scale.set(ARENA.halfX + 2.4, ARENA.halfZ + 2.4, 1);
+    patch.scale.set(PATCH_R, PATCH_R, 1);
     patch.material.map = lilyPadTex; patch.material.color.setHex(0xffffff);
     patch.material.needsUpdate = true;
     border.visible=false;
@@ -832,7 +832,7 @@ function refreshThemeEnvironment(th){
     // read as flat pink with nothing going on
     ground.material = candyGroundMat;
     ground.scale.setScalar(1);
-    patch.scale.set(ARENA.halfX + 2.4, ARENA.halfZ + 2.4, 1); patch.material.color.setHex(0xffffff);
+    patch.scale.set(PATCH_R, PATCH_R, 1); patch.material.color.setHex(0xffffff);
     patch.material.map = candyGroundTex; patch.material.needsUpdate = true;
     border.visible=false; makeSprinkles(); makeCandyBubbles();
     // gumdrops kept outside the play field so they never sit under falling food
@@ -843,7 +843,7 @@ function refreshThemeEnvironment(th){
     // candy canes replace the meadow's trees for this biome
     treeSpots.forEach(([x,z,s]) => makeCandyCane(x, z, s*1.7));
   } else if(mode==='night'){
-    patch.scale.set(ARENA.halfX + 2.4, ARENA.halfZ + 2.4, 1); patch.material.color.setHex(0xffffff);
+    patch.scale.set(PATCH_R, PATCH_R, 1); patch.material.color.setHex(0xffffff);
     patch.material.map = nightGroundTex;
     patch.material.emissiveMap = nightGroundTex;
     patch.material.emissive.setHex(0x8fc8b0);
@@ -863,7 +863,7 @@ function refreshThemeEnvironment(th){
     // arena surface: obsidian/basalt with lava fissures baked into the
     // texture, so they're physically part of the arena and can never
     // extend past its edge the way the old free-floating tube curves did
-    patch.scale.set(ARENA.halfX + 2.4, ARENA.halfZ + 2.4, 1);
+    patch.scale.set(PATCH_R, PATCH_R, 1);
     patch.material.map = obsidianTex; patch.material.color.setHex(0xffffff);
     // Matte, and NOT metallic. metalness on a MeshStandardMaterial with no
     // environment map to reflect kills the diffuse and leaves only a specular
@@ -888,7 +888,7 @@ function refreshThemeEnvironment(th){
     makeHellMoon();
   } else {
     ground.material=mat.grass; ground.scale.setScalar(1);
-    patch.scale.set(ARENA.halfX+2.4,ARENA.halfZ+2.4,1);
+    patch.scale.set(PATCH_R, PATCH_R, 1);
     patch.material.color.copy(mat.grassDark.color);
     border.visible=true; pond.visible=true; pondRim.visible=true;
     sunDisc.material.map=null; sunDisc.material.needsUpdate=true;

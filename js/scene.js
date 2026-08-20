@@ -221,16 +221,22 @@ const THUMB_SPAN = { x: 185, z: 120 };   // px the arena should fit inside, per 
 const STRAIN_FLOOR = /[?&]strain=1/.test(location.search);
 const TOUCH_MIN_PX = 11;                 // smallest thumb movement worth aiming with
 const REACH_CEIL = 2.2;                  // beyond here is guesswork, not evidence
-const LIFT_REACH = 1.35;                 // depth scale the lift may assume it can spend
+/* The depth scale the LIFT is allowed to assume it can spend. It was 1.35, and
+   on a circular field that was self-defeating: the lift took room on the
+   promise of a 1.35 scale, which left `down` too small for the near rim, which
+   forced the scale to actually BE 1.35. Setting it to 1 makes the lift take
+   only what a true 1:1 map can pay for — and 1:1 is the thing input.js calls
+   load-bearing, so the lift should not be the one spending it. Measured: reach
+   falls from 1.35 to 1.0 on a phone, and the skew with it. */
+const LIFT_REACH = 1.0;
 
-function fitCamera(){
-  const aspect = window.innerWidth / window.innerHeight;
-  const need = ARENA.halfX + FIT_MARGIN;
-  // half-width visible at the arena's distance with the current framing
+/* The band of screen the whole platform has to land inside. The top is HUD,
+   the bottom is the hint line and, on a phone, the DASH button. Fractions
+   rather than pixels because both of those scale with the viewport. */
+const FIT_TOP = 0.12, FIT_BOTTOM = 0.95, FIT_SIDE = 0.02;
+
+function poseAt(zoom, aspect){
   const base = Math.hypot(CAM_BASE.y - CAM_LOOK.y, CAM_BASE.z - CAM_LOOK.z);
-  const halfH = base * Math.tan(THREE.MathUtils.degToRad(BASE_FOV) / 2);
-  const halfW = halfH * aspect;
-  const zoom = THREE.MathUtils.clamp(need / halfW, 1, 2.6);
   const dist = base * zoom;
   const t = THREE.MathUtils.clamp(
     (PITCH_ASPECT.wide - aspect) / (PITCH_ASPECT.wide - PITCH_ASPECT.tall), 0, 1);
@@ -239,6 +245,43 @@ function fitCamera(){
   camFit.y = CAM_LOOK.y + Math.sin(pitch) * dist;
   camFit.z = CAM_LOOK.z + Math.cos(pitch) * dist;
   camFit.follow = 1 / zoom;
+}
+
+/* FIT THE WHOLE PLATFORM, width AND depth, as large as both allow.
+
+   This used to fit width alone and floor the zoom at 1. Both were right for a
+   rectangle two units wide for every one deep on a camera whose framing was
+   being held byte-identical: depth never ran out first, so it was never
+   checked. A circle is as deep as it is wide, and on a 16:9 screen the depth
+   is what runs out first — unchecked, the near rim landed below the bottom of
+   the window and the opening beats of a route were simply off screen.
+
+   Both constraints are now one predicate, and the answer is the SMALLEST zoom
+   that satisfies it, since a smaller zoom is a larger arena. Bisected rather
+   than stepped: stepping up by a fixed ratio until it fits overshoots by up to
+   that ratio every pass, which measured out as a field a sixth smaller than it
+   needed to be. Monotone in zoom — further away is always smaller — so twenty
+   halvings land on it exactly, and it runs on resize only. */
+function fitCamera(){
+  const aspect = window.innerWidth / window.innerHeight;
+  const W = window.innerWidth, H = window.innerHeight;
+  const top = H * FIT_TOP, bottom = H * FIT_BOTTOM, side = W * FIT_SIDE;
+
+  const fits = zoom => {
+    poseAt(zoom, aspect);
+    if (groundY(0, PATCH_R) > bottom) return false;      // near rim below the band
+    if (groundY(0, -PATCH_R) < top) return false;        // far rim above it
+    return Math.abs(groundX(PATCH_R, 0) - groundX(0, 0)) <= W / 2 - side;
+  };
+
+  let lo = 0.45, hi = 4.0;
+  if (!fits(hi)) hi = 6.0;                               // a viewport nothing fits
+  if (fits(lo)) hi = lo;
+  else for (let i = 0; i < 20; i++){
+    const mid = (lo + hi) / 2;
+    if (fits(mid)) hi = mid; else lo = mid;
+  }
+  poseAt(hi, aspect);
   refreshTouchMap();
   refreshSky();
 }
@@ -290,15 +333,19 @@ function refreshTouchMap(){
      cannot be steered to. Measured off the live button rather than assumed, so
      it keeps up with the CSS; hidden on desktop, where the rect is empty. */
   const dash = document.getElementById('btnDash')?.getBoundingClientRect();
-  const arenaRight = groundX(ARENA.halfX, ARENA.halfZ);
+  // the field's near-right is at 45 degrees on a circle, not at a corner
+  const diag = ARENA.r * Math.SQRT1_2;
+  const arenaRight = groundX(diag, diag);
   if (dash && dash.height > 0 && arenaRight > dash.left) bottom = Math.min(bottom, dash.top - 10);
 
   touchCX = groundX(0, 0);
   touchCY = groundY(0, 0);
-  // the widest the arena gets is at its near corners, not its middle
-  const hx = Math.abs(groundX(ARENA.halfX, ARENA.halfZ) - touchCX);
-  const hNear = groundY(0, ARENA.halfZ) - touchCY;
-  const hFar  = touchCY - groundY(0, -ARENA.halfZ);
+  /* On a circle the extremes are on the axes: widest at z=0, nearest and
+     furthest at x=0. (On the old rectangle the widest point was a near corner,
+     which is why this used to read halfX,halfZ.) */
+  const hx = Math.abs(groundX(ARENA.r, 0) - touchCX);
+  const hNear = groundY(0, ARENA.r) - touchCY;
+  const hFar  = touchCY - groundY(0, -ARENA.r);
 
   // as much lift as the room below allows, once the near edge is guaranteed
   // reachable within the depth scale the lift is allowed to spend
@@ -320,8 +367,25 @@ function refreshTouchMap(){
   // a strain of 0 drops out of the Math.min/Math.max above, leaving reach alone
   const strainX = STRAIN_FLOOR ? (hx * 2) / THUMB_SPAN.x : 0;
   const strainZ = STRAIN_FLOOR ? (hNear + hFar) / THUMB_SPAN.z : 0;
-  touchReachX = fit(hx / Math.max(1, W / 2 - EDGE), strainX, perX);
-  touchReachZ = fit(Math.max(hNear / down, hFar / up), strainZ, perZ);
+  const wantX = fit(hx / Math.max(1, W / 2 - EDGE), strainX, perX);
+  const wantZ = fit(Math.max(hNear / down, hFar / up), strainZ, perZ);
+
+  /* ONE REACH, BOTH AXES, and this is the change a circular arena earns.
+
+     These used to be fitted separately, and the reason given was that the arena
+     was 2:1 and only its width strained. That premise is gone: the field is as
+     deep as it is wide now, and fitted apart the two came out at 1 and 1.35 —
+     a 0.74x skew, so a diagonal swipe walked up to 8.6 degrees off the line it
+     was aimed at, every viewport, worse than anything the rectangle ever
+     produced. Measured against the modelled thumb it also cost real catches:
+     pointing fell behind the thumbstick at a fast look rate for the first time.
+
+     Taking the larger of the two satisfies both constraints by construction and
+     makes the skew exactly zero — swipe a direction, walk that direction. What
+     it costs is thumb-box width, since the wider reach now applies to x as
+     well; --touch asserts every point on the rim is still reachable and
+     aimable, which is the floor under that trade. */
+  touchReachX = touchReachZ = Math.max(wantX, wantZ);
 }
 
 /* Repaint the sky for the current theme, framing and viewport. Cheap enough

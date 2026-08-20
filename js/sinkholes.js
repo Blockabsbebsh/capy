@@ -55,8 +55,8 @@ function spawnHoleSafe(){
   if (holes.length >= 5) return;
   const r = 1.35 + Math.random() * 0.5;
   for (let tries = 0; tries < 40; tries++){
-    const x = (Math.random()*2 - 1) * (ARENA.halfX - r * 0.7);
-    const z = (Math.random()*2 - 1) * (ARENA.halfZ - r * 0.4);
+    const spot = arenaRandom(r * 0.7);
+    const x = spot.x, z = spot.z;
     if (Math.hypot(x - capyState.x, z - capyState.z) < r + 3.0) continue;
     let clash = false;
     for (const h of holes){
