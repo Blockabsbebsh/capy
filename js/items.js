@@ -14,16 +14,20 @@ function spawnItem(type, opts = {}){
   let x, z;
   if (opts.x !== undefined){
     // the spawn director places formation beats itself
-    x = THREE.MathUtils.clamp(opts.x, -ARENA.halfX, ARENA.halfX);
-    z = THREE.MathUtils.clamp(opts.z, -ARENA.halfZ, ARENA.halfZ);
+    const at = arenaClamp(opts.x, opts.z);
+    x = at.x; z = at.z;
   } else if (targeted){
     const jx = missile ? 0.8 : 2.6, jz = missile ? 0.6 : 1.8;
-    x = THREE.MathUtils.clamp(capyState.x + (Math.random()-0.5)*jx, -ARENA.halfX, ARENA.halfX);
-    z = THREE.MathUtils.clamp(capyState.z + (Math.random()-0.5)*jz, -ARENA.halfZ, ARENA.halfZ);
+    const at = arenaClamp(capyState.x + (Math.random()-0.5)*jx,
+                          capyState.z + (Math.random()-0.5)*jz);
+    x = at.x; z = at.z;
   } else {
-    const spreadZ = Math.min(ARENA.halfZ, 1.6 + game.level * 0.42);
-    x = (Math.random()*2 - 1) * (ARENA.halfX - 0.5);
-    z = (Math.random()*2 - 1) * spreadZ;
+    /* A stray lands anywhere in the field, spreading out from the middle as
+       the level climbs. Uniform by area inside a growing disc, which on a
+       circle is the whole of what the old x-full/z-ramped split was doing. */
+    const spread = Math.min(ARENA.r - 0.5, 1.8 + game.level * 0.55);
+    const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * spread;
+    x = Math.cos(a) * d; z = Math.sin(a) * d;
   }
 
   mesh.position.set(x, SPAWN_Y, z);
@@ -359,13 +363,16 @@ function updateItems(dt){
     m.position.x += it.vx * dt;
     m.position.z += it.vz * dt;
 
-    // watermelons bounce off the invisible side walls while falling
-    const lim = ARENA.halfX + 0.6;
-    if (m.position.x < -lim){ m.position.x = -lim; it.vx = Math.abs(it.vx); }
-    if (m.position.x >  lim){ m.position.x =  lim; it.vx = -Math.abs(it.vx); }
-    const zlim = ARENA.halfZ + 0.8;
-    if (m.position.z < -zlim){ m.position.z = -zlim; it.vz = Math.abs(it.vz); }
-    if (m.position.z >  zlim){ m.position.z =  zlim; it.vz = -Math.abs(it.vz); }
+    // watermelons bounce off the invisible wall while falling — off the rim
+    // now, reflected about its normal so a graze stays a graze
+    const lim = ARENA.r + 0.7;
+    const rr = Math.hypot(m.position.x, m.position.z);
+    if (rr > lim){
+      const nx = m.position.x / rr, nz = m.position.z / rr;
+      m.position.x = nx * lim; m.position.z = nz * lim;
+      const out = it.vx * nx + it.vz * nz;
+      if (out > 0){ it.vx -= 2 * out * nx; it.vz -= 2 * out * nz; }
+    }
 
     m.rotation.x += it.spin.x * dt;
     m.rotation.y += it.spin.y * dt;
@@ -416,8 +423,9 @@ function updateItems(dt){
       px += (capyState.x - px) * k;
       pz += (capyState.z - pz) * k;
     }
-    it.ring.position.x += (THREE.MathUtils.clamp(px, -ARENA.halfX - 1, ARENA.halfX + 1) - it.ring.position.x) * Math.min(1, dt * 9);
-    it.ring.position.z += (THREE.MathUtils.clamp(pz, -ARENA.halfZ - 1, ARENA.halfZ + 1) - it.ring.position.z) * Math.min(1, dt * 9);
+    const rp = arenaClamp(px, pz, -1);        // negative margin: a ring may sit just off the rim
+    it.ring.position.x += (rp.x - it.ring.position.x) * Math.min(1, dt * 9);
+    it.ring.position.z += (rp.z - it.ring.position.z) * Math.min(1, dt * 9);
 
     /* Landing indicator. This is the only cue for where a thing will end up,
        and it used to key its visibility off HEIGHT — opacity 0.14 until the
