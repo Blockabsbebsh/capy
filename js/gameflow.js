@@ -74,6 +74,7 @@ function toMenu(){
   game.power = null; game.shield = false; game.timeScale = 1;
   shieldBubble.visible = false;
   renderHatPicker();
+  renderDashSide();
   ui.hud.classList.remove('on');
   showPanel(ui.startPanel);
 }
@@ -86,7 +87,7 @@ function endGame(reason){
   const isBest = game.score > game.best;
   if (isBest){
     game.best = game.score;
-    try { localStorage.setItem('capybaraSnackRushBest', String(game.best)); } catch(e){}
+    store.set('capybaraSnackRushBest', String(game.best));
   }
   ui.finalScore.textContent = game.score;
   ui.finalBest.textContent = game.best;

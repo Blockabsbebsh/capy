@@ -7,11 +7,9 @@ const themeFxState = { points:null, pointsMat:null, fireflies:[], bubbles:[], st
 function clearThemeFX(){
   while (themeFX.children.length){
     const o = themeFX.children.pop();
-    // Anything flagged shared is owned by the module, not by this group, and
-    // is reused the next time the biome comes back (starting a new game or
-    // quitting to the menu re-runs this too, so "you never revisit a level"
-    // isn't protection). Disposing it here forced three.js to silently
-    // re-upload the geometry and recompile the shaders on the way back in.
+    // Anything flagged shared is owned by the module, not this group, and is
+    // reused next time the biome comes back. Disposing it here forced three.js
+    // to re-upload the geometry and recompile the shaders on the way back in.
     o.traverse?.(q => {
       if (q.geometry && !q.geometry.userData.shared) q.geometry.dispose();
       if (q.material && q.material.dispose && !q.material.userData.shared) q.material.dispose();
@@ -26,12 +24,6 @@ function clearThemeFX(){
   if (themeFxState.stars) themeFxState.stars.visible = false;
 }
 
-function makeFlatBlob(x,z,sx,sz,material,y=0.04){
-  const m = new THREE.Mesh(new THREE.CircleGeometry(1,48), material);
-  m.rotation.x = -Math.PI/2; m.scale.set(sx,sz,1); m.position.set(x,y,z);
-  m.receiveShadow = true; themeFX.add(m); return m;
-}
-
 function makeLilyPad(x,z,s=1,rot=0){
   const g = new THREE.Group(); g.position.set(x,0.06,z); g.rotation.y=rot; g.scale.setScalar(s);
   const pad = new THREE.Mesh(new THREE.CircleGeometry(1,48,0,Math.PI*1.82), new THREE.MeshStandardMaterial({color:0x6fae73,roughness:0.9}));
@@ -42,18 +34,14 @@ function makeLilyPad(x,z,s=1,rot=0){
 }
 
 /* ---------------------------------------------------------------------------
-   Texture resolution helpers.
-
-   `paint(drawSize, scale)` hands back a canvas that is drawSize*scale pixels
-   but pre-scaled so every drawing call still works in the original drawSize
-   coordinate space. That buys resolution without having to rescale hundreds of
-   hand-tuned coordinates, and vector work (arcs, strokes, gradients) simply
-   comes out crisper.
+   `paint(drawSize, scale)` hands back a canvas of drawSize*scale pixels that is
+   pre-scaled, so every drawing call still works in drawSize coordinates —
+   resolution without rescaling hundreds of hand-tuned numbers.
 
    `finish()` sets anisotropic filtering, which matters more here than raw
-   resolution does: this camera looks across the arena at a shallow angle, and
-   without it the GPU picks an over-blurred mip for the far half of the floor.
-   That, plus the low resolutions these started at, is what read as grain.
+   resolution: the camera looks across the arena at a shallow angle, and without
+   it the GPU picks an over-blurred mip for the far half of the floor. That is
+   what read as grain.
 --------------------------------------------------------------------------- */
 const ANISO = Math.min(8, renderer.capabilities.getMaxAnisotropy());
 function paint(drawSize, scale){
@@ -74,13 +62,11 @@ function finish(c, { srgb = true, repeat = null } = {}){
   return tex;
 }
 
-/* Lily-pad ground texture for the main pond arena — applied to the SAME
-   shared `patch` mesh every other biome uses (see the "hell" and "candy"
-   textures below), instead of a separate custom-geometry object. Using a
-   texture on the existing plain-circle patch — like every other biome —
-   avoids the class of bugs a bespoke mesh kept introducing (tilted
-   silhouette from rotating a non-uniformly-scaled group, geometry that
-   didn't match the collision ellipse, etc). */
+/* Lily-pad ground texture for the pond arena — applied to the SAME shared
+   `patch` mesh every other biome uses, not a bespoke mesh. The custom geometry
+   this replaced kept introducing its own bugs: a tilted silhouette from
+   rotating a non-uniformly-scaled group, geometry that missed the collision
+   ellipse. */
 const lilyPadTex = (() => {
   const [c, g] = paint(512, 2);            // 1024px, drawn in 512-space
   const cx = 256, cy = 256, R = 256;
@@ -91,11 +77,10 @@ const lilyPadTex = (() => {
   base.addColorStop(1, '#4f9060');
   g.fillStyle = base; g.fillRect(0,0,512,512);
 
-  /* Venation. Real lily-pad ribs fan out in gentle arcs that are thick at the
-     hub and taper to nothing at the margin, with finer forks filling the gaps
-     between them — and they sit LIGHTER than the pad, the way a raised rib
-     catches light. The old version drew eleven hard, dead-straight, uniformly
-     dark spokes, which read as a drawn asterisk rather than a leaf. */
+  /* Venation. Real ribs fan out in gentle arcs, thick at the hub, tapering to
+     nothing at the margin, with finer forks between — and LIGHTER than the pad,
+     the way a raised rib catches light. Eleven hard straight dark spokes read
+     as a drawn asterisk, not a leaf. */
   g.lineCap = 'round'; g.lineJoin = 'round';
   const ribPath = (a0, len, curve, steps = 26) => {
     const pts = [];
@@ -153,14 +138,12 @@ const lilyPadTex = (() => {
   return finish(c);
 })();
 
-/* The upturned rim of a giant Victoria lily — those pads flare up at the edge
-   into a short vertical wall with a rolled lip, which is the thing that makes
-   them read as a *giant* lily rather than a big flat leaf. It doubles as a
-   hard boundary for the arena, which until now had to be inferred from a
-   change of colour on a flat disc. Built once and toggled by visibility (the
-   themeFX group is torn down and rebuilt per visit, this is not). The rim
-   sits at the patch radius, well outside the movement bounds in
-   updateCapybara, so it is purely visual and never blocks the player. */
+/* The upturned rim of a giant Victoria lily: a short vertical wall with a
+   rolled lip, which is what makes the pad read as giant rather than big and
+   flat. It doubles as a visible arena boundary, which used to have to be
+   inferred from a change of colour. Built once and toggled by visibility (the
+   themeFX group is rebuilt per visit, this is not). It sits at the patch
+   radius, outside the movement bounds, so it never blocks the player. */
 const lilyRim = new THREE.Group();
 {
   const rimMat = new THREE.MeshStandardMaterial({ color:0x74b878, roughness:0.86, side:THREE.DoubleSide });
@@ -169,11 +152,9 @@ const lilyRim = new THREE.Group();
   wall.position.y = h / 2;
   wall.castShadow = true; wall.receiveShadow = true;
   lilyRim.add(wall);
-  // The tube radius is in UNSCALED units, and the group below scales the rim
-  // by 11 on X and 6.6 on Z (and 1 on Y), so whatever goes here comes out an
-  // order of magnitude fatter across the pad than it looks in this line. Half
-  // the old 0.075 keeps the lip readable as a rolled edge without it reading
-  // as a wall in its own right.
+  // UNSCALED units: the group below scales the rim by 11 on X and 6.6 on Z, so
+  // this comes out an order of magnitude fatter than it looks. Half the old
+  // 0.075 keeps a readable rolled edge without reading as a wall of its own.
   const lip = new THREE.Mesh(new THREE.TorusGeometry(1.05, 0.0375, 10, 96), rimMat);
   lip.rotation.x = Math.PI / 2;
   lip.position.y = h;
@@ -184,35 +165,29 @@ const lilyRim = new THREE.Group();
   world.add(lilyRim);
 }
 
-/* The arena patch is the same ellipse in every biome (see the identical
-   patch.scale calls in refreshThemeEnvironment). Background dressing that
-   lands inside it grows out of the arena floor instead of out of the field
-   beyond, which the pond already had to guard against and which the raised
-   hell slab below now shows up too. */
+/* The arena patch is the same ellipse in every biome. Background dressing that
+   lands inside it grows out of the arena floor instead of the field beyond —
+   which the pond had to guard against and the raised hell slab shows up too. */
 // one radius, because the drawn floor is a circle now — this was an ellipse
 // test with two half-axes that are the same number
 function outsidePatch(x, z, margin = 0){
   return Math.hypot(x, z) > PATCH_R + margin;
 }
 
-/* Hell's basalt slab sat exactly level with the lava field around it, so it
-   read as a pattern printed on the lava rather than a platform standing in
-   it. The slab is left alone — it is the shared `patch` mesh at the same size
-   and the same height as in every other biome, and nothing about where the
-   capybara stands, where food lands or where sinkholes open moves. What moves
-   is the field AROUND it: for 'hell' the big background disc drops by
-   HELL_LAVA_DROP, and this skirt fills the step, so the slab's side face
-   becomes visible and the eye reads it as raised out of the lava. Built once
-   and toggled by visibility, same as lilyRim above. */
+/* Hell's slab sat exactly level with the lava, so it read as a pattern printed
+   on it. The slab itself is untouched — the shared `patch` mesh at the same
+   size and height as every biome, so nothing about where the capybara stands or
+   where food lands moves. What moves is the field AROUND it: the background
+   disc drops by HELL_LAVA_DROP and this skirt fills the step, so the side face
+   shows and the eye reads the slab as raised. Toggled by visibility. */
 const HELL_LAVA_DROP = 0.4;
 const hellSkirt = new THREE.Group();
 {
   const h = HELL_LAVA_DROP + patch.position.y;     // lava level up to the slab face
-  // Top radius 1.0 sits directly under the patch edge; the slightly narrower
-  // base undercuts the slab, so the side face turns away from the sun and
-  // reads as a shadowed cut rather than as more floor. The colour is a shade
-  // lighter than the slab's own basalt — matched, the side face and the top
-  // read as one continuous black mass and the step disappears again.
+  // Top radius 1.0 sits under the patch edge; the narrower base undercuts the
+  // slab so the side face turns away from the sun and reads as a shadowed cut
+  // rather than more floor. A shade lighter than the basalt — matched, side and
+  // top read as one black mass and the step disappears again.
   const wall = new THREE.Mesh(
     new THREE.CylinderGeometry(1.0, 0.965, h, 96, 1, true),
     new THREE.MeshStandardMaterial({ color:0x2a1e1b, roughness:0.95, metalness:0 })
@@ -220,11 +195,10 @@ const hellSkirt = new THREE.Group();
   wall.position.y = patch.position.y - h / 2;
   wall.receiveShadow = true;
   hellSkirt.add(wall);
-  /* Cooled crust pooled on the lava at the foot of the slab — a contact
-     shadow, which the lava cannot get any other way: its material is
-     MeshBasic, so it receives no real shadow at all. Two plain rings of
-     falling opacity rather than one with a per-vertex alpha ramp, which is
-     the tidier idea but leaves a hard circle if the vertex-alpha path is not
+  /* Cooled crust pooled at the foot of the slab — a contact shadow, which the
+     lava cannot get any other way: its material is MeshBasic and receives no
+     real shadow. Two plain rings of falling opacity rather than one vertex-alpha
+     ramp, which is tidier but leaves a hard circle where that path is not
      taken; stepped opacity always draws. */
   for (const [r0, r1, a] of [[0.995, 1.06, 0.34], [1.06, 1.15, 0.16]]){
     const ring = new THREE.Mesh(
@@ -239,12 +213,9 @@ const hellSkirt = new THREE.Group();
   world.add(hellSkirt);
 }
 
-/* Water ripple texture for the pond biome's open water — a bump map
-   (grayscale height, not color) of concentric ring sets, so the surface
-   catches light unevenly instead of reading as a single flat color.
-   Tiled seamlessly via the same wraparound-draw trick used for the lava
-   and candy backgrounds. Used as a bumpMap, not a color map, so it adds
-   surface variation without changing the water's actual tint. */
+/* Water ripple bump map for the pond's open water: grayscale height, not
+   colour, so the surface catches light unevenly instead of reading flat. Tiled
+   with the same wraparound-draw trick as the lava and candy backgrounds. */
 const waterRippleTex = (() => {
   const [c, g] = paint(256, 2);            // 512px, drawn in 256-space
   g.fillStyle = '#808080'; g.fillRect(0,0,256,256);   // neutral gray = no bump
@@ -319,14 +290,11 @@ function makeObsidian(x,z,s=1,y0=0){
   m.castShadow=true; themeFX.add(m); return m;
 }
 
-/* Hell arena surface: obsidian/basalt rock with glowing lava fissures
-   baked into a texture on the shared `patch` mesh (same pattern as every
-   other biome's ground texture). A canvas texture is used instead of 3D
-   tube-geometry lines because the tubes had no relationship to the
-   patch's actual boundary — nothing stopped a curve control point from
-   landing outside the arena, which is exactly what happened. Painting
-   the fissures directly onto the surface that IS the arena guarantees
-   they can never extend past it. */
+/* Hell arena surface: basalt with glowing fissures baked into a texture on the
+   shared `patch` mesh. A canvas texture rather than tube geometry because the
+   tubes had no relationship to the patch boundary — nothing stopped a control
+   point landing outside the arena, which is exactly what happened. Painted onto
+   the surface that IS the arena, a fissure cannot leave it. */
 const obsidianTex = (() => {
   const [c, g] = paint(512, 2);            // 1024px, drawn in 512-space
   // base: mottled dark basalt, not flat black
@@ -359,13 +327,11 @@ const obsidianTex = (() => {
     g.strokeStyle = 'rgba(96,78,70,0.30)'; g.lineWidth = 1.1; trace(-1,-1);  // lit lip
   }
 
-  /* Lava fissures. A crack in cooled basalt is a GAP between plates: it runs
-     mostly straight, turns in sharp kinks where it meets a plate boundary
-     rather than wobbling smoothly, is widest mid-run and tapers to a hairline
-     at both ends, and glows from inside a dark recess. The old version drew
-     midpoint-displaced polylines at a constant width, which is why they read
-     as squiggles sitting on the rock instead of splits in it. Still baked
-     into this texture, so a crack can never extend past the arena. */
+  /* Lava fissures. A crack in cooled basalt is a GAP between plates: mostly
+     straight, kinking sharply at plate boundaries rather than wobbling, widest
+     mid-run, tapering to a hairline at both ends, glowing from inside a dark
+     recess. Midpoint-displaced polylines at constant width read as squiggles
+     sitting on the rock instead of splits in it. */
   // A crack runs from one junction to another. Walking freely and steering
   // away from the rim made every crack curve inward and meet in the middle,
   // which read as a twig. Going node-to-node instead lets them close into
@@ -439,13 +405,11 @@ const lavaGroundTex = (() => {
   const grd = g.createRadialGradient(128,128,10,128,128,180);
   grd.addColorStop(0, '#ffcf6a'); grd.addColorStop(0.35, '#ff7a1f'); grd.addColorStop(0.7, '#c23a10'); grd.addColorStop(1,'#5c1204');
   g.fillStyle = grd; g.fillRect(0,0,256,256);
-  // draw each blob NINE times (a 3x3 wraparound grid) so any blob that
-  // straddles a tile edge is mirrored on the opposite edge too — this is
-  // what makes a RepeatWrapping texture actually seamless. Without this,
-  // a circle near x=250 gets cut off with nothing continuing it at x=0,
-  // which reads as a hard seam — and since this texture's offset is
-  // animated for the scrolling effect, that seam visibly sweeps across
-  // the screen instead of sitting still.
+  // draw each blob NINE times (a 3x3 wraparound grid) so anything straddling a
+  // tile edge is mirrored on the opposite edge — this is what makes a
+  // RepeatWrapping texture actually seamless. Without it a blob near x=250 is
+  // cut off with nothing continuing it at x=0, and since this texture's offset
+  // is animated, that seam visibly sweeps across the screen.
   for (let i=0;i<60;i++){
     const x=Math.random()*256, y=Math.random()*256, r=6+Math.random()*20;
     g.fillStyle = Math.random()<0.5 ? 'rgba(255,220,140,0.35)' : 'rgba(90,20,5,0.35)';
@@ -510,13 +474,9 @@ function makeLavaBubbles(){
   }
 }
 
-// shared sprinkle materials + geometry, built once — makeSprinkles() used
-// to allocate a brand new material per capsule (42 materials for 42
-// meshes), which is wasted GPU program/state overhead for identical
-// flat-color materials. Reusing 4 shared materials + 1 shared geometry
-// across all instances is free visually and much cheaper to draw.
-// ...which in turn means clearThemeFX must not dispose them along with the
-// per-visit props it is clearing, hence the shared flag.
+// shared sprinkle materials + geometry, built once: a new material per capsule
+// was 42 identical flat-colour materials and 42 GPU state changes. Which is why
+// clearThemeFX must not dispose them — hence the shared flag.
 const sprinkleMats = [0xf06b9a,0x6c8fe8,0xffc64a,0x74c98d].map(c =>
   new THREE.MeshStandardMaterial({color:c, roughness:0.6}));
 const sprinkleGeo = new THREE.CapsuleGeometry(0.045,0.14,3,6);
@@ -625,18 +585,15 @@ function makeHellMoon(){
    dots and swirl streaks on a pink base, tiled across the arena patch. */
 const candyGroundTex = (() => {
   const [c, g] = paint(256, 4);            // 1024px, drawn in 256-space
-  // Deliberately a good few shades deeper than candyBgTex (the pale field
-  // beyond the arena), so the play area reads as a distinct candy mat at a
-  // glance. This tint used to arrive by accident, as the theme's ground
-  // colour multiplying the whole texture; it is baked in properly now, which
-  // keeps the contrast without also crushing the pattern underneath it.
+  // Deliberately deeper than candyBgTex, the pale field beyond the arena, so
+  // the play area reads as a distinct mat. This used to arrive by accident as
+  // the theme's ground colour multiplying the whole texture; baked in properly
+  // it keeps the contrast without crushing the pattern underneath.
   g.fillStyle = '#db80ac'; g.fillRect(0,0,256,256);
   const dotColors = ['#e793bc','#d16da0','#e78b85','#b698c0'];
-  // same wraparound trick as candyBgTex: draw each dot at all 4 tile
-  // offsets so nothing gets sliced off at the repeat seam. Without this,
-  // any dot straddling the edge of the 256x256 tile got hard-clipped —
-  // visible as a sharp cut running across the play field once the
-  // texture repeated (repeat.set(2, 1.4) below).
+  // same wraparound trick as candyBgTex: any dot straddling the edge of the
+  // 256x256 tile got hard-clipped, which showed as a sharp cut across the play
+  // field once the texture repeated.
   for (let i=0;i<26;i++){
     g.fillStyle = dotColors[i%dotColors.length];
     g.globalAlpha = 0.55;
@@ -648,14 +605,11 @@ const candyGroundTex = (() => {
   }
   g.globalAlpha = 0.30; g.strokeStyle = '#ffd9ec'; g.lineWidth = 5;
   /* Swirl bands as a sine whose period is exactly the tile width, spaced so a
-     whole number of them fits the tile height. Both axes are then genuinely
-     periodic and the bands run on unbroken across every repeat.
-     The old bezier ran edge to edge, which the comment here called "clean on
-     X", but nothing made its height and slope match at x=0 and x=256 — so
-     each tile boundary stepped the bands vertically. With repeat.set(2, 1.4)
-     that put a hard seam straight down the middle of the arena, and the 46px
-     spacing did not divide 256 either, so the Y duplication did not close it
-     up. Very visible now that the arena is a deeper colour. */
+     whole number fit the tile height — both axes genuinely periodic, so the
+     bands run on unbroken across every repeat. The bezier this replaced ran
+     edge to edge but nothing made its height AND slope match at x=0 and x=256,
+     so every tile boundary stepped the bands vertically — a hard seam down the
+     middle of the arena at repeat.set(2, 1.4). */
   const bands = 6, gap = 256 / bands;
   for (let i = 0; i < bands; i++){
     const y0 = i * gap;
@@ -670,24 +624,20 @@ const candyGroundTex = (() => {
   return finish(c, { repeat:[2, 1.4] });
 })();
 
-/* Night arena floor: a soft glowing pattern so the play field's boundary
-   reads clearly even in near-darkness — otherwise the arena is nearly
-   the same value as the background and hard to place at a glance. Uses
-   an emissive map (glows regardless of scene lighting, same technique as
-   the Hell obsidian fissures) rather than relying on ambient light to
-   pick out a flat color. */
+/* Night arena floor: a soft glowing pattern so the field's boundary reads in
+   near-darkness, where it is otherwise nearly the same value as the background.
+   An emissive map (glows regardless of scene lighting, same as the Hell
+   fissures) rather than relying on ambient light to pick out a flat colour. */
 const nightGroundTex = (() => {
   const [c, g] = paint(512, 2);            // 1024px, drawn in 512-space
   const cx = 256, cy = 256, R = 256;
   g.fillStyle = '#16281f'; g.fillRect(0,0,512,512);
 
   /* Damp mossy ground, lit unevenly. The concentric circles this used to draw
-     did define the arena, but they read as a target painted on the grass —
-     nothing about a moonlit clearing is that geometric. Anything radial has
-     the same problem: weighting the moss toward the rim just turns the
-     bullseye into a doughnut. So there is no radial structure here at all.
-     The arena still reads because the whole floor glows (this doubles as the
-     emissive map) against much darker surrounding ground. */
+     did define the arena, but they read as a target painted on the grass, and
+     anything radial has the same problem — weighting moss toward the rim just
+     turns the bullseye into a doughnut. So there is no radial structure at all:
+     the arena reads because the whole floor glows against darker ground. */
   // one broad off-centre wash, like moonlight coming in from one side
   const wash = g.createRadialGradient(cx - 70, cy - 90, 30, cx - 70, cy - 90, R * 1.25);
   wash.addColorStop(0,   'rgba(126,196,172,0.20)');
@@ -755,22 +705,18 @@ function refreshThemeEnvironment(th){
   sceneryGroup.visible = mode==='meadow' || mode==='night';   // hidden for pond/candy/hell, which supply their own dressing
   if (themeFxState.stars) themeFxState.stars.visible = mode==='night';
 
-  // helper: true if (x,z) lands outside the arena, with a margin — used so
-  // background decorations never spawn on top of you. One circle for every
-  // biome now: the drawn floor and the playable field are the same shape, so
-  // "clear of the field" and "clear of the grass" differ only by ARENA.pad and
-  // there is no longer a larger ellipse for a prop to hide inside.
+  // helper: true if (x,z) lands outside the arena, with a margin, so background
+  // decorations never spawn on top of you. One circle for every biome now — the
+  // drawn floor and the playable field are the same shape, so there is no
+  // larger ellipse for a prop to hide inside.
   function outsideArena(x, z, margin = 1.4){
     if (mode === 'pond' || mode === 'hell'){
-      // match the ACTUAL visible patch size (PATCH_R, same
-      // as every other biome now — see the uniform-scale fix), not the
-      // older, smaller collision-only ellipse. Using the smaller ellipse
-      // here let lily pads spawn in the gap between it and the larger
-      // visible patch, where they'd land on/under the patch and never
-      // actually show — which is why the background read as sparse
-      // despite plenty being spawned. Hell needs the same treatment for the
-      // opposite reason: its slab now stands proud of the lava, so a boulder
-      // planted at lava level inside the slab's footprint punches through it.
+      // match the ACTUAL visible patch (PATCH_R), not the older collision-only
+      // ellipse: the gap between them let lily pads spawn where they landed
+      // under the patch and never showed, which is why the background read as
+      // sparse. Hell needs it for the opposite reason — its slab stands proud
+      // of the lava, so a boulder at lava level inside the footprint punches
+      // through it.
       return outsidePatch(x, z, margin);
     }
     return Math.hypot(x, z) > PATCH_R + margin;
@@ -789,24 +735,18 @@ function refreshThemeEnvironment(th){
     ground.material = pondGroundMat;
     // Same disc size as every other biome. At 1.35 the water reached ~94 units
     // out, past the top of the frame, so the pond was the one level with no
-    // visible horizon at all — the sky only showed through the water's 0.85
-    // opacity, which put its apparent skyline in a completely different place
-    // to the other four.
+    // visible horizon — the sky showed only through the water's 0.85 opacity.
     ground.scale.setScalar(1);
-    // same pattern as every other biome: texture the shared `patch` mesh,
-    // sized to match ARENA exactly, same as every other theme — kept
-    // uniform across all 5 biomes now instead of each one having its own
-    // slightly different scale, which made the arenas look inconsistent
-    // in size from level to level
+    // same pattern as every biome: texture the shared `patch`, sized to ARENA.
+    // Each biome having its own slightly different scale made the arena look a
+    // different size from level to level.
     patch.scale.set(PATCH_R, PATCH_R, 1);
     patch.material.map = lilyPadTex; patch.material.color.setHex(0xffffff);
     patch.material.needsUpdate = true;
     border.visible=false;
-    // lots more mini lily pads scattered across the open water — kept
-    // clear of the main pad so they never overlap the play field. Spread
-    // tightened from the previous 30x22 toward the camera's typical
-    // visible range so more of them actually land on screen instead of
-    // scattering into the far distance where they're barely visible.
+    // mini lily pads across the open water, kept clear of the main pad. Spread
+    // tightened toward the camera's visible range so they land on screen rather
+    // than scattering into the far distance.
     for(let i=0;i<48;i++){
       const [x,z] = randomOutside(20, 16, 1.2);
       makeLilyPad(x, z, 0.35+Math.random()*0.7, Math.random()*6.28);
@@ -865,12 +805,10 @@ function refreshThemeEnvironment(th){
     // extend past its edge the way the old free-floating tube curves did
     patch.scale.set(PATCH_R, PATCH_R, 1);
     patch.material.map = obsidianTex; patch.material.color.setHex(0xffffff);
-    // Matte, and NOT metallic. metalness on a MeshStandardMaterial with no
-    // environment map to reflect kills the diffuse and leaves only a specular
-    // highlight, so the slab went near-black on the side facing away from the
-    // sun and picked up a wandering sheen on the side facing it — and since
-    // animate() orbits the sun, that sheen slid across the arena. Cooled
-    // basalt is rough rock anyway.
+    // Matte, and NOT metallic: metalness on a MeshStandardMaterial with no
+    // environment map kills the diffuse and leaves only a specular highlight, so
+    // the slab went near-black away from the sun and picked up a sheen toward
+    // it — and animate() orbits the sun, so the sheen slid across the arena.
     patch.material.roughness = 0.92; patch.material.metalness = 0;
     patch.material.emissiveMap = obsidianTex;
     patch.material.emissive.setHex(0xff5a1f);

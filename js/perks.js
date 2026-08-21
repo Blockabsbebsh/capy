@@ -2,13 +2,10 @@
    PERK MECHANICS
 
    The drafted perks that are more than a number: the dash shockwave, the
-   Phantombara afterimage, the Long Snout aura, Chain Sweeper's golden routes and
-   Puzzler's payouts. They all live here rather than being sprinkled through the
-   systems they touch, so a perk is one thing to read. (Auto-Shield is the
-   exception — it lives in powers.js, next to the bubble it borrows.)
-
-   Everything in here is inert until the matching perk is drafted — the update
-   pass returns immediately when nothing is owned.
+   Phantombara afterimage, the Long Snout aura, Chain Sweeper's golden routes
+   and Puzzler's payouts — here rather than sprinkled through the systems they
+   touch, so a perk is one thing to read. (Auto-Shield is in powers.js, next to
+   the bubble it borrows.) Everything is inert until drafted.
    ======================================================================= */
 
 /* --- Quick Paws: the landing shockwave ---------------------------------
@@ -72,36 +69,26 @@ function updateShocks(dt){
 }
 
 /* --- Phantombara: the dash afterimage ----------------------------------
-   A translucent copy of the capybara, left standing where the dash began. It
-   catches on the same radius the real one does, so the perk is really a second
-   pair of hands you place by dashing away from where the food is about to be.
-
-   Built once and cloned: THREE's clone shares geometry and material, so a
-   ghost costs a handful of objects and nothing on the GPU — which is also why
-   removing one must NOT dispose anything it walks. */
-/* Shaded, not flat, and it writes depth. Both matter: a MeshBasicMaterial
-   turned the whole animal into one pale silhouette with no volume, and without
-   depthWrite every overlapping piece blended through every other one, so the
-   ghost read as a cluster of soap bubbles rather than a capybara. Emissive
-   keeps it visible in Night and Hell, where a 0.55 white would sink into the
-   background. */
+   A translucent copy left standing where the dash began, catching on the same
+   radius the real one does — a second pair of hands you place by dashing away
+   from where the food is about to be. Built once and cloned: THREE's clone
+   shares geometry and material, so removing one must NOT dispose anything. */
+/* Shaded, not flat, and it writes depth. A MeshBasicMaterial turned the animal
+   into one pale silhouette with no volume, and without depthWrite every
+   overlapping piece blended through every other — a cluster of soap bubbles
+   rather than a capybara. Emissive keeps it visible in Night and Hell. */
 const ghostMat = new THREE.MeshStandardMaterial({
   color: 0xbfe9ff, roughness: 0.55, metalness: 0,
   emissive: 0x3f6f8f, emissiveIntensity: 0.35,
   transparent: true, opacity: 0.55, depthWrite: true });
-/* The ghost is the REAL capybara: the .glb's skinned geometry, rendered as a
-   plain Mesh so it stands frozen in its bind pose — which is the model's
-   neutral standing pose, since the retarget in capyrig.js composes its deltas
-   onto exactly those bone rest quaternions. A plain Mesh also means no cloned
-   skeleton to keep in step, and no chance of the afterimage animating along
-   with the capybara that left it.
-
-   Placed by the live mesh's own transform relative to `capy.root`, rather than
-   by hand: the loader's own offsets are then accounted for whatever the model
-   does, and the ghost stands where the capybara stands.
-
-   The procedural build stays as the fallback, for the same reason
-   buildCapybara() has one — a model that fails the rig contract should
+/* The ghost is the REAL capybara: the .glb's skinned geometry rendered as a
+   plain Mesh, so it stands frozen in the bind pose — the model's neutral
+   standing pose, since the retarget composes its deltas onto exactly those rest
+   quaternions. A plain Mesh also means no cloned skeleton to keep in step and
+   no chance of the afterimage animating along with the capybara that left it.
+   Placed by the live mesh's own transform relative to `capy.root`, so the
+   loader's offsets are accounted for whatever the model does. The procedural
+   build stays as the fallback: a model that fails the rig contract should
    downgrade the ghost, not break the perk. */
 const ghostTemplate = (() => {
   const skin = capy.torso;
@@ -174,12 +161,10 @@ function ghostItemTest(it){
     const reach = catchReach(it.def.good) + it.def.radius;
     if (dx*dx + dz*dz > reach*reach) continue;
 
-    /* Hearts and power-ups go through the ordinary onCatch: the whole point of
-       a heart or a magnet is the effect it has on the RUN, and reimplementing
-       that here is how the ghost ended up silently dropping them. Only plain
-       food takes the ghost-specific path, because that is the only case where
-       the difference matters (no hop, no chew, nothing on the head stack — the
-       food went into something standing somewhere else). */
+    /* Hearts and power-ups go through the ordinary onCatch: the point of a
+       heart or a magnet is what it does to the RUN, and reimplementing that
+       here is how the ghost ended up silently dropping them. Only plain food
+       takes the ghost path, since that is the only case where it differs. */
     if (it.def.heal || it.def.power){
       burst(p.clone(), 10, PAL.soap, { spread: 3.0, up: 2.4, size: 0.1, life: 0.5 });
       onCatch(it);
@@ -245,13 +230,10 @@ function updateAura(dt){
 }
 
 /* --- Chain Sweeper: golden routes ---------------------------------------
-   Clear a route and the next one is worth double; keep clearing and it is worth
-   triple, then quadruple, with no ceiling. The reward for a streak used to be
-   the streak itself (the combo timer refilling); this makes the NEXT route the
-   prize, which is a much better reason to keep one going.
-
-   The multiple lives on the record and on every item in it, so it cannot drift
-   out of step with what the player was shown. */
+   Clear a route and the next is worth double, then triple, with no ceiling. The
+   reward for a streak used to be the streak itself; this makes the NEXT route
+   the prize. The multiple lives on the record and on every item in it, so it
+   cannot drift out of step with what the player was shown. */
 function chainMul(){
   return game.up.chain && game.chain > 0 ? game.chain + 1 : 1;
 }

@@ -1,39 +1,24 @@
 /* =======================================================================
    CONSTANTS / TUNING
    ======================================================================= */
-/* THE ARENA IS A CIRCLE, and that is a route decision as much as a movement
-   one. A route is authored in a unit disc and dropped in at any angle: on a
-   circle a rotation is exact — every distance, angle and proportion survives
-   it — so one authored route is 360 different-looking routes and none of them
-   can fall outside the field. On the old rectangle (and on any ellipse) a
-   rotation shears the shape and has to be clamped back in, which is a
-   different figure at every angle and provably nothing.
-
-   It reads as an ellipse because the camera looks down the field at an angle,
-   which is the only reason the arena ever WAS an ellipse — that shape was
-   being drawn in the world and then flattened again by perspective.
-
-   `r` is the walkable radius and `pad` is the dressing beyond it: the grass
-   you can see but not stand on, which is now a rim rather than the 2.6x of
-   unreachable field the rectangle-in-an-ellipse used to leave. */
-/* The radius is the old rectangle's AREA, made round: 17.2 x 8.4 was 144.5
-   square units, and a circle of 6.78 is the same. Keeping the area is what
-   keeps every number tuned against it — step distances, fmtSpeed, the catch
-   radius, the difficulty curve — inside the range they were proven in.
-
-   It is also what pays for the depth. The field is as deep as it is wide now,
-   and fitCamera has to fit both (it only ever fitted width, because a
-   rectangle's depth never ran out first). Fitting depth on a 16:9 screen costs
-   pixels-per-unit, and shrinking the world radius is what buys them back: the
-   catch radius is a fixed 1.25 units, so a smaller field draws it BIGGER on
-   screen. At 8.6 a phone read it at 24px; at 6.8, 30px. */
+/* THE ARENA IS A CIRCLE, which is a route decision as much as a movement one:
+   routes are authored in a unit disc and dropped in at any angle, and only on
+   a circle is a rotation exact — every distance and proportion survives, so one
+   route is 360 that all still fit. On a rectangle or ellipse a rotation shears
+   the figure and has to be clamped back in. It only READS as an ellipse because
+   the camera looks down the field at an angle.
+   `r` is the walkable radius, `pad` the visible rim beyond it. */
+/* The old rectangle's AREA, made round: 17.2 x 8.4 = 144.5 square units, and
+   so is a circle of 6.78. Keeping the area keeps every number tuned against it
+   — step distances, fmtSpeed, catch radius, the curve — in its proven range.
+   Smaller than that costs field and buys pixels: the catch radius is a fixed
+   1.25 units, so a phone drew it at 24px on an 8.6 field and 30px on a 6.8. */
 const ARENA = { r: 6.8, pad: 0.55 };
 const PATCH_R = ARENA.r + ARENA.pad;
 
-/* Nearest point inside the field. Every "keep this in the arena" in the game
-   goes through here, so the arena has ONE definition — the old rectangle was
-   open-coded at a dozen call sites and the drawn floor agreed with none of
-   them. `margin` keeps a thing that has size clear of the rim. */
+/* Nearest point inside the field. Every "keep this in the arena" goes through
+   here so the arena has ONE definition; open-coded at a dozen call sites, the
+   drawn floor agreed with none of them. `margin` is for things with size. */
 const _arenaPt = { x:0, z:0 };
 function arenaClamp(x, z, margin = 0){
   const R = Math.max(0, ARENA.r - margin);
@@ -63,10 +48,8 @@ const GRAV = -19;
 const SLIP_TIME = 2.0;       // seconds of soap-slick controls
 
 /* Ceiling on the hop. Catches, hits, respawns and shield bounces all pop the
-   capybara up, and those pops used to STACK: assigning hopV while already
-   airborne relaunches from that height, so a few hits in quick succession put
-   the capybara in the stratosphere and out of the fight on the way back down.
-   See popUp() in player.js. */
+   capybara up, and assigning hopV while airborne relaunches from that height —
+   a few in quick succession used to reach the stratosphere. See popUp(). */
 const HOP_MAX = 2.4;
 
 /* Grace period after taking a hit. There was none, so three chillis landing in
@@ -75,54 +58,41 @@ const HOP_MAX = 2.4;
 const HIT_INVULN = 1.2;
 
 /* --- movement feel -------------------------------------------------------
-   Both input paths — the keys, and the pointer that mouse and thumb share —
-   resolve to a DESIRED velocity, and updateCapybara eases the real velocity
-   toward it. These are the times, in seconds, to close 90% of that gap;
-   smaller is snappier.
-
-   Having three of them is the whole point. The previous model accelerated at
-   a fixed 92 u/s² and then let friction do the stopping, which measured out
-   at 0.18s to reach full speed but 0.77s and 3.2 units of glide to stop —
-   more than twice the catch radius, so you could never park on a landing
-   ring, only drift over it. */
+   Both input paths resolve to a DESIRED velocity and updateCapybara eases
+   toward it; these are seconds to close 90% of the gap, smaller is snappier.
+   Three separate times is the point: accelerate-and-let-friction-stop measured
+   0.18s to full speed but 0.77s and 3.2 units of glide to stop, twice the catch
+   radius, so you could only ever drift over a landing ring. */
 const MOVE_T_ACCEL = 0.10;   // opening up, or holding a line
 const MOVE_T_BRAKE = 0.07;   // input released: stop, don't coast
 const MOVE_T_TURN  = 0.07;   // reversing into the opposite direction
 const MOVE_T_SLIP  = 0.55;   // soap turns all of the above to mush
-/* The pointer's proportional controller, and the reason a pointer feels good:
-   desired speed is min(distance * DRAG_GAIN, SPEED), so the walk saturates
-   until the target is about 1.1 units out and then eases itself to a stop. No
-   part of arriving is left to the player's timing — which is most of why the
-   same channel works for a thumb (see input.js). */
+/* The pointer's proportional controller: desired speed is
+   min(distance * DRAG_GAIN, SPEED), so the walk saturates until about 1.1 units
+   out and then eases itself to a stop. Nothing about arriving is left to the
+   player's timing, which is why the same channel works for a thumb. */
 const DRAG_GAIN    = 11;     // desired speed per unit of offset
 const DRAG_DEAD    = 0.05;   // pointer offset below which we simply stop
 
 /* --- dash ----------------------------------------------------------------
-   The player's action button, in place of the old hop. It is a repositioning
-   tool first: a burst well above top speed that carries you over a sinkhole,
-   and pays double on anything you catch during it. The hop itself is still
-   here — catches, respawns and shield bounces all pop the capybara up — it
-   just isn't something you can ask for any more. */
+   A repositioning tool first: a burst above top speed that carries you over a
+   sinkhole, paying double on anything caught during it. The hop still exists
+   but is no longer something the player can ask for. */
 const DASH_SPEED = 34;       // u/s at the start of the burst
 const DASH_TIME  = 0.22;     // seconds of burst
 const DASH_CD    = 0.55;     // cooldown, counted from the end of the burst
 const DASH_BONUS = 2.0;      // score multiplier for catching mid-dash
 const DASH_REACH = 0.2;      // extra catch radius while dashing
 
-/* Quick Paws' landing shockwave: a ring thrown out where the burst ends that
-   hoovers up food inside it. The multiplier is on the catch radius, so the
-   a pick is a multiple of however far you can already reach, and it widens 20%
-   a pick from there. Halved from where it started: at 3x the first pick
-   swallowed most of a route's next beats in one go, which is less a perk than
-   an autoplay button — the ring should reward dashing well, not replace
-   walking the shape. */
+/* Quick Paws' landing shockwave: a ring where the burst ends that hoovers up
+   food inside it, sized as a multiple of the catch radius and 20% wider a pick.
+   Halved from 3x, where the first pick swallowed most of a route's next beats
+   — the ring should reward dashing well, not replace walking the shape. */
 const SHOCK_R = [0, 1.5, 1.8, 2.16];
 const SHOCK_LIFE = 0.5;      // seconds the visual ring takes to expand and fade
 
-/* Phantombara's afterimage: how long a dash's ghost lingers. It catches on the
-   same radius the capybara does, so a ghost parked on a landing ring is as good
-   as standing there yourself — 5s is long enough to place one and go back for
-   something else, which is the whole point of the perk. */
+/* Phantombara's afterimage: a ghost catches on the same radius the capybara
+   does, so 5s is long enough to park one on a ring and go elsewhere. */
 const GHOST_LIFE = 5.0;
 
 /* Auto-Shield: a bubble that throws itself up when a hazard gets close, holds
@@ -140,18 +110,14 @@ const STEP_RATE = 1.03;      // leg-cycle speed per unit of ground speed. Purely
                              // travelled, so this is a look dial, not physics.
 const HEART_FALL = 3.1;      // hearts ignore fallSpeed and drift down at this rate
 
-/* Fall speed keeps its old ramp — the early levels are unchanged — but stops
-   climbing far sooner. Past this the difficulty is carried by the spawn
-   director's shapes getting longer and tighter (see formations.js), not by
-   giving the player less time to read anything. At the old 15.5 ceiling an
-   item fell from spawn to catch height in 0.82s, of which roughly 0.3s had a
-   legible landing ring; at 11 that fall is 1.08s. */
+/* Fall speed keeps its old ramp but stops climbing far sooner: past this,
+   difficulty is carried by the director's shapes, not by less time to read.
+   At the old 15.5 ceiling a fall was 0.82s; at 11 it is 1.08s. */
 const FALL_CAP = 11.0;
 
-/* Minimum seconds between level-ups, however much score arrives. The curve is
-   1 + score/220 + elapsed/34, and a watermelon at a x6 multiplier is worth
-   240 — so a feast, or a magnet over a feast, used to bank a dozen levels in
-   a couple of seconds and drop a fresh run straight into Hell. */
+/* Minimum seconds between level-ups, however much score arrives: a watermelon
+   at x6 is 240 against a curve of 1 + score/220 + elapsed/34, so a magnet over
+   a feast used to bank a dozen levels and drop a fresh run into Hell. */
 const LEVEL_MIN_GAP = 4.5;
 
 /* `weight` used to live here and hasn't been read since pickType started
@@ -184,20 +150,13 @@ const POWERS = {
   slowmo: { name:'SLOW-MO',  dur:7,    color:'#bff4ff', icon:'slowmo' },
 };
 
-/* Upgrades are drafted every 10 levels. Each one bumps a field on game.up,
-   which the relevant system reads live — nothing here needs a re-apply pass.
-
-   `icon` names an entry in ICON_BODY (icons.js) — drawn, not an emoji, so the
-   same card looks the same on every platform.
-
-   `tier` drives the card treatment and the icon on the owned-perk rail:
-   undefined for the ordinary stacking perks, 'silver' for the two one-offs, and
-   'gold' for the run perks below. `dead(game)` marks a perk that this run has
-   made pointless — it is kept out of the draft and struck through if it is ever
-   shown, because offering a dash upgrade to a player with no dash is worse than
-   offering nothing.
-
-   Descriptions are sentences: capital letter, no full stop. */
+/* Drafted every 10 levels; each bumps a field on game.up that the relevant
+   system reads live, so nothing needs a re-apply pass. `icon` names an entry in
+   ICON_BODY. `tier` drives the card and rail treatment: undefined for ordinary
+   stacking perks, 'silver' for one-offs, 'gold' for the run perks below.
+   `dead(game)` marks a perk this run has made pointless — kept out of the draft
+   entirely, since offering a dash perk to a player with no dash is worse than
+   offering nothing. Descriptions are sentences: capital, no full stop. */
 const UPGRADES = [
   { id:'reach',  icon:'reach', name:'Long Snout',
     desc:'Reach further for food, shown as an aura', max:4,
@@ -225,10 +184,8 @@ const UPGRADES = [
     apply:u => u.chain = true },
 ];
 
-/* ONE-PER-RUN PERKS. Each is a trade with a real cost, not a straight buff, so
-   taking one is a decision about how the rest of the run plays rather than a
-   number going up. Half the drafts offer one alongside the ordinary perks, and
-   the gold slot closes for the whole run once any of them is taken. */
+/* ONE-PER-RUN PERKS. Each is a trade with a real cost, not a buff. Half the
+   drafts offer one, and the gold slot closes for the run once any is taken. */
 const RUN_PERKS = [
   { id:'phantom', icon:'phantom', name:'Phantombara', tier:'gold', max:1,
     desc:'−1 max life. Every dash leaves a ghost for 5s that catches food — a hazard pops it',
@@ -302,23 +259,44 @@ reduceMotionQuery.addEventListener?.('change', e => { REDUCED = e.matches; });
 const TOUCH = window.matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
 if (TOUCH) document.body.classList.add('touch');
 
+/* localStorage, which throws rather than returning null in a locked-down
+   Safari — every read and write goes through these two so a private window
+   costs the saved hat and nothing else. Values are raw strings; scores.js
+   layers JSON on top for the board's own keys. */
+const store = {
+  get(k, fb = null){ try { return localStorage.getItem(k) ?? fb; } catch(e){ return fb; } },
+  set(k, v){ try { localStorage.setItem(k, v); } catch(e){} },
+};
+
+/* Which side the DASH button sits on. Steering has no handedness — press
+   anywhere — but the button does, and the hand that reaches it is the one not
+   steering. Left is not a mirror of the layout, only of the button: the arena
+   is centred and the HUD reads the same either way.
+   `refreshTouchMap` measures the live button rect to keep the finger off it,
+   so moving it has to re-run the fit. */
+let dashSide = 'right';
+if (store.get('capyDashSide') === 'left') dashSide = 'left';
+function setDashSide(side){
+  dashSide = side === 'left' ? 'left' : 'right';
+  document.body.classList.toggle('dash-left', dashSide === 'left');
+  store.set('capyDashSide', dashSide);
+  if (typeof fitCamera === 'function') fitCamera();
+}
+setDashSide(dashSide);
+
 /* =======================================================================
    HIGH SCORE BOARD
 
-   The game is served as static files, which only means GitHub Pages never
-   runs code for us — the page itself is free to talk to a server, and this
-   is that server. Supabase is a database with an HTTP API in front of it;
-   we call two endpoints with plain fetch, so there is still no SDK, no
-   bundler and no dependency.
+   Supabase is a database with an HTTP API in front of it; two endpoints,
+   plain fetch, no SDK and no dependency.
 
-   The key below is the PUBLISHABLE key and is meant to ship in public
-   source. It grants exactly the `anon` role, which row-level security
-   limits to reading the board and calling submit_score. Never put a
-   secret key or the database password here.
+   The key below is the PUBLISHABLE key and belongs in public source. It grants
+   the `anon` role, which row-level security limits to reading the board and
+   calling submit_score. Never a secret key or the database password.
 
-   Blank either field and the whole feature turns itself off: the menu
-   button hides and nothing is ever fetched. That is what keeps the game
-   working offline, and what keeps tools/shoot.js from needing a network.
+   Blank either field and the feature turns itself off — the menu button hides
+   and nothing is fetched. That is the offline story, and why shoot.js needs no
+   network.
    ======================================================================= */
 const SCORE_API = {
   url: 'https://wifqxxujxpuhhkddikhp.supabase.co',

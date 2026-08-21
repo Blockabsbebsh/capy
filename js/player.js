@@ -43,11 +43,10 @@ function resetCapy(){
   blobShadow.visible = true;
 }
 
-/* The action button. Commits to a direction for DASH_TIME and drives the
-   capybara along it well above top speed — see updateCapybara, which hands
-   steering back once the burst is spent. Soap takes the dash away along with
-   the grip: skidding helplessly past a sinkhole is the whole penalty, and an
-   escape hatch would refund it. */
+/* The action button: commits to a direction for DASH_TIME and drives well above
+   top speed — updateCapybara hands steering back once the burst is spent. Soap
+   takes the dash away with the grip: skidding past a sinkhole is the penalty,
+   and an escape hatch would refund it. */
 function tryDash(){
   if (game.state !== 'playing' || capyState.falling) return;
   if (capyState.dashT > 0 || capyState.dashCD > 0) return;
@@ -126,14 +125,11 @@ function popUp(v){
   capyState.hopV = Math.max(capyState.hopV, v * Math.max(0, 1 - capyState.hopY / HOP_MAX));
 }
 
-/* Where the finger is pointing, drawn on the ground.
-
-   A mouse has a cursor and a thumb does not, and the capybara stands a fixed
-   distance ABOVE the fingertip, so without this the offset is something the
-   player has to infer from watching the capybara chase it. It fades out as the
-   capybara arrives — once you are standing on the mark there is nothing left
-   to say, and a ring under your feet during the parked half of every beat is
-   just clutter on the part of the ground the ribbon is drawn on. */
+/* Where the finger is pointing, drawn on the ground. A mouse has a cursor and a
+   thumb does not, and the capybara stands a fixed distance ABOVE the fingertip,
+   so without this the offset is something the player infers by watching. It
+   fades as the capybara arrives — a ring under your feet during the parked half
+   of every beat is clutter on the ground the ribbon is drawn on. */
 const steerMark = new THREE.Mesh(
   new THREE.RingGeometry(0.30, 0.44, 28).rotateX(-Math.PI / 2),
   new THREE.MeshBasicMaterial({ color:0xffd07a, transparent:true, opacity:0, depthWrite:false }));
@@ -197,11 +193,10 @@ function updateCapybara(dt){
     }
   } else {
     /* --- one velocity-target model for both input paths ------------------
-       Keys say a direction, a pointer says a destination, and both resolve to
-       a desired velocity that the easing below closes on. Previously keys fed
-       an accelerator, the pointer fed a spring and a thumbstick had its own
-       snap that had to opt out of the friction pass to avoid fighting it;
-       three different feels for one character. */
+       Keys say a direction, a pointer says a destination, and both resolve to a
+       desired velocity this easing closes on. Keys used to feed an accelerator,
+       the pointer a spring, and a thumbstick its own snap that opted out of the
+       friction pass: three feels for one character. */
     let dvx = 0, dvz = 0;
     if (input.left || input.right || input.up || input.down){
       const ax = (input.right ? 1 : 0) - (input.left ? 1 : 0);
@@ -209,12 +204,11 @@ function updateCapybara(dt){
       const len = Math.hypot(ax, az) || 1;
       dvx = ax / len * SPEED; dvz = az / len * SPEED;
     } else if (capyState.dragX !== null){
-      // A proportional controller straight onto VELOCITY. Driving acceleration
-      // with the same gain made this a spring with almost no damping — it rang
-      // for eight visible oscillations around the cursor, ±0.5 units, which is
-      // most of a catch radius. On velocity it is first order and cannot
-      // overshoot at all. Magnitude is clamped as a vector, not per axis, or a
-      // diagonal drag would be worth SPEED * sqrt(2).
+      // A proportional controller straight onto VELOCITY. The same gain on
+      // acceleration is a spring with almost no damping — it rang for eight
+      // visible oscillations around the cursor, ±0.5 units, most of a catch
+      // radius. On velocity it is first order and cannot overshoot. Magnitude
+      // clamped as a vector, or a diagonal drag is worth SPEED * sqrt(2).
       const ex = capyState.dragX - capyState.x, ez = capyState.dragZ - capyState.z;
       const d = Math.hypot(ex, ez);
       if (d > DRAG_DEAD){
@@ -257,21 +251,16 @@ function updateCapybara(dt){
   capyState.x += capyState.vx * dt;
   capyState.z += capyState.vz * dt;
 
-  /* THE RIM. One arena shape for every biome, and the reason this is four
-     lines instead of a reflection: a curved wall is only unpleasant if it
-     fights you on it.
-
-     The old rectangle flipped the axis velocity (`*= -0.25`), which on a
-     circle is a bounce off a tangent — you get shoved sideways by a wall you
-     walked into straight, and repeatedly, which is the saw-tooth. So only the
-     OUTWARD component is removed here. What is left is the part along the rim:
-     walk into the edge at an angle and you glide around it, walk into it
-     square and you simply stop. Nothing is ever added to your velocity.
-
-     This is the safety net rather than the mechanism. Both pointers clamp
-     their TARGET into the field before the controller ever sees it (see
-     steerTo), so ordinary steering never presses on the wall at all — what
-     reaches here is the keys, a dash, and being thrown out of a sinkhole. */
+  /* THE RIM, and the reason it is four lines rather than a reflection: a curved
+     wall is only unpleasant if it fights you. Flipping the axis velocity
+     (`*= -0.25`, what the rectangle did) is a bounce off a tangent on a circle
+     — you get shoved sideways by a wall you walked into straight, repeatedly,
+     which is the saw-tooth. Only the OUTWARD component is removed, so walking
+     in at an angle glides around and square simply stops; nothing is ever added
+     to your velocity.
+     This is the safety net, not the mechanism: both pointers clamp their TARGET
+     into the field before the controller sees it (steerTo), so what reaches
+     here is the keys, a dash, and being thrown out of a sinkhole. */
   let hitWall = false;
   const rim = Math.hypot(capyState.x, capyState.z);
   if (rim > ARENA.r){
@@ -397,10 +386,9 @@ function updateCapybara(dt){
   }
 
   // --- head stack wobble, driven by how hard we just accelerated --------
-  // Clamped, because a dash sets velocity outright rather than ramping to it:
-  // taken literally that is a ~2000 u/s² spike in a single frame, which slams
-  // every piece of the stack straight to its rotation limit. A lurch is the
-  // right reaction to a dash; a slam is not.
+  // Clamped, because a dash sets velocity outright rather than ramping: taken
+  // literally that is a ~2000 u/s² spike in one frame, which slams every piece
+  // of the stack to its rotation limit. A lurch is right for a dash; a slam is not.
   const STACK_ACC_MAX = 300;
   const jerk = a => THREE.MathUtils.clamp(a / Math.max(dt, 1e-4), -STACK_ACC_MAX, STACK_ACC_MAX);
   updateStack(dt, jerk(capyState.vx - capyState.pvx), jerk(capyState.vz - capyState.pvz));

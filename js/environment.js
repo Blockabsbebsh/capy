@@ -43,13 +43,11 @@ pondRim.receiveShadow = true;
 world.add(pondRim);
 
 /* The pond's whole footprint, bank included, as somewhere scenery may not
-   stand. Two hand-placed trees and a share of the random scatter were growing
-   straight out of the water, which only ever showed in Meadow — it is the one
-   biome that draws the pond and the default scenery at the same time, so the
-   bug had exactly one place to appear and stayed there.
-
-   Measured off the meshes rather than repeating their numbers, so moving or
-   resizing the pond keeps the exclusion with it. `--check` asserts it. */
+   stand. Trees were growing straight out of the water, which only ever showed
+   in Meadow — the one biome drawing the pond and the default scenery at once,
+   so the bug had exactly one place to appear. Measured off the meshes rather
+   than repeating their numbers, so moving the pond keeps the exclusion with it.
+   `--check` asserts it. */
 function outsidePond(x, z, margin = 0){
   // the ring lies in its own XY plane and is rotated flat, so world z is
   // scaled by scale.Y — both are 1 today, and reading .z would be right by
@@ -134,10 +132,9 @@ function makeCloud(x, y, z, s, color = null, pool = clouds){
   const g = new THREE.Group();
   const n = 4 + Math.floor(Math.random()*3);
   // The neutral pool renders with the shared mat.cloud, which updateThemeMix
-  // eases toward each theme's `cloud` colour. Building a private material here
-  // instead is what left that colour with nothing to drive, so the clouds
-  // stayed pure white in every biome. Pass an explicit colour to opt out and
-  // get a bespoke material — the pink Bubblegum pool below does exactly that.
+  // eases toward each theme's `cloud` colour; a private material here is what
+  // left that colour with nothing to drive and the clouds white in every biome.
+  // Pass an explicit colour to opt out — the pink Bubblegum pool does.
   const cloudMat = color === null ? mat.cloud : new THREE.MeshStandardMaterial({ color, roughness: 0.9 });
   for (let i = 0; i < n; i++){
     const m = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 1), cloudMat);

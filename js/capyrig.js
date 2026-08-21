@@ -1,21 +1,18 @@
 /* =======================================================================
    RIGGED CAPYBARA — adapter around the converted external model.
 
-   The model is a SkinnedMesh with 28 bones (see tools/glb2json.mjs). The
+   The model is a SkinnedMesh with 28 bones (see tools/glb2json.mjs), but the
    animation code in player.js was written against the hand-built capybara and
-   drives it in GAME units: `legs[i].position.y = legRestY + lift` with
-   legRestY = 0.21. Bone translations are nothing like that — a hip bone sits
-   at a local offset of its own, and assigning 0.21 to it would fold the model
-   in half. Bones also carry rest rotations, which an absolute `rotation.x =`
+   drives it in GAME units: `legs[i].position.y = legRestY + lift`. Bone
+   translations are nothing like that — assigning 0.21 to a hip bone folds the
+   model in half — and bones carry rest rotations an absolute `rotation.x =`
    would wipe out.
 
    So the game is never handed bones. `legs`, `head`, `muzzle`, `mouth` and
-   `skull` are PROXY objects that exist only to absorb those writes; once a
-   frame `syncCapyRig()` reads them and composes the result onto the real
-   bones, on top of each bone's rest quaternion. player.js is untouched.
-
-   Everything else in the contract is a real object: root/bob/squash/tilt/body
-   are ordinary Groups exactly as before, and the anchors are real Groups
+   `skull` are PROXY objects that absorb those writes, and once a frame
+   `syncCapyRig()` composes the result onto the real bones on top of each rest
+   quaternion. player.js is untouched. Everything else in the contract is real:
+   root/bob/squash/tilt/body are ordinary Groups, and the anchors are Groups
    parented to the head bone so hats and the food stack ride the head.
    ======================================================================= */
 
@@ -39,13 +36,11 @@ const HEAD_SHARE = 0.72;    // head bob split between head0 and neck1
 
 let rig = null;             // retarget state, null while the procedural build is up
 
-/* -----------------------------------------------------------------------
-   Fur texture. The mesh ships with no UVs at all, so glb2json generates a
-   cylindrical projection; it stretches over the legs and has a seam down the
-   belly. That is survivable only because what it carries is noise — a
-   structured pattern would fall apart on it. Grain is high frequency around
-   the body and low along it, so it reads as strands running head to tail.
-   ----------------------------------------------------------------------- */
+/* Fur texture. The mesh ships with no UVs, so glb2json generates a cylindrical
+   projection; it stretches over the legs and seams down the belly, which is
+   survivable only because what it carries is noise — a structured pattern would
+   fall apart on it. Grain is high frequency around the body and low along it,
+   so it reads as strands running head to tail. */
 function furTexture(){
   const S = 256;
   const cv = document.createElement('canvas');
@@ -95,11 +90,9 @@ function furTexture(){
   return tex;
 }
 
-/* -----------------------------------------------------------------------
-   Build. Returns null (loudly) if the model or a driven bone is missing, so
+/* Build. Returns null (loudly) if the model or a driven bone is missing, so
    models.js can fall back to the procedural capybara rather than putting a
-   broken animal on screen.
-   ----------------------------------------------------------------------- */
+   broken animal on screen. */
 function buildRiggedCapybara(){
   if (typeof CAPY_MODEL === 'undefined'){
     console.error('[capy] capymodel.js did not load — using the procedural capybara');
@@ -192,18 +185,13 @@ function buildRiggedCapybara(){
                d: headBox.max.z - headBox.min.z };
 
   /* --- eyes -------------------------------------------------------------
-     Small, flat and dark, no catchlight — the art direction is explicit that
-     a glossy highlight reads as cartoon rather than figurine. The mesh has the
-     sockets sculpted but carries no colour of its own.
-
-     The sockets are FOUND, not guessed at from bounding-box fractions: this
-     capybara's eyes sit high and well back on the skull (they are set up like
-     a real capybara's, near the top of the head), which is nowhere near where
-     a "60% up, 72% forward" guess lands. Concavity is the discrete Laplacian
-     projected on the normal — positive where the surface dishes inward. The
-     head has three such dishes: the eye sockets, the nostrils and the mouth
-     line, so the search is fenced off the midline and above the muzzle, which
-     leaves only the eyes. */
+     Small, flat and dark, no catchlight: a glossy highlight reads as cartoon
+     rather than figurine. The sockets are FOUND, not guessed from bounding-box
+     fractions — this capybara's eyes sit high and well back on the skull, like
+     a real one's, nowhere near where "60% up, 72% forward" lands. Concavity is
+     the discrete Laplacian projected on the normal, positive where the surface
+     dishes inward; the head has three such dishes, so the search is fenced off
+     the midline and above the muzzle, which leaves only the eyes. */
   const nbr = new Map();
   const link = (a, b) => { if (!nbr.has(a)) nbr.set(a, new Set()); nbr.get(a).add(b); };
   const index = mesh.geometry.index;
@@ -258,13 +246,11 @@ function buildRiggedCapybara(){
   }
 
   /* --- head mount -------------------------------------------------------
-     hatAnchor / stackAnchor hang off this. It sits at the crown, world-aligned
-     rather than bone-aligned, because stack.js writes `stackAnchor.position.y`
-     and hats are modelled upright from y = 0.
-     Taken as the highest point ON THE MIDLINE, not the highest head vertex and
-     not a centroid: the ears are the tallest thing on the head and would drag
-     the anchor sideways, and averaging drags it forward into the muzzle, which
-     leaves hats hovering off the brow. */
+     hatAnchor / stackAnchor hang off this. World-aligned rather than
+     bone-aligned, because stack.js writes `stackAnchor.position.y` and hats are
+     modelled upright from y = 0. Taken as the highest point ON THE MIDLINE: the
+     ears are the tallest thing on the head and would drag the anchor sideways,
+     and a centroid drags it forward into the muzzle. */
   const crown = new THREE.Vector3(midX, -Infinity, 0);
   for (const i of headVerts){
     v.fromBufferAttribute(pos, i);

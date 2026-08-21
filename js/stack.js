@@ -14,7 +14,7 @@ function setHat(id){
     capy.hatAnchor.add(currentHat);
   }
   capy.stackAnchor.position.y = capy.stackBaseY + def.top;
-  try { localStorage.setItem('capyHat', def.id); } catch(e){}
+  store.set('capyHat', def.id);
 }
 
 /* =======================================================================
