@@ -78,7 +78,7 @@ Load order, which is also roughly the dependency order:
 
 ## Testing
 
-No unit-test framework. The harness is `tools/shoot.js` (52 assertions) and
+No unit-test framework. The harness is `tools/shoot.js` (67 assertions) and
 `tools/music.js`, run against a real browser:
 
 ```sh

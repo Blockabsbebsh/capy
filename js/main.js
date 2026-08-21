@@ -65,11 +65,10 @@ function animate(){
   if (game.state === 'playing'){
     game.elapsed += dt;
 
-    /* Level-ups are rate limited. The curve reads score, and score is
-       multiplied — a watermelon at x6 is 240, more than a whole level — so a
-       feast, or worse a magnet running over a feast, banked a dozen levels in
-       a couple of seconds and dropped a fresh run straight into Hell. Score
-       still drives the pace; it just cannot skip the levels in between. */
+    /* Level-ups are rate limited: the curve reads score, and a watermelon at x6
+       is 240 — more than a whole level — so a magnet over a feast banked a
+       dozen levels in seconds and dropped a fresh run into Hell. Score still
+       drives the pace, it just cannot skip the levels in between. */
     game.levelHold = Math.max(0, game.levelHold - dt);
     const want = game.devLock ? game.level : difficultyFrom(game.score, game.elapsed);
     const newLevel = game.devLock || game.levelHold > 0
@@ -81,50 +80,30 @@ function animate(){
     const themeStart =
       (Math.floor((game.level - 1) / THEME_EVERY) + 1) * THEME_EVERY + 1;
     /* A draft freezes the game, and a route in flight does not survive being
-       frozen: the ribbon you were walking goes behind a full-screen panel, and
-       whatever is mid-fall lands the instant it comes back. So the draft waits
-       for the arena to clear. The wait is bounded by the director itself —
-       nothing new is emitted until the live route is resolved or aged out, and
-       there is an `fmtGap` of idle between routes for this to fire in. The
-       level itself waits too, ceremony and all, rather than arriving now and
-       the perk later. */
+       frozen: the ribbon goes behind a full-screen panel and whatever is
+       mid-fall lands the instant it comes back. So the draft — and the level it
+       belongs to, ceremony and all — waits for the arena to clear. Bounded by
+       the director: nothing new is emitted until the live route resolves or
+       ages out, and the fmtGap between routes is the window this fires in. */
     const busy = fmt.queue.length > 0 || fmt.live.size > 0;
     if (newLevel > game.level && !(newLevel >= themeStart && busy)){
       game.levelHold = LEVEL_MIN_GAP;
       if (newLevel >= themeStart){
         if (!offerUpgrades(themeStart)){
-          // no perks left to offer — just advance straight into the theme
-          const was = curTheme;
-          game.level = themeStart;
+          // no perks left to offer — straight into the theme
+          const arrived = enterLevel(themeStart);
           applyDifficulty();
-          const th = themeFor(themeStart);
-          applyTheme(th, false);
-          Audio.setMusicTheme(THEMES.indexOf(th));
           Audio.levelUp();
           refreshHUD();
-          ui.levelBadge.classList.remove('bump');
-          void ui.levelBadge.offsetWidth;
-          ui.levelBadge.classList.add('bump');
-          /* Only announce a biome the player is actually arriving in. themeFor
-             clamps at Hell, so every ten levels past it used to fire the whole
-             arrival ceremony — banner, whoosh, white flash, FOV punch — for a
-             biome that had not changed. */
-          if (th !== was){
-            Audio.themeShift();
-            showBanner('✦ ' + th.name.toUpperCase() + ' ✦', '#ffe1a8');
-            if (!REDUCED){ flash('#ffffff', 0.3); game.fovKick = 3.2; }
-          } else {
-            showBanner('LEVEL ' + themeStart, '#ffe1a8');
-          }
+          showBanner(arrived ? '✦ ' + curTheme.name.toUpperCase() + ' ✦'
+                             : 'LEVEL ' + themeStart, '#ffe1a8');
         }
       } else {
         game.level = newLevel;
         applyDifficulty();
         Audio.levelUp();
         refreshHUD();
-        ui.levelBadge.classList.remove('bump');
-        void ui.levelBadge.offsetWidth;
-        ui.levelBadge.classList.add('bump');
+        bumpLevelBadge();
         showBanner('LEVEL ' + newLevel, '#ffe1a8');
       }
     }
@@ -210,8 +189,7 @@ document.addEventListener('visibilitychange', () => {
 // boot
 fitCamera();
 applyTheme(THEMES[0], true);
-let savedHat = 'none';
-try { savedHat = localStorage.getItem('capyHat') || 'none'; } catch(e){}
+const savedHat = store.get('capyHat', 'none') || 'none';
 const savedDef = HATS.find(h => h.id === savedHat);
 setHat(savedDef && hatUnlocked(savedDef) ? savedHat : 'none');
 renderHatPicker();

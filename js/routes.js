@@ -1,41 +1,34 @@
 /* =======================================================================
    ROUTE LIBRARY
 
-   Every route the spawn director can drop, as data. There is no runtime
-   construction any more: a route is emitted exactly as it was drawn, rotated
-   to a random angle and scaled to the field. What you see in the editor
-   (`node tools/routes.js`) is what lands on the grass.
+   Every route the director can drop, as data. There is no runtime construction:
+   a route is emitted exactly as drawn, rotated to a random angle and scaled to
+   the field, so what the editor (`node tools/routes.js`) shows is what lands.
 
-   That replaced a chainer which assembled each route out of two to five
-   smaller shapes. It measured badly: the joins between shapes averaged a 105
-   degree turn against 65 inside a shape, and 46% of them exceeded the
-   system's own definition of a near-reversal, against 2% inside a shape. The
-   randomness a player saw in a route was, almost entirely, the seams. It also
-   was not buying much — 60% of late-game routes were a single shape anyway.
+   The chainer this replaced assembled each route from two to five smaller
+   shapes and measured badly: joins averaged a 105 degree turn against 65 inside
+   a shape, and 46% of them passed the system's own near-reversal threshold
+   against 2% inside a shape. The randomness a player saw was the seams — and it
+   bought little, since 60% of late routes were a single shape anyway.
 
-   COORDINATES ARE A UNIT DISC. x and z run -1..1 with x^2 + z^2 <= 1, and the
-   whole thing is scaled by the arena radius at emit time. The disc is why the
-   arena is a circle: a rotation on a circle is exact, so one authored route is
-   360 routes that all still fit, and none of them has to be clamped, squashed
-   or redrawn to stay on the field.
+   COORDINATES ARE A UNIT DISC: x and z in -1..1 with x^2 + z^2 <= 1, scaled by
+   the arena radius at emit. The disc is why the arena is a circle — a rotation
+   on a circle is exact, so one authored route is 360 that all still fit.
 
-   Routes are listed in the order the items ARRIVE — every item falls at the
-   same speed from the same height, so emission order is landing order.
+   Routes are listed in the order items ARRIVE: everything falls at the same
+   speed from the same height, so emission order is landing order.
 
-   `min` is the level a route unlocks at, and it is ALSO how length is paced:
-   short routes early, longer ones layered on top, and nothing is ever taken
-   out of the pool. That is the whole length system — there is no distribution
-   to tune, because a three-beat route stays in the deck at level 60.
+   `min` is the unlock level and ALSO how length is paced — short routes early,
+   longer ones layered on top, nothing ever removed, so a three-beat route is
+   still in the deck at level 60 and there is no distribution to tune.
+   `weight` is tickets in the pool of everything unlocked. `dash` on a beat
+   prices that step against a dash-assisted run, and falls back to walking time
+   for a player who traded the dash away.
 
-   `weight` is how many tickets the route holds in the pool of everything
-   unlocked. `dash` on a beat prices that step against a dash-assisted run
-   instead of a walk — shorter, so it is only comfortable if you use the dash,
-   and it falls back to walking time for a player who traded the dash away.
-
-   Nothing here is a difficulty knob. Gaps come out of stepTime, so a new route
-   is a new PATH and never a new demand. What a new route has to earn is a
-   distinct IDEA — two routes that walk the same way are one route as far as
-   the player is concerned, and rotation already covers "the same but turned".
+   Nothing here is a difficulty knob: gaps come out of stepTime, so a new route
+   is a new PATH, never a new demand. What it has to earn is a distinct IDEA —
+   two routes that walk the same way are one route, and rotation already covers
+   "the same but turned".
    ======================================================================= */
 const ROUTES = [
   // the plainest thing in the deck: one straight run across the field

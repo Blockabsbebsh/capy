@@ -1,10 +1,9 @@
 const input = { left:false, right:false, up:false, down:false };
 const raycaster = new THREE.Raycaster();
 /* Two planes, because the two devices point at different things. A mouse sits
-   ON the capybara, so it reads against a plane at its middle and the body ends
-   up under the cursor. A finger points at a spot on the GROUND — a ribbon dot,
-   a landing ring — from a fixed distance below it, so it reads against y=0 or
-   the lift is quietly 0.6 units short of what it says. */
+   ON the capybara, so it reads against a plane at its middle. A finger points
+   at a spot on the GROUND from a fixed distance below it, so it reads against
+   y=0 or the lift is quietly 0.6 units short of what it says. */
 const bodyPlane  = new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.7);
 const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 const _ndc = new THREE.Vector2();
@@ -19,43 +18,30 @@ function pointerToGround(clientX, clientY, plane = groundPlane){
 }
 
 /* ---- steering: one scheme, two devices --------------------------------
-   Both the mouse and a thumb answer the same question — WHERE do you want to
-   be — and hand `capyState.dragX/dragZ` to the proportional controller in
-   updateCapybara. That controller is why the game feels good with a mouse: it
-   scales speed by how far away the target is, so arriving is automatic and
-   overshoot is impossible. Nothing about arrival is left to the player's
-   timing.
+   Mouse and thumb answer the same question — WHERE do you want to be — and
+   hand `capyState.dragX/dragZ` to the proportional controller in
+   updateCapybara, which scales speed by distance so arriving is automatic and
+   overshoot impossible. Nothing about arrival is left to the player's timing.
 
-   Touch used to get a velocity thumbstick instead, and that is what made
-   routes unplayable on a phone. A rate device asks the player for two
-   quantities they cannot see anywhere on screen — a heading and a throttle —
-   and holds whatever they last said until they say something else, so every
-   moment of inattention is an integration error. Measured against the
-   thumbstick with a modelled thumb (see `--touch` in tools/shoot.js) it clears
-   47% of routes to the stick's 39% at a 150ms look-rate, and 31% to 16% at
-   250ms — an ordinary rate for someone reading a route rather than drilling
-   one. The gap widens as the player slows down because a destination stays
-   correct while nobody is looking at it and a velocity does not.
+   Touch used to get a velocity thumbstick, and that is what made routes
+   unplayable on a phone: a rate device asks for a heading and a throttle that
+   are nowhere on screen and holds the last answer until you give another, so
+   every moment of inattention is an integration error. Against a modelled thumb
+   (`--touch`) pointing clears 47% of routes to the stick's 39% at a 150ms look
+   rate, and 31% to 16% at 250ms — the gap widens as the player slows down,
+   because a destination stays correct while nobody is looking at it.
 
-   Two things make pointing work on a phone at all, and both are load-bearing:
+   Two things make pointing work on a phone, and both are load-bearing:
 
-   1:1, never a gain. A relative "trackpad" mapping was measured at gains 1.4
-   through 3.6 and every one of them was WORSE than the thumbstick, because a
-   gain multiplies the thumb's own imprecision: 6px of thumb wobble at gain 2.4
-   is half a catch radius on a screen where the whole arena is 350px wide. At
-   1:1 the arena is small enough on screen to cover without ever clutching, so
-   there is no reason to pay for reach.
+   1:1, NEVER A GAIN. A relative trackpad mapping measured worse than the
+   thumbstick at every gain from 1.4 to 3.6, because a gain multiplies the
+   thumb's own imprecision: 6px of wobble at 2.4 is half a catch radius.
 
-   The capybara stands ABOVE the fingertip, by `touchLift` px. This is the
-   reason drag-to-follow was rejected for touch before, and it is the whole
-   fix rather than a detail: the lift is computed from the arena's own
-   projected depth, so on a phone your thumb sits entirely BELOW the play
-   field and never covers the thing you are steering onto.
-
-   `touchReachX/Z` are the one place the 1:1 gives, and they give for two
-   reasons — keeping the ends of the arena away from the bezel, and fitting the
-   play field inside a thumb's own sweep. They are separate because the arena
-   is 2:1 and only its width strains; see refreshTouchMap. */
+   THE CAPYBARA STANDS ABOVE THE FINGERTIP by `touchLift` px, computed from the
+   arena's own projected depth, so the thumb sits below the play field and never
+   covers the thing it is steering onto. `touchReachX/Z` are the one place the
+   1:1 gives, and only to keep the field clear of the bezel — see
+   refreshTouchMap. */
 const canvas = renderer.domElement;
 const touchZone = $('touchZone');
 let steerId = null;
@@ -68,13 +54,11 @@ function steerTo(clientX, clientY){
                       touchCY + (clientY - touchLift - touchCY) * touchReachZ)
     : pointerToGround(clientX, clientY, bodyPlane);
   if (!h) return;                       // pointing at the sky: keep the last target
-  /* Both devices clamp now, and on a round field that is what keeps the rim
-     pleasant rather than a nicety. The controller drives toward the place you
-     named; name a place outside the field and it drives into the wall and
-     holds there. Clamping to the NEAREST point inside means pointing past the
-     edge asks for the edge — the capybara arrives and stops, and the rim code
-     in updateCapybara never has to do anything. The rectangle only needed this
-     on touch because a mouse outside a box still resolves to a sensible axis. */
+  /* Both devices clamp, and on a round field that is what keeps the rim
+     pleasant rather than a nicety: the controller drives toward the place you
+     named, so a place outside the field means driving into the wall and holding
+     there. Clamping to the NEAREST point inside means pointing past the edge
+     asks for the edge — the capybara arrives and stops. */
   const t = arenaClamp(h.x, h.z);
   capyState.dragX = t.x;
   capyState.dragZ = t.z;
@@ -103,11 +87,10 @@ surface.addEventListener('pointermove', e => {
   e.preventDefault();
   steerTo(e.clientX, e.clientY);
 });
-/* `pointerleave` is desktop-only. With the pointer captured it should never
-   fire mid-drag, but if capture is ever refused it would end steering the
-   moment a thumb grazed the screen edge — the exact place the reach margin
-   exists to keep you away from. A touch that the OS does steal arrives as
-   pointercancel. */
+/* `pointerleave` is desktop-only: with the pointer captured it should never
+   fire mid-drag, but if capture is refused it would end steering the moment a
+   thumb grazed the screen edge — the exact place the reach margin exists to
+   keep you away from. A touch the OS steals arrives as pointercancel. */
 const enders = TOUCH ? ['pointerup','pointercancel']
                      : ['pointerup','pointercancel','pointerleave'];
 enders.forEach(ev =>
