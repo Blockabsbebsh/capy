@@ -302,6 +302,22 @@ reduceMotionQuery.addEventListener?.('change', e => { REDUCED = e.matches; });
 const TOUCH = window.matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
 if (TOUCH) document.body.classList.add('touch');
 
+/* Which side the DASH button sits on. Steering has no handedness — press
+   anywhere — but the button does, and the hand that reaches it is the one not
+   steering. Left is not a mirror of the layout, only of the button: the arena
+   is centred and the HUD reads the same either way.
+   `refreshTouchMap` measures the live button rect to keep the finger off it,
+   so moving it has to re-run the fit. */
+let dashSide = 'right';
+try { if (localStorage.getItem('capyDashSide') === 'left') dashSide = 'left'; } catch(e){}
+function setDashSide(side){
+  dashSide = side === 'left' ? 'left' : 'right';
+  document.body.classList.toggle('dash-left', dashSide === 'left');
+  try { localStorage.setItem('capyDashSide', dashSide); } catch(e){}
+  if (typeof fitCamera === 'function') fitCamera();
+}
+setDashSide(dashSide);
+
 /* =======================================================================
    HIGH SCORE BOARD
 

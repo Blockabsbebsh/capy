@@ -108,6 +108,23 @@ function renderHatPicker(){
   }
 }
 
+/* Which side the DASH button sits on — drawn wherever there is a container for
+   it (the menu, and the pause card so a wrong choice does not cost a run). */
+function renderDashSide(){
+  for (const id of ['dashSidePicker', 'dashSidePicker2']){
+    const box = $(id);
+    if (!box) continue;
+    box.innerHTML = '';
+    for (const side of ['left', 'right']){
+      const b = document.createElement('button');
+      b.className = 'hatbtn' + (dashSide === side ? ' sel' : '');
+      b.textContent = side.toUpperCase();
+      b.addEventListener('click', () => { setDashSide(side); renderDashSide(); Audio.jump(); });
+      box.appendChild(b);
+    }
+  }
+}
+
 /* --------------------------- owned perk rail ---------------------------
    Every perk you hold, as a small tinted icon down the left edge: tier colour
    for the background (plain / silver / gold), a n/max badge on anything that

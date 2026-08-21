@@ -74,14 +74,23 @@ function animate(){
     const want = game.devLock ? game.level : difficultyFrom(game.score, game.elapsed);
     const newLevel = game.devLock || game.levelHold > 0
                    ? game.level : Math.min(want, game.level + 1);
-    if (newLevel !== game.level && newLevel > game.level){
+    // find the first level that would start a new theme — that's where
+    // the run should pause for a draft, even if a big catch pushed
+    // newLevel further past it in a single frame. Whatever's left over
+    // gets picked up again next frame once we resume.
+    const themeStart =
+      (Math.floor((game.level - 1) / THEME_EVERY) + 1) * THEME_EVERY + 1;
+    /* A draft freezes the game, and a route in flight does not survive being
+       frozen: the ribbon you were walking goes behind a full-screen panel, and
+       whatever is mid-fall lands the instant it comes back. So the draft waits
+       for the arena to clear. The wait is bounded by the director itself —
+       nothing new is emitted until the live route is resolved or aged out, and
+       there is an `fmtGap` of idle between routes for this to fire in. The
+       level itself waits too, ceremony and all, rather than arriving now and
+       the perk later. */
+    const busy = fmt.queue.length > 0 || fmt.live.size > 0;
+    if (newLevel > game.level && !(newLevel >= themeStart && busy)){
       game.levelHold = LEVEL_MIN_GAP;
-      // find the first level that would start a new theme — that's where
-      // the run should pause for a draft, even if a big catch pushed
-      // newLevel further past it in a single frame. Whatever's left over
-      // gets picked up again next frame once we resume.
-      const themeStart =
-        (Math.floor((game.level - 1) / THEME_EVERY) + 1) * THEME_EVERY + 1;
       if (newLevel >= themeStart){
         if (!offerUpgrades(themeStart)){
           // no perks left to offer — just advance straight into the theme
@@ -206,6 +215,7 @@ try { savedHat = localStorage.getItem('capyHat') || 'none'; } catch(e){}
 const savedDef = HATS.find(h => h.id === savedHat);
 setHat(savedDef && hatUnlocked(savedDef) ? savedHat : 'none');
 renderHatPicker();
+renderDashSide();
 renderLives();
 refreshHUD();
 document.getElementById('loading').remove();

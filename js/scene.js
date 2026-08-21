@@ -458,10 +458,12 @@ function thumbFloor(){
   const H = window.innerHeight;
   let bottom = H - THREE.MathUtils.clamp(H * 0.06, 30, 64);
   const dash = document.getElementById('btnDash')?.getBoundingClientRect();
-  // the field's near-right is at 45 degrees on a circle, not at a corner
+  // the field's near corners are at 45 degrees on a circle, not at a corner,
+  // and the button may be under either one — see setDashSide
   const diag = ARENA.r * Math.SQRT1_2;
-  const arenaRight = groundX(diag, diag);
-  if (dash && dash.height > 0 && arenaRight > dash.left) bottom = Math.min(bottom, dash.top - 10);
+  if (dash && dash.height > 0 &&
+      groundX(diag, diag) > dash.left && groundX(-diag, diag) < dash.right)
+    bottom = Math.min(bottom, dash.top - 10);
   return bottom;
 }
 function refreshTouchMap(){
