@@ -108,6 +108,14 @@ function renderHatPicker(){
   }
 }
 
+// restart the CSS animation: removing the class is not enough on its own, the
+// reflow between is what lets it play again
+function bumpLevelBadge(){
+  ui.levelBadge.classList.remove('bump');
+  void ui.levelBadge.offsetWidth;
+  ui.levelBadge.classList.add('bump');
+}
+
 /* Which side the DASH button sits on — drawn wherever there is a container for
    it (the menu, and the pause card so a wrong choice does not cost a run). */
 function renderDashSide(){

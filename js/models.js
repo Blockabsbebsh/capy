@@ -18,12 +18,11 @@ function roundedBoxGeo(w, h, d, soft = 0.45, seg = 22){
 
 /* =======================================================================
    SCULPTED BLOB
-   Deforms a sphere along its Z axis with a per-slice profile, so a body
-   comes out as ONE continuous surface. Overlapping primitives leave a
-   visible crease wherever two convex surfaces meet, which is most of why
-   the previous build read as assembled parts instead of a sculpted figure.
-   `prof(u)` receives u = 0 at the -Z end through 1 at the +Z end, and
-   returns width/height multipliers plus a spine offset for that slice.
+   Deforms a sphere along its Z axis with a per-slice profile, so a body comes
+   out as ONE continuous surface — overlapping primitives leave a visible crease
+   wherever two convex surfaces meet, which is most of why the previous build
+   read as assembled parts. `prof(u)` takes u = 0 at the -Z end through 1 at +Z
+   and returns width/height multipliers plus a spine offset for that slice.
    ======================================================================= */
 function sculptBlob(len, halfW, halfH, prof, seg = 48){
   const g = new THREE.SphereGeometry(0.5, seg, Math.round(seg * 0.7));
@@ -42,17 +41,14 @@ function sculptBlob(len, halfW, halfH, prof, seg = 48){
 /* =======================================================================
    CAPYBARA  (all primitives, hand-assembled) — faces the camera (+Z)
 
-   Built to match a smooth stylised-figurine look, which differs from an
-   anatomical capybara in ways worth writing down, because they are the
-   things that kept going wrong:
-     - the back and the head are ONE unbroken line with only a slight dip,
-       not a head lifted clear of the shoulders;
-     - every form is a soft ellipsoid, never a rounded box — corners read
-       as "assembled from parts" instantly at this size;
-     - eyes are small flat dark dots with no catchlight. Glossy highlights
-       push it toward cartoon character and away from figurine;
-     - legs are distinctly darker than the body, and there is no pale
-       belly patch at all.
+   A smooth stylised figurine, which differs from an anatomical capybara in the
+   ways that kept going wrong:
+     - back and head are ONE unbroken line with a slight dip, not a head lifted
+       clear of the shoulders;
+     - every form is a soft ellipsoid, never a rounded box — corners read as
+       "assembled from parts" instantly at this size;
+     - eyes are small flat dark dots, no catchlight;
+     - legs are distinctly darker than the body, and there is no belly patch.
    ======================================================================= */
 function buildProceduralCapybara(){
   const root  = new THREE.Group();   // world position
@@ -79,10 +75,9 @@ function buildProceduralCapybara(){
   body.add(torso);
 
   /* --- head ---------------------------------------------------------------
-     Overlaps the chest deeply (the skull's back half sits inside the body)
-     so the two masses merge into one silhouette with just a soft dip at the
-     neck — that junction is the whole look, and lifting the head clear of
-     it was the single biggest thing wrong before. */
+     Overlaps the chest deeply so the two masses merge into one silhouette with
+     a soft dip at the neck. That junction is the whole look — lifting the head
+     clear of it was the single biggest thing wrong before. */
   const head = new THREE.Group();
   head.position.set(0, 0.92, 0.46);
   body.add(head);

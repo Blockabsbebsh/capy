@@ -10,11 +10,9 @@ const shuffled = arr => {
   return a;
 };
 
-/* Offer a draft for `level`, the level that's about to start. The game
-   pauses right here on the OLD level/theme; game.level itself doesn't
-   move and the new theme doesn't apply until a pick is made (see
-   takeUpgrade), so the pause lines up with the moment the new level
-   actually begins instead of firing a beat early. */
+/* Offer a draft for `level`, the level about to start. The game pauses on the
+   OLD level and theme — game.level does not move until a pick is made — so the
+   pause lines up with where the new level begins rather than a beat early. */
 /* A perk is dead when this run has made it pointless — Quick Paws with no dash
    to cool. Dead perks are kept OUT of the pool, so a draft never spends one of
    its three slots on something unusable, and struck through if one is shown
@@ -23,16 +21,12 @@ const perkDead = u => !!(u.dead && u.dead(game));
 
 function offerUpgrades(level){
   const pool = UPGRADES.filter(u => (game.taken[u.id] || 0) < u.max && !perkDead(u));
-  /* Half of all drafts put ONE run perk on the table, in the third slot,
-     against two ordinary perks. Half, not always: a run perk reshapes the run,
-     and a guaranteed one every draft would make the ordinary perks the
-     sideshow.
-
-     ONE PER RUN IS A BUDGET FOR THE WHOLE RUN, not one of each: taking any run
+  /* Half of all drafts put ONE run perk in the third slot against two ordinary
+     perks. Half, not always: a guaranteed one every draft would make the
+     ordinary perks the sideshow.
+     ONE PER RUN IS A BUDGET FOR THE WHOLE RUN, not one of each — taking any run
      perk closes the gold slot for good. Filtering only the perk that was taken
-     let a run stack all three, and they are balanced as a single trade — a
-     Phantombara who is also immune to everything and banking a life per route
-     has paid one life for the lot. */
+     let a run stack all three, and they are balanced as a single trade. */
   const runPool = hasRunPerk() ? [] : RUN_PERKS.filter(u => !perkDead(u));
   const gold = runPool.length && Math.random() < 0.5
              ? shuffled(runPool)[0] : null;
@@ -58,19 +52,12 @@ function offerUpgrades(level){
     const b = document.createElement('button');
     b.className = 'upcard' + (u.tier ? ' ' + u.tier : '') + (dead ? ' dead' : '');
     /* Every card carries its class line, including an ordinary perk you do not
-       own yet — the row read as ragged when only some of them had one, and
-       "how many of these can I take" is the question the tier is answering.
-       Gold says what taking it costs you, because that is the part a player
-       cannot work out from the card in front of them: it retires the whole
-       gold slot, not just this perk. The tracked small-caps style is built for
-       a short tag, so only the tag is uppercase and the sentence after it
-       stays sentence case.
-
-       An ordinary perk you already hold extends the same line rather than
-       replacing it — `MAX 4 • OWNED 2`, not `OWNED 2/4` — so the limit sits in
-       the same place on every card in the draft and the count is what gets
-       added. Swapping the whole label out is what made the row read as three
-       unrelated things. */
+       own yet: the row read as ragged when only some had one, and "how many can
+       I take" is what the tier answers. Gold says what taking it COSTS, since
+       that is the part the card cannot otherwise show — it retires the whole
+       gold slot. A perk you already hold extends the same line (`MAX 4 • OWNED
+       2`) rather than replacing it, so the limit stays in the same place on
+       every card in the draft. */
     const tag = dead ? `<u>NO USE THIS RUN</u>`
               : u.tier === 'gold'
                 ? `<u>UNIQUE<em> • Once chosen, gold upgrades will no longer ` +
@@ -127,12 +114,10 @@ function takeUpgrade(u){
   refreshHUD();
 }
 
-/* Take nothing and get on with it. Every perk is a trade — Long Snout drags
-   hazards into reach as the game gets denser, Second Wind buys the hazard rate
-   up with it — so "none of these" is a real answer to a draft, and without this
-   the only way to decline was to take the least bad one. Shares the whole tail
-   below with takeUpgrade: whichever way a draft ends, the level it was for has
-   to actually start. */
+/* Take nothing and get on with it: every perk is a trade, so "none of these" is
+   a real answer, and without this the only way to decline was to take the least
+   bad one. Shares the tail below with takeUpgrade — whichever way a draft ends,
+   the level it was for still has to start. */
 function skipUpgrade(){
   closeDraft();
   refreshHUD();
@@ -144,22 +129,7 @@ function closeDraft(){
   // right as play resumes instead of a beat later
   const startingLevel = game.pendingLevel;
   game.pendingLevel = null;
-  if (startingLevel){
-    const was = curTheme;
-    game.level = startingLevel;
-    const th = themeFor(startingLevel);
-    applyTheme(th, false);
-    Audio.setMusicTheme(THEMES.indexOf(th));
-    // past Hell themeFor clamps, so the arrival ceremony would replay for a
-    // biome that did not change — see the same guard in main.js
-    if (th !== was){
-      Audio.themeShift();
-      if (!REDUCED){ flash('#ffffff', 0.3); game.fovKick = 3.2; }
-    }
-    ui.levelBadge.classList.remove('bump');
-    void ui.levelBadge.offsetWidth;
-    ui.levelBadge.classList.add('bump');
-  }
+  if (startingLevel) enterLevel(startingLevel);
 
   applyDifficulty();
   Audio.powerUp();

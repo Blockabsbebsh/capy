@@ -55,12 +55,10 @@ const Audio = (() => {
 
   /* ---------------- MUSIC ----------------
      Five written pieces, one per biome, rather than one loop reskinned five
-     ways. The old version drew every melody note at RANDOM from a pentatonic
-     pool, which is exactly why it "worked but didn't sound great": random
-     pitches never form a phrase, so there was nothing to remember, nothing to
-     hum, and no difference between biomes beyond timbre. Each theme here is an
-     actual composition — its own key, tempo, metre, groove, bass line and a
-     melody with a motif that repeats.
+     ways. Melody notes drawn at RANDOM from a pentatonic pool is why it used to
+     "work but not sound great": random pitches never form a phrase, so there
+     was nothing to hum and no difference between biomes beyond timbre. Each
+     theme has its own key, tempo, metre, groove, bass line and a motif.
 
        Meadow     G major, 104bpm, swung eighths, marimba stroll
        Pond       D major, 92bpm, kalimba over water drips, lots of air
@@ -68,9 +66,9 @@ const Audio = (() => {
        Night      A minor WALTZ (3/4), 72bpm, music box, almost no percussion
        Hell       D harmonic minor, 126bpm, circus oompah organ and tambourine
 
-     The level never changes the piece, only how filled in it is: tempo creeps
-     up across the ten levels of a biome and the extra percussion joins halfway
-     through. A tune that mutated with difficulty would stop being a tune.  */
+     Level never changes the piece, only how filled in it is: tempo creeps up
+     across a biome's ten levels and the extra percussion joins halfway. A tune
+     that mutated with difficulty would stop being a tune. */
   /* Two gain stages, on purpose: `musicBus` carries the per-theme trim (see
      `mix` on each theme — the sparse pieces need a few dB to sit level with the
      busy ones) and `musicGain` is what duck() pulls down for menus, so ducking
@@ -83,9 +81,8 @@ const Audio = (() => {
        74   start a note here (MIDI number)
        -    hold the previous note one step longer
        .    rest
-     `pat` checks every bar against the theme's step grid, because a miscounted
-     bar does not look wrong — it silently shifts the rest of the phrase off the
-     beat, which is the hardest kind of bug to hear and the easiest to make. */
+     `pat` checks every bar against the theme's step grid: a miscounted bar does
+     not look wrong, it silently shifts the rest of the phrase off the beat. */
   function pat(bars, spb, label){
     const out = [];
     bars.forEach((bar, i) => {
@@ -270,10 +267,9 @@ const Audio = (() => {
   let mTheme = THEMES_M[0];
 
   /* --- lead voices ------------------------------------------------------
-     Two oscillators each: a body and one inharmonic partial, which is what
-     makes a struck or plucked thing sound struck or plucked. `decay` scales the
-     written note length, so the same phrase can ring (music box) or stay dry
-     and staccato (organ). */
+     Two oscillators each, a body and one inharmonic partial, which is what makes
+     a struck or plucked thing sound struck. `decay` scales the written note
+     length, so the same phrase can ring or stay staccato. */
   const VOICE = {
     marimba: { type:'triangle', ratio:2.01, partial:0.30, decay:1.10, atk:0.006, gain:0.100 },
     kalimba: { type:'sine',     ratio:3.01, partial:0.34, decay:1.70, atk:0.008, gain:0.088 },
@@ -289,10 +285,9 @@ const Audio = (() => {
        the melody's A5 — and buzzed loudly enough to bury the tune it was
        supposed to sit under. Cut it well below the lead's register instead. */
     /* Triangle, not sawtooth. A saw pad's third harmonic is a third of its
-       fundamental, and Hell's Dm is voiced on A3 — putting a strong 660Hz tone a
-       semitone under the melody's F5, measured at 2.4x the melody's own level.
-       A triangle's third harmonic is a ninth, ~10dB down, and the filter takes
-       the rest: the reedy darkness comes from the cutoff, not from the buzz. */
+       fundamental, and Hell's Dm is voiced on A3 — a strong 660Hz tone a
+       semitone under the melody's F5, at 2.4x the melody's level. A triangle's
+       third is a ninth, ~10dB down; the darkness comes from the cutoff. */
     reed:  { type:'triangle', lp:520,  gain:0.030 },
   };
   const BASS = {
@@ -426,12 +421,11 @@ const Audio = (() => {
     T.leadAt = part(T.leadP, spb, T.id + ' lead');
     T.bassAt = part(T.bassP, spb, T.id + ' bass');
     T.loop = T.chords.length * spb;
-    /* Resolved once, at load: an instrument name, whether it is a fill layer,
-       and its bar. A trailing '+' marks a layer that only joins in the second
-       half of a biome. The name is checked against the kit HERE, because it
-       used to be looked up per hit — and a pattern keyed 'extra', with no
-       instrument of that name, threw on every fill hit from level 6 onward and
-       took the whole music scheduler down with it. */
+    /* Resolved once, at load: instrument, whether it is a fill layer, and its
+       bar. A trailing '+' marks a layer that joins in the second half of a
+       biome. The name is checked against the kit HERE because it used to be
+       looked up per hit — a pattern keyed 'extra' threw on every fill hit from
+       level 6 and took the whole scheduler down with it. */
     T.hits = Object.keys(T.drums).map(k => {
       const fillOnly = k.endsWith('+');
       const inst = fillOnly ? k.slice(0, -1) : k;
@@ -519,11 +513,10 @@ const Audio = (() => {
     duck(v){ if (musicGain) musicGain.gain.value = v; },
 
     /* The compiled themes, for tools/music.js: what note is written where, so a
-       checker can verify the music as WRITTEN (scale membership, whether a
-       melody note fights the chord under it) rather than trying to infer notes
-       back out of a rendered mix — where a square wave's seventh harmonic reads
-       as an out-of-key pitch and the kick's downward sweep reads as a bass
-       note. Measure the audio for level and timing; check the data for notes. */
+       checker can verify the music as WRITTEN rather than infer notes back out
+       of a mix, where a square wave's seventh harmonic reads as an out-of-key
+       pitch and the kick's sweep as a bass note. Measure the audio for level
+       and timing; check the data for notes. */
     musicData(){
       return THEMES_M.map(T => ({
         id:T.id, tempo:T.tempo, tempoUp:T.tempoUp, mix:T.mix,
@@ -541,12 +534,10 @@ const Audio = (() => {
       }));
     },
 
-    /* Offline render of one theme, for tools/music.js. Music is the one part of
-       this game that cannot be checked by looking at it, and it is written as
-       data — so this exists to render that data and measure it, and to hand a
-       WAV to a human, which is the only real test of whether a tune is any
-       good. Uses a private OfflineAudioContext; do not call it mid-run, since
-       it borrows the module's context while it renders. */
+    /* Offline render of one theme, for tools/music.js — the one part of this
+       game that cannot be checked by looking at it, and the only real test is
+       handing a WAV to a human. Uses a private OfflineAudioContext; do not call
+       it mid-run, since it borrows the module's context while it renders. */
     async renderTheme({ theme = 0, seconds = 24, level = 1, rate = 44100 } = {}){
       const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
       if (!OAC) return null;
