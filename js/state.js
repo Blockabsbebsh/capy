@@ -55,10 +55,9 @@ function resetUpgrades(){
 
 /* Long Snout only reaches for FOOD. Applied to everything, the perk got worse
    the more you took: hazard density climbs with level and with every heart
-   banked, so a wider circle around the capybara eventually swept up more
-   chillies than burgers and the aura was drawn round a liability. Every catch
-   test passes what it is testing, so the drawn aura (which passes true) is the
-   good-item radius it has always looked like. */
+   banked, so a wider circle eventually swept up more chillies than burgers.
+   Every catch test passes what it is testing, so the drawn aura (which passes
+   true) is the good-item radius it has always looked like. */
 const catchReach = (good = true) => CATCH_R + (good ? game.up.reach : 0);
 
 /* One run perk per run, total — see the gold slot in offerUpgrades. */
@@ -75,9 +74,8 @@ function gainLife(raiseMax){
   return true;
 }
 
-try {
-  game.unlocked = JSON.parse(localStorage.getItem('capyHats') || '{}') || {};
-} catch(e){ game.unlocked = {}; }
+try { game.unlocked = JSON.parse(store.get('capyHats', '{}')) || {}; }
+catch(e){ game.unlocked = {}; }
 
 function hatUnlocked(h){
   return h.score === 0 || game.unlocked[h.id] || game.best >= h.score;
@@ -86,15 +84,14 @@ function checkHatUnlocks(){
   for (const h of HATS){
     if (h.score > 0 && !game.unlocked[h.id] && game.score >= h.score){
       game.unlocked[h.id] = true;
-      try { localStorage.setItem('capyHats', JSON.stringify(game.unlocked)); } catch(e){}
+      store.set('capyHats', JSON.stringify(game.unlocked));
       showBanner('HAT UNLOCKED — ' + h.name.toUpperCase(), '#ffd77a', 'hat');
       Audio.levelUp();
     }
   }
 }
 
-try { game.best = parseInt(localStorage.getItem('capybaraSnackRushBest') || '0', 10) || 0; }
-catch(e){ game.best = 0; }
+game.best = parseInt(store.get('capybaraSnackRushBest', '0'), 10) || 0;
 
 function difficultyFrom(score, elapsed){
   const lvl = 1 + Math.floor(score / 220) + Math.floor(elapsed / 34);
@@ -103,14 +100,11 @@ function difficultyFrom(score, elapsed){
 function applyDifficulty(){
   const L = game.level;
   game.fallSpeed  = Math.min(FALL_CAP, 5.8 + L * 0.52);
-  // What actually ramps now: formations arrive closer together and strays
-  // fill the gaps more often. Their internal difficulty — how much slack
-  // each step leaves — lives in fmtReach() over in formations.js.
-  // Routes are the pacing. Early levels get a real breather between them —
-  // one shape, cleared, then a beat to notice you did it — and late levels
-  // get barely a pause, so they run almost back to back. Only one route is
-  // ever live at a time (see formations.js), so this gap is measured from the
-  // last beat of one landing to the first of the next.
+  // What ramps: formations arrive closer together and strays fill the gaps
+  // more often. How much slack each step leaves lives in fmtReach().
+  // Routes are the pacing — early levels get a real breather between them, late
+  // ones almost none. Only one route is ever live at a time, so this gap is
+  // measured from the last beat of one landing to the first of the next.
   game.fmtGap     = Math.max(0.45, 4.2 - L * 0.16);
   // Strays are seasoning, not the meal — enough that the sky is not a
   // metronome, not so much that the routes get lost in noise. Measured over a
@@ -121,18 +115,33 @@ function applyDifficulty(){
   Audio.setMusicLevel(L);
 }
 
+/* Arriving at a level: theme, music, badge bump, and the biome ceremony — but
+   only for a biome that actually CHANGED. themeFor clamps at Hell, so every ten
+   levels past it used to replay the whole arrival for a theme that had not
+   moved. Both ways into a theme level (a draft closing, and no perks left to
+   offer) come through here. Returns whether the biome is new. */
+function enterLevel(level){
+  const was = curTheme;
+  game.level = level;
+  const th = themeFor(level);
+  applyTheme(th, false);
+  Audio.setMusicTheme(THEMES.indexOf(th));
+  bumpLevelBadge();
+  if (th === was) return false;
+  Audio.themeShift();
+  if (!REDUCED){ flash('#ffffff', 0.3); game.fovKick = 3.2; }
+  return true;
+}
+
 /* --- overtime -------------------------------------------------------------
    Every curve above bottoms out: fall speed by level 10, fmtReach by 16,
-   strayEvery by 21, fmtGap by 23. Past that the game stopped getting harder at
-   all, which a good player reaches and then farms — the last biome was the
-   easiest part of a long run because nothing was still climbing.
-
-   So one scalar keeps rising, from where the curves stop, and it is deliberately
-   spent on DENSITY rather than on speed: more hazards, less quiet between
-   routes, bigger set-pieces. Fall speed still caps at FALL_CAP and fmtReach
-   still caps at 0.78 — a route you cannot read is not difficulty, and a route
-   that is not clearable is a bug (see CLAUDE.md). Uncapped on purpose: it grows
-   slowly enough that level 60 is hard rather than impossible. */
+   strayEvery by 21, fmtGap by 23 — past which a good player farms a game that
+   has stopped getting harder, and the last biome is the easiest part of a run.
+   So one scalar keeps rising from where the curves stop, spent deliberately on
+   DENSITY and never on speed: more hazards, less quiet, bigger set-pieces. Fall
+   speed still caps at FALL_CAP and fmtReach at 0.78 — a route you cannot read
+   is not difficulty. Uncapped on purpose, and slow enough that level 60 is hard
+   rather than impossible. */
 const OVERTIME_FROM = 24;
 const overtime = () => Math.max(0, game.level - OVERTIME_FROM) / 10;
 

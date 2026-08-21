@@ -617,6 +617,32 @@ const fail = [];
       ? 'the axes agree — diagonal skew is NOT the finicky feel'
       : 'diagonal skew is real and this is where it lives. The strain floor ' +
         'is the only thing that pulls the two apart — see ?strain=1'));
+    /* The same corners with the button on the OTHER side. thumbFloor used to
+       clear the arena's near-RIGHT against dash.left, which is quietly true
+       for a button on the left — the near-left corner would have gone right
+       back under it, which is the bug this whole check exists for. */
+    for (const [w, h] of [[390, 844], [360, 640]]) {
+      await tp.setViewportSize({ width: w, height: h });
+      await tp.evaluate(() => setDashSide('left'));
+      await tp.waitForTimeout(350);
+      const onDash = await tp.evaluate(() => {
+        const V = new THREE.Vector3();
+        const dash = document.getElementById('btnDash').getBoundingClientRect();
+        let hit = 0;
+        for (let k = 0; k < 8; k++){
+          const a = Math.PI * 2 * k / 8;
+          V.set(Math.cos(a) * ARENA.r, 0, Math.sin(a) * ARENA.r).project(camera);
+          const g = { x: (V.x + 1)/2*window.innerWidth, y: (1 - V.y)/2*window.innerHeight };
+          const f = { x: touchCX + (g.x - touchCX)/touchReachX,
+                      y: touchCY + (g.y - touchCY)/touchReachZ + touchLift };
+          if (f.x > dash.left && f.x < dash.right && f.y > dash.top && f.y < dash.bottom) hit++;
+        }
+        return hit;
+      });
+      okT(`${w}x${h}: left-handed DASH eats no corner either`, onDash === 0,
+          `${onDash} under the button`);
+      await tp.evaluate(() => setDashSide('right'));
+    }
     await tp.setViewportSize({ width: 390, height: 844 });
     /* Asserted on the ITEM rate, not the clear rate. A route clear is all-or-
        nothing, so its rate falls off as p^n with route length — at 80% an item

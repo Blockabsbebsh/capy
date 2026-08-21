@@ -100,11 +100,10 @@ function spawnItem(type, opts = {}){
     });
     return;
   }
-  /* A routed item — a formation beat, or a melon on a feast path — falls
-     straight down and at the shared speed: the ribbon promises where it lands
-     and when, and a melon's usual lateral wander (up to 3.2 u/s) would make
-     that promise a lie. Puzzler halves that speed for formation beats, which
-     is the whole perk: the same shape, twice as long to read. */
+  /* A routed item — a formation beat or a melon on a feast path — falls
+     straight down at the shared speed: the ribbon promises where and when it
+     lands, and a melon's usual lateral wander would make that a lie. Puzzler
+     halves the speed for formation beats: same shape, twice as long to read. */
   const straight = !!opts.fid || !!opts.straight;
   const routeMul = opts.fid ? routeFallMul() : 1;
   items.push({
@@ -306,11 +305,10 @@ function pickType(){
 
 function updateItems(dt){
   const capPos = new THREE.Vector3(capyState.x, 0, capyState.z);
-  /* Iterated over a SNAPSHOT, skipping anything already removed. A resolution
-     inside this pass can now take more than one item off the list — catching a
-     power-up with Overcharged clears every hazard in the air — and a live
-     reverse index over a shrinking array reads past its end the moment
-     something below the cursor disappears. */
+  /* Iterated over a SNAPSHOT, skipping anything already removed: one resolution
+     can take several items off the list — Overcharged clears every hazard in
+     the air — and a live reverse index over a shrinking array reads past its
+     end as soon as something below the cursor disappears. */
   for (const it of [...items]){
     if (it.gone) continue;
     const m = it.mesh;
@@ -319,15 +317,12 @@ function updateItems(dt){
                        && it.def.good && !it.def.power && !it.dead && !capyState.falling;
 
     if (magnetised){
-      /* Pure pursuit, aimed at the capybara's MOUTH and driving velocity
-         directly. The magnet used to add acceleration toward the capybara's
-         feet with no damping and no vertical component, which is a spring:
-         items closed on you, shot straight through, and swung back out —
-         measured at 8.05 -> 0.60 -> 2.69 units while standing still — so they
-         orbited past and landed on the floor. Only 4 of 10 were ever caught.
-         Re-aiming velocity every frame converges instead of oscillating, and
-         including Y means the item arrives at catch height rather than
-         sailing over your head. */
+      /* Pure pursuit, aimed at the MOUTH and driving velocity directly. Adding
+         acceleration toward the feet with no damping is a spring: items closed,
+         shot through and swung back out — 8.05 -> 0.60 -> 2.69 units while
+         standing still — so they orbited past and landed, and 4 of 10 were
+         caught. Re-aiming velocity converges instead, and including Y means the
+         item arrives at catch height rather than sailing overhead. */
       const dx = capyState.x - m.position.x;
       const dy = (CATCH_Y - 0.15) - m.position.y;
       const dz = capyState.z - m.position.z;
@@ -427,16 +422,12 @@ function updateItems(dt){
     it.ring.position.x += (rp.x - it.ring.position.x) * Math.min(1, dt * 9);
     it.ring.position.z += (rp.z - it.ring.position.z) * Math.min(1, dt * 9);
 
-    /* Landing indicator. This is the only cue for where a thing will end up,
-       and it used to key its visibility off HEIGHT — opacity 0.14 until the
-       item dropped below y=6.5, which at the old top fall speed was two
-       thirds of the way down. You got about 0.3s of legible warning out of a
-       0.82s fall, i.e. the cue arrived after the moment it was useful.
-
-       It keys off TIME TO LAND now, so it reads the same at any fall speed:
-       clearly visible the moment the item exists, and closing from a wide
-       ring onto its exact footprint as the item arrives. That collapse is
-       the timing cue — the ring reaching full size IS the catch moment. */
+    /* Landing indicator, the only cue for where a thing ends up. It used to key
+       off HEIGHT — 0.14 opacity until y=6.5, which at the old fall speed gave
+       0.3s of legible warning out of a 0.82s fall, i.e. it arrived after it was
+       useful. It keys off TIME TO LAND now, so it reads the same at any fall
+       speed, closing from a wide ring onto its footprint as the item arrives:
+       the ring reaching full size IS the catch moment. */
     const lead = THREE.MathUtils.clamp(1 - tFall / 1.5, 0, 1);
     let alpha = 0.4 + lead * 0.5;
     if (!it.def.good && !it.def.neutral){

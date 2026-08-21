@@ -1,21 +1,17 @@
 /* =======================================================================
    HIGH SCORE BOARD
 
-   Every row on the board is one RUN, not one player: the same tag appears
-   as often as it has beaten itself. What keeps that list from filling with
-   noise is the submit rule — a run is only sent when it beat this device's
-   personal best, which is the `isBest` flag endGame already computes for
-   the NEW HIGH SCORE banner.
+   Every row is one RUN, not one player: the same tag appears as often as it has
+   beaten itself. What keeps the list from filling with noise is the submit rule
+   — a run is only sent when it beat this device's own best, the `isBest` flag
+   endGame already computes for the NEW HIGH SCORE banner.
 
-   A tag is a name you choose, not an account. Nothing proves it is yours,
-   the same way nothing stopped you typing someone else's initials into an
-   arcade cabinet. That is the point: you play on fifteen devices and keep
-   the same tag because you want the board to say it was you.
+   A tag is a name, not an account. Nothing proves it is yours, the same way
+   nothing stopped you typing someone else's initials into an arcade cabinet.
 
-   Nothing here may ever block the game. Every call is fire-and-forget, a
-   failed submit goes in a queue and retries at next boot, and the board
-   falls back to its last cached copy when the network is gone. If
-   SCORE_API is not filled in, the whole feature hides itself.
+   Nothing here may ever block the game: every call is fire-and-forget, a failed
+   submit queues and retries at next boot, and the board falls back to its last
+   cached copy. Unfilled SCORE_API hides the whole feature.
    ======================================================================= */
 const scoresOn = () => !!(SCORE_API.url && SCORE_API.key);
 
@@ -23,8 +19,8 @@ const LS_TAG   = 'capyTag';
 const LS_QUEUE = 'capyScoreQueue';
 const LS_CACHE = 'capyBoardCache';
 
-const lsGet = (k, fb) => { try { return JSON.parse(localStorage.getItem(k)) ?? fb; } catch(e){ return fb; } };
-const lsSet = (k, v)  => { try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} };
+const lsGet = (k, fb) => { try { return JSON.parse(store.get(k)) ?? fb; } catch(e){ return fb; } };
+const lsSet = (k, v)  => store.set(k, JSON.stringify(v));
 
 /* Tags are normalised here as well as in submit_score, so what the player
    is shown in the input matches the row that comes back from the server. */
@@ -34,7 +30,7 @@ function cleanTag(s){
 const validTag = t => /^[A-Z0-9 _-]{2,12}$/.test(t);
 
 let myTag = '';
-try { myTag = cleanTag(localStorage.getItem(LS_TAG) || ''); } catch(e){}
+myTag = cleanTag(store.get(LS_TAG, ''));
 
 /* Server-supplied text goes through here before it reaches innerHTML. The
    tag regex already rules out every HTML character, so this is the second
@@ -194,7 +190,7 @@ async function submitFromPrompt(){
     return;
   }
   myTag = tag;
-  try { localStorage.setItem(LS_TAG, tag); } catch(e){}
+  store.set(LS_TAG, tag);
 
   ui.btnTagSubmit.disabled = true;
   ui.btnTagSubmit.textContent = 'SENDING…';

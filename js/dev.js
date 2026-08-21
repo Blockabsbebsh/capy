@@ -28,20 +28,17 @@ function jumpToLevel(n){
 /* =======================================================================
    ROW LEVEL SECURITY SELF-CHECK
 
-   The board looks identical whether or not RLS holds — it reads and writes
-   correctly either way — so the only way to know is to try the thing that
-   must fail: an anon INSERT straight into the table, bypassing submit_score
-   and every guard in it.
+   The board looks identical whether or not RLS holds, so the only way to know
+   is to try the thing that must fail: an anon INSERT straight into the table,
+   bypassing submit_score and every guard in it.
 
-   Supabase's SQL Editor cannot answer this. It runs as the table owner and
-   bypasses RLS entirely, so it reports success no matter how the policies
-   are set. The question is only meaningful from a browser holding the
-   publishable key, which is exactly what this page is.
+   Supabase's SQL Editor cannot answer this — it runs as the table owner and
+   bypasses RLS, so it reports success however the policies are set. The
+   question is only meaningful from a browser holding the publishable key.
 
-   It runs a READ first. Without that, a wrong URL answers 404 to the write
-   and reads as "refused" — a false pass, which is the worst possible result
-   for a security check. A write is only evidence once a read has proved we
-   are talking to the right project at all.
+   It runs a READ first: without that a wrong URL answers 404 to the write and
+   reads as "refused", a false pass, which is the worst possible result for a
+   security check.
    ======================================================================= */
 async function rlsCheck(out){
   const set = (t, c) => { out.textContent = t; out.style.color = c; };
@@ -91,13 +88,11 @@ async function rlsCheck(out){
 }
 
 if (DEV_MODE){
-  /* The panel is markup inside #hud, and #hud sets z-index:15, which makes it
-     a stacking context — so the panel's own z-index:50 is only meaningful
-     among #hud's children and can never lift it above #startPanel at 20. It
-     also inherits #hud's opacity:0 while the menu is up. On a desktop the
-     start card is capped at 520px so the panel sits beside it and neither
-     problem shows; on a phone the card is 96vw and buries it completely.
-     Reparenting to <body> takes it out of that stacking context entirely. */
+  /* The panel is markup inside #hud, which sets z-index:15 and so is a stacking
+     context — the panel's own z-index:50 is only meaningful among #hud's
+     children and can never lift it above #startPanel at 20, and it inherits
+     #hud's opacity:0 while the menu is up. Reparenting to <body> takes it out
+     of that context entirely. */
   document.body.appendChild(ui.testLevelPanel);
   ui.testLevelPanel.style.position = 'fixed';
   ui.testLevelPanel.style.zIndex = '60';
