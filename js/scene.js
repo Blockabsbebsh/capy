@@ -234,8 +234,21 @@ const LIFT_REACH = 1.0;
 
 /* The band of screen the whole platform has to land inside. The top is HUD,
    the bottom is the hint line and, on a phone, the DASH button. Fractions
-   rather than pixels because both of those scale with the viewport. */
-const FIT_TOP = 0.12, FIT_BOTTOM = 0.95, FIT_SIDE = 0.02;
+   rather than pixels because both of those scale with the viewport.
+
+   Touch keeps more of the top, and the reason is raiseFrame: 12% is where the
+   HUD chips end, so it is the right place for a platform that is simply being
+   FITTED and the wrong one for a platform being pushed up against it. On a
+   short viewport — a phone's real one is ~714px, not the 844 the hardware
+   claims, once the browser's own chrome is out — the raise wanted more room
+   than the screen had, took all 12% of it, and pinned the field under the
+   score chips with the whole lower half bare. Reported as "still high up
+   there". At 18% the raise stops short of the HUD and the fit pays the
+   difference by making the platform a little smaller, which is the trade
+   worth making: the field being an inch lower is worth more than the last 7%
+   of its width. */
+const FIT_TOP = 0.12, FIT_TOP_TOUCH = 0.18, FIT_BOTTOM = 0.95, FIT_SIDE = 0.02;
+const fitTop = () => window.innerHeight * (TOUCH ? FIT_TOP_TOUCH : FIT_TOP);
 
 function poseAt(zoom, aspect){
   const base = Math.hypot(CAM_BASE.y - CAM_LOOK.y, CAM_BASE.z - CAM_LOOK.z);
@@ -267,7 +280,7 @@ function poseAt(zoom, aspect){
 function fitCamera(){
   const aspect = window.innerWidth / window.innerHeight;
   const W = window.innerWidth, H = window.innerHeight;
-  const top = H * FIT_TOP, bottom = H * FIT_BOTTOM, side = W * FIT_SIDE;
+  const top = fitTop(), bottom = H * FIT_BOTTOM, side = W * FIT_SIDE;
   frameLift = 0; applyFrameLift();       // the fit measures the unshifted frame
 
   const fits = zoom => {
@@ -335,7 +348,8 @@ function fitCamera(){
    and the landing rings are the read on a phone anyway, and both are on the
    ground, where the shift puts them fully in the clear.
 
-   The clamp is the HUD band: the platform never rides above FIT_TOP. Where
+   The clamp is the HUD band: the platform never rides above FIT_TOP_TOUCH,
+   which is set back from the chips for exactly this reason. Where
    that clamps the shift short — a 320x568, or a landscape phone with the DASH
    button eating the bottom third — the thumb keeps whatever band is left,
    which is still more than it had. */
@@ -356,7 +370,7 @@ function thumbBand(){
   const hNear = groundY(0, ARENA.r) - cy, hFar = cy - groundY(0, -ARENA.r);
   const band = (hNear + hFar) * (1 - HAND_TOLERANCE) + LIFT_GAP;
   return { need: cy + hNear / LIFT_REACH + band - thumbFloor(),
-           room: groundY(0, -PATCH_R) - window.innerHeight * FIT_TOP };
+           room: groundY(0, -PATCH_R) - fitTop() };
 }
 // the catch radius as it reads UP the screen, which is what a smaller platform
 // spends. 14px was measured as "you cannot see whether you are on the dot".
