@@ -203,7 +203,7 @@
   #powerBarOuter{width:min(26vw,132px); height:6px; border-radius:5px; background:rgba(0,0,0,.5);
     margin:4px 0 0 auto; overflow:hidden; border:1px solid rgba(255,255,255,.18);}
   #powerBar{height:100%; width:100%; border-radius:5px; transition:width .1s linear;}
-  #hatPicker{display:flex; flex-wrap:wrap; gap:7px; justify-content:center; margin:14px 0 2px;}
+  #hatPicker, .hatrow{display:flex; flex-wrap:wrap; gap:7px; justify-content:center; margin:14px 0 2px;}
   .hatbtn{
     margin:0; padding:8px 12px; font-size:12.5px; letter-spacing:.5px; border-radius:11px;
     background:rgba(255,255,255,.09); color:var(--cream);
@@ -233,6 +233,9 @@
   @keyframes badgeBump{0%{transform:scale(1)}25%{transform:scale(1.22)}100%{transform:scale(1)}}
 
   .bottom-row{display:flex; align-items:flex-end; justify-content:space-between; gap:10px;}
+  /* the DASH button on the other side, for the other hand. Only the row
+     reverses — the hint keeps its flex:1 and stays centred. */
+  body.dash-left .bottom-row{flex-direction:row-reverse;}
   .hint{font-size:11px; opacity:.5; letter-spacing:1px; flex:1; text-align:center;}
   #btnMute, #btnPause{
     pointer-events:auto; background:rgba(20,14,10,.7); border:1.5px solid rgba(255,205,140,.3);
@@ -629,6 +632,8 @@
     </p>
     <div class="label" style="margin-top:12px">Headwear</div>
     <div id="hatPicker"></div>
+    <div class="label touch-only" style="margin-top:12px">Dash button</div>
+    <div id="dashSidePicker" class="hatrow touch-only"></div>
     <!-- Controls, split by device: the two setups share nothing but the dash.
          Written as flowing lines rather than a grid of chips — see the CSS. -->
     <div class="ctrlhelp">
@@ -655,6 +660,8 @@
   <div class="card">
     <h2>Paused</h2>
     <p class="sub">The capybara is taking a hot spring break.</p>
+    <div class="label touch-only">Dash button</div>
+    <div id="dashSidePicker2" class="hatrow touch-only"></div>
     <button id="btnResume">RESUME</button><br>
     <button class="ghost" id="btnQuit">QUIT TO MENU</button>
   </div>

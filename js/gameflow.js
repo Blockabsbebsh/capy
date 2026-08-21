@@ -74,6 +74,7 @@ function toMenu(){
   game.power = null; game.shield = false; game.timeScale = 1;
   shieldBubble.visible = false;
   renderHatPicker();
+  renderDashSide();
   ui.hud.classList.remove('on');
   showPanel(ui.startPanel);
 }
