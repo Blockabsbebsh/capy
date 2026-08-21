@@ -134,21 +134,36 @@ const CAM_LOOK = new THREE.Vector3(0, 1.6, -0.6);
 const camFit = { x:CAM_BASE.x, y:CAM_BASE.y, z:CAM_BASE.z, follow:1 };
 const FIT_MARGIN = 1.6;
 
-/* Pitch, by how tall the screen is.
+/* Pitch, by how tall the screen is — and it barely leans any more.
 
-   The arena is twice as wide as it is deep, so fitting its WIDTH is what sets
-   the camera distance, and on a portrait phone that distance leaves the play
-   field a 371x92px strip: eight and a half units of depth inside 92 pixels,
-   which puts the catch radius at 14px measured up the screen. You cannot see
-   whether you are on the dot, and no input scheme fixes that.
+   The tall end was 46 degrees, and it was a fix for the RECTANGLE. That arena
+   was twice as wide as it was deep, so fitting its width set the camera
+   distance and left a portrait phone a 371x92px strip: eight and a half units
+   of depth inside 92 pixels, a catch radius of 14px measured up the screen,
+   and no way to see whether you were on the dot. Pitching down to 46 spent the
+   unused height above and below on depth and took it to 18px.
 
-   A tall screen has hundreds of pixels of unused height above and below that
-   strip, and pitching the camera down spends them on depth without moving the
-   camera any closer: at 46 degrees the same arena is 120px deep and the catch
-   radius reads 18px. It is gated on aspect and the wide end is the original
-   pose to the last decimal, so every desktop framing is untouched. */
+   A circle is as deep as it is wide, so that premise is gone, and 46 had
+   turned into a tax paid twice. The steep angle stretches the field's depth
+   across the screen, and the thumb band under it is a 1:1 copy of that depth
+   (see raiseFrame), so every pixel of pitch cost two — until the phone ran out
+   of room, the fit shrank the arena to get it back, and the field ended up
+   NARROWER than the screen could hold. Measured on a 402x714 phone: at 46 the
+   field is 313x240 with its top jammed at 18% of the screen; at 34 it is
+   357x226 at 22%, which is 14% wider, lower down, and with more of the biome
+   behind it. The catch radius goes the other way, 22.1px up the screen to
+   20.6 — the axis being spent is the one the tilt is buying room on, which is
+   the whole reason this is the right lever and shrinking the arena is not.
+
+   34 rather than shallower because that is where the field's WIDTH maxes out
+   on a phone; past it the tilt only foreshortens, and by 30 the catch radius
+   is at the 18px line that fitCamera will not cross. It is barely a lean now —
+   the desktop pose is 32.7 and has always drawn the ribbon, the falling food
+   and a tall head-stack legibly at that angle, so a phone at 34 is not a new
+   regime. The ramp stays only because the wide end IS the original pose to the
+   last decimal, so every desktop framing is untouched. */
 const CAM_PITCH_WIDE = Math.atan2(CAM_BASE.y - CAM_LOOK.y, CAM_BASE.z - CAM_LOOK.z);
-const CAM_PITCH_TALL = THREE.MathUtils.degToRad(46);
+const CAM_PITCH_TALL = THREE.MathUtils.degToRad(34);
 const PITCH_ASPECT = { wide: 1.3, tall: 0.55 };
 
 /* The finger-to-ground mapping, all of it derived from where the arena
