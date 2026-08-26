@@ -723,6 +723,10 @@
 <!-- three.js first, then the game modules in dependency order. These are plain
      scripts sharing one global scope, so the order below is load-bearing. -->
 <script src="vendor/three.min.js"></script>
+<!-- Tone.js UMD, for the music modules below. A plain script, not a module:
+     Tone's ESM build is 555 files with bare-specifier deps and would need a
+     bundler, which this repo deliberately does not have. -->
+<script src="vendor/tone.js"></script>
 <script src="js/config.js"></script>
 <script src="js/icons.js"></script>
 <script src="js/audio.js"></script>
@@ -752,5 +756,12 @@
 <script src="js/gameflow.js"></script>
 <script src="js/dev.js"></script>
 <script src="js/main.js"></script>
+<!-- The five biome tracks. The ONLY module script on the page: classic scripts
+     share one global lexical scope, which is what lets the game go without
+     namespacing, and converting them to modules would break that. This one
+     imports the five tracks and publishes them as window.Music, which
+     js/audio.js delegates to. Module scripts are deferred, so it runs after
+     every script above it. -->
+<script type="module" src="js/music/index.js"></script>
 </body>
 </html>
