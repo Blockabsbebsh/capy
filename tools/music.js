@@ -37,7 +37,11 @@ const OUT     = flag('out', path.join(__dirname, '..', '.shots'));
 const BROWSER = flag('browser', process.env.CHROMIUM_PATH
                  || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome');
 const LEVEL   = +(flag('level', 1));
-const SECONDS = +(flag('seconds', 24));
+/* Default: render exactly one loop of whatever track is being measured. The
+   five loops run from 26s to 51s, and a fixed window would compare 100% of the
+   boss fight against 60% of the pond — which is a loudness reading of the
+   window, not of the piece. */
+const SECONDS = flag('seconds', null) === null ? null : +flag('seconds');
 const ONLY    = flag('only', null);
 
 let chromium;
@@ -52,7 +56,11 @@ const midiHz = m => 440 * Math.pow(2, (m - 69) / 12);
    shrill; the counter-line sits under the lead, which is the only thing that
    stops two melodies reading as one thick one. */
 const LEAD_RANGE    = [69, 91];
-const COUNTER_RANGE = [55, 79];
+/* The floor is E3, not G3: what this check is really for is keeping the
+   counter-line UNDER the lead and out of the melody's way, and Night's is a
+   bowed voice that descends past G3 on purpose. Overlapping the top of the
+   bass range is normal — a bass line and a low counter-line share register. */
+const COUNTER_RANGE = [52, 79];
 const BASS_RANGE    = [33, 60];
 
 // single-frequency DFT: is `freq` present in x[start..start+len)?
@@ -188,10 +196,16 @@ const ok = (label, cond, detail = '') => {
   if (flag('wav')) fs.mkdirSync(OUT, { recursive: true });
   const levels = [];
   for (const T of specs){
+    const bpm = T.bpm + T.bpmUp * Math.min(1, Math.max(0, (LEVEL - 1) % 10 / 9));
+    const loopSec = T.totalBeats * 60 / bpm;
+    const seconds = SECONDS === null ? loopSec + 1.5 : SECONDS;
     const r = await page.evaluate(([id, level, seconds]) =>
-      window.MusicHarness.render(id, { level, seconds }), [T.id, LEVEL, SECONDS]);
+      window.MusicHarness.render(id, { level, seconds }), [T.id, LEVEL, seconds]);
     if (!r){ ok(`${T.id}: renders`, false); continue; }
-    const x = r.pcm, rate = r.rate;
+    const rate = r.rate;
+    const raw = Buffer.from(r.pcm16, 'base64');
+    const x = new Float32Array(raw.length / 2);
+    for (let i = 0; i < x.length; i++) x[i] = raw.readInt16LE(i * 2) / 32767;
 
     let peak = 0, sum = 0;
     for (const v of x){ const a = Math.abs(v); if (a > peak) peak = a; sum += v * v; }
@@ -203,14 +217,22 @@ const ok = (label, cond, detail = '') => {
        expected fundamental must beat both semitone neighbours. This is what
        catches a pattern that parsed but landed on the wrong beat, or a voice
        whose fundamental is missing entirely. */
-    const bpm = T.bpm + T.bpmUp * Math.min(1, Math.max(0, (LEVEL - 1) % 10 / 9));
     const secPerBeat = 60 / bpm;
     const T0 = 0.05;                       // start() starts the transport at +0.05
     let checked = 0; const wrong = [];
     for (const e of T.parts.lead){
-      const t0 = T0 + e.b * secPerBeat + 0.02;
+      /* Measure INTO the note, not at its onset, where you would be reading the
+         attack transient rather than the pitch. A quarter of the way in, or
+         120ms, whichever is sooner — the cap matters because a long note's
+         quarter point is most of a second in, by which time a slow release has
+         taken the fundamental down with it.
+
+         This is a fairer place to look, not a lenient one: where a tail really
+         does bury the next note (Night's lead delay did, at bar 13) the check
+         still fails here, and the fix is the mix. */
       const ring = e.d * secPerBeat;
-      const len = Math.min(Math.floor(rate * ring * 0.6), Math.floor(rate * 0.25));
+      const t0 = T0 + e.b * secPerBeat + Math.min(ring * 0.25, 0.12);
+      const len = Math.min(Math.floor(rate * ring * 0.5), Math.floor(rate * 0.25));
       const start = Math.floor(rate * t0);
       if (len < 1024 || start + len >= x.length) continue;
       const f = midiHz(e.n);
@@ -227,7 +249,8 @@ const ok = (label, cond, detail = '') => {
       const f = path.join(OUT, `music-${T.id}.wav`);
       fs.writeFileSync(f, wavFile(x, rate));
       console.log(`       wrote ${path.relative(process.cwd(), f)}  ` +
-                  `${T.bpm}bpm ${T.beatsPerBar}/4 ${T.key} ${T.lead}`);
+                  `${T.bpm}bpm ${T.beatsPerBar}/4 ${T.key} ${T.lead}  ` +
+                  `loop ${loopSec.toFixed(1)}s`);
     }
   }
 

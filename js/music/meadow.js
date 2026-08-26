@@ -133,11 +133,18 @@ export const spec = {
   drums:KIT.map(k => k.inst + (k.fill ? '+' : '')),
 };
 
+/* Balance trim, in dB. The five pieces have very different densities — a
+   sparse pond and a wall-to-wall boss fight do not land at the same loudness
+   at the same fader — so each carries its own offset and `tools/music.js`
+   asserts they end up within 1.5x of each other. A theme change is a mood
+   change, not a volume change. */
+const MIX = -2.7;
+
 let rig = null, level = 1, vol = 0.75;
 
 function build(){
   const T = tone();
-  const out = new T.Volume(unitToDb(vol));
+  const out = new T.Volume(unitToDb(vol) + MIX);
   const comp = new T.Compressor({ threshold:-16, ratio:3, attack:0.005, release:0.1 });
   comp.connect(out);
   out.toDestination();
@@ -266,6 +273,7 @@ export function start({ level: lv = level } = {}){
   rig = build();
   const tr = T.getTransport();
   tr.bpm.value = spec.bpm + spec.bpmUp * ramp(level);
+  tr.timeSignature = BPB;   // the transport is shared, so each track claims its metre
   tr.position = 0;
   for (const p of rig.parts) p.start(0);
   if (tr.state !== 'started') tr.start('+0.05');
@@ -283,7 +291,7 @@ export function stop(){
 /** 0..1, applied whether or not the track is playing. */
 export function setVolume(v){
   vol = Math.max(0, Math.min(1, v));
-  if (rig) rig.out.volume.rampTo(unitToDb(vol), 0.08);
+  if (rig) rig.out.volume.rampTo(unitToDb(vol) + MIX, 0.08);
 }
 
 /** The game's level. Tempo creeps up across a biome's ten levels and the fill
