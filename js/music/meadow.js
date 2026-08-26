@@ -82,16 +82,16 @@ const LEAD = bars([
 const COUNTER = bars([
   './4', './4', './4', './4', './4',        //  1-5  the tune states itself alone
   './1.5 D5/1 B4/1 G4/0.5',                 //  6  G/B   enters on the & of 2
-  '-/0.5 C5/2 A4/1 ./0.5',                  //  7  Am7
-  './0.5 A4/1 F#4/2 D4/0.5',                //  8  D7
+  '-/0.5 A4/2 E4/1 ./0.5',                  //  7  Am7
+  './0.5 A4/1 ./1 F#4/1 D4/0.5',            //  8  D7    F#4 under the lead's F#5
   '-/1.5 G4/1 B4/1 D5/0.5',                 //  9  G     holds through the downbeat
-  '-/0.5 E5/0.5 C5/1.5 G4/1.5',             // 10  C/E
+  '-/0.5 E5/0.5 G4/1.5 C5/1.5',             // 10  C/E
   '-/0.5 A4/1 C5/1 E5/1.5',                 // 11  Am7   climbs while the lead rests
   '-/1 A4/1.5 F#4/1.5',                     // 12  D7
   './0.5 B4/2 G4/1 E4/0.5',                 // 13  Em7
   '-/0.5 C#5/1 E5/1 G4/1.5',                // 14  A7    takes the C# too
   '-/0.5 E5/1 G4/1 B4/1.5',                 // 15  Cmaj7
-  '-/0.5 A4/1 F#4/1 D4/1.5',                // 16  D7
+  './0.5 A4/0.5 F#4/1 D4/2',                // 16  D7    octaves under the lead
 ], BPB, 'meadow counter');
 
 /* Root, fifth, root, third — a pizzicato bounce with a hole on beat 2-and so it
@@ -140,7 +140,7 @@ export const spec = {
    change, not a volume change. */
 const MIX = -2.7;
 
-let rig = null, level = 1, vol = 0.75;
+let rig = null, playing = false, level = 1, vol = 0.75;
 
 function build(){
   const T = tone();
@@ -150,9 +150,15 @@ function build(){
   out.toDestination();
 
   // one reverb for the whole track, fed by sends, so the balance is per-voice
-  const verb = new T.Freeverb({ roomSize:0.62, dampening:2600, wet:1 });
+  /* JCReverb, not Freeverb. Freeverb builds a dozen comb and allpass filters
+     and costs 226ms to construct — over half the time `build()` took, on every
+     single start, and the player heard that as the music arriving late. This is
+     14ms, and the tail is shaped by the filter after it rather than by the
+     reverb's own dampening. */
+  const verb = new T.JCReverb({ roomSize:0.6, wet:1 });
+  const verbLp = new T.Filter(2600, 'lowpass');
   const verbIn = new T.Gain(1);
-  verbIn.connect(verb); verb.connect(comp);
+  verbIn.connect(verb); verb.connect(verbLp); verbLp.connect(comp);
   const send = (node, amt) => { const g = new T.Gain(amt); node.connect(g); g.connect(verbIn); return g; };
 
   /* Flute: nearly a sine, with just enough 2nd and 3rd harmonic to have a
@@ -192,7 +198,7 @@ function build(){
     envelope:{ attack:0.7, decay:0.4, sustain:0.75, release:1.4 },
     volume:-26,
   });
-  const chorus = new T.Chorus({ frequency:0.6, delayTime:4, depth:0.5, wet:0.5 }).start();
+  const chorus = new T.Chorus({ frequency:0.6, delayTime:4, depth:0.5, wet:0.5 });
   const pLp = new T.Filter(1500, 'lowpass');
   pad.connect(pLp); pLp.connect(chorus); chorus.connect(comp); send(chorus, 0.35);
 
@@ -256,21 +262,28 @@ function build(){
     lead.triggerAttackRelease(hz(e.n + 12), ticks(e.d * 0.6, P), t + 0.012, 0.18);
   }, LEAD.map(e => ({ time: ticks(e.b, P), ...e }))));
 
-  return { out, parts,
-    nodes:[out, comp, verb, verbIn, vib, lead, counter, cLp, pluck, body, bLp,
+  return { out, parts, lfos:[chorus],
+    nodes:[out, comp, verb, verbLp, verbIn, vib, lead, counter, cLp, pluck, body, bLp,
            pad, chorus, pLp, kick, block, blLp, shaker, shHp, tamb] };
 }
 
 /** Build the voices, set the tempo, and start the transport. Safe to call from
     a click handler: it resumes Tone's context first. */
+/* Builds the voices on the first call and KEEPS them. Rebuilding cost ~400ms
+   of blocked main thread every time the music started — at a level start, with
+   the game already busy, that is heard as the music arriving late. Pause and
+   resume, and coming back to a biome, now cost nothing. `dispose()` is the
+   real teardown. */
 export function start({ level: lv = level } = {}){
-  if (rig) return;
   const T = tone();
   level = lv;
   // an OfflineContext is already "running" as far as rendering goes, and
   // Tone.start() on one is meaningless — tools/music.js renders through here
   if (!T.getContext().isOffline) T.start();
-  rig = build();
+  if (!rig) rig = build();
+  else if (playing) return;
+  playing = true;
+  for (const l of rig.lfos) l.start();
   const tr = T.getTransport();
   tr.bpm.value = spec.bpm + spec.bpmUp * ramp(level);
   tr.timeSignature = BPB;   // the transport is shared, so each track claims its metre
@@ -279,18 +292,39 @@ export function start({ level: lv = level } = {}){
   if (tr.state !== 'started') tr.start('+0.05');
 }
 
+/** Build the voices without playing. The first build of a track costs a few
+    hundred ms of blocked main thread; doing it while a menu is up means the
+    player never waits for it. Safe before any user gesture — constructing Tone
+    nodes does not need one, only starting audio does. */
+export function warm(){
+  if (!rig) rig = build();
+}
+
 /* `keepTransport` is for a theme change. Tone's transport is global and shared,
    and stopping it here only for the next track to start it again in the same
    tick makes it recompute an offset that lands a hair below zero — Tone then
    throws ("Value must be within [0, Infinity]", "Start time must be strictly
    greater than previous"). Leaving it running and letting the incoming track
    seek to 0 is both correct and quieter: no track restarts the clock, it just
-   takes it over. A caller stopping the music for real gets the clock stopped. */
+   takes it over. A caller stopping the music for real gets the clock stopped.
+
+   The voices are left built — see start(). */
 export function stop({ keepTransport = false } = {}){
-  if (!rig) return;
+  if (!rig || !playing) return;
+  playing = false;
   const T = tone();
-  for (const p of rig.parts){ p.stop(); p.dispose(); }
+  for (const p of rig.parts) p.stop();
+  for (const l of rig.lfos) l.stop();
   if (!keepTransport) T.getTransport().stop();
+}
+
+/** Tear the voices down for real. The game never needs this — it is for a host
+    that is finished with the track, and for the offline renderer, which builds
+    into a context that lives only for the length of one render. */
+export function dispose(){
+  if (!rig) return;
+  stop();
+  for (const p of rig.parts) p.dispose();
   for (const n of rig.nodes) n.dispose();
   rig = null;
 }

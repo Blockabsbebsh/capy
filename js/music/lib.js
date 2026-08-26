@@ -46,7 +46,7 @@ export const noteName = m => SPELL[((m % 12) + 12) % 12] + (Math.floor(m / 12) -
  */
 export function bars(list, beatsPerBar, label){
   const out = [];
-  let at = 0;
+  let at = 0, tied = false;      // is the previous token a note this may tie to?
   list.forEach((bar, i) => {
     let sum = 0;
     for (const tok of bar.trim().split(/\s+/)){
@@ -56,12 +56,17 @@ export function bars(list, beatsPerBar, label){
       const head = tok.slice(0, slash);
       const d = Number(tok.slice(slash + 1));
       if (!(d > 0)) throw new Error(`[${label}] bar ${i + 1}: bad length in "${tok}"`);
-      if (head === '.'){ /* rest */ }
+      if (head === '.'){ tied = false; }
       else if (head === '-'){
         const prev = out[out.length - 1];
         if (!prev) throw new Error(`[${label}] bar ${i + 1}: tie with nothing to tie to`);
+        /* A tie may only follow the note it ties. After a rest it would extend a
+           note that already stopped, which does not sound like a longer note —
+           it sounds like that note overlapping everything written after it. */
+        if (!tied) throw new Error(`[${label}] bar ${i + 1}: tie after a rest`);
         prev.d += d;
       } else {
+        tied = true;
         out.push({ b: at + sum, n: midi(head), d });
       }
       sum += d;

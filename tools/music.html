@@ -36,8 +36,13 @@ window.MusicHarness = {
      tracks must build their nodes in start() and not at module load. */
   async render(id, { level = 1, seconds = 24, rate = 44100 } = {}){
     const mod = await load(id);
+    // a track KEEPS its voices between plays, so anything built earlier belongs
+    // to the live context; the offline render needs its own
+    mod.dispose();
     const buf = await Tone.Offline(async () => { mod.start({ level }); }, seconds, 1, rate);
-    mod.stop();
+    // dispose(), not stop(): tracks now KEEP their voices between plays, and
+    // these belong to an offline context that stops existing after this call
+    mod.dispose();
     /* Base64 of 16-bit PCM, not an array of floats. A full loop is two million
        samples, and page.evaluate serialises its result as JSON — as a number
        array that alone took longer than rendering the audio did. */
