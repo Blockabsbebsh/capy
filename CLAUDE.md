@@ -151,6 +151,16 @@ contract and each file's header comment is the piece's reasoning.
 - **Verify the data and the audio separately** (`tools/music.js` does both), and
   never try to read pitches back out of a mix — a square wave's 7th harmonic
   and the kick's sweep both read as notes nobody wrote.
+- **A note is checked against every bar it SOUNDS over, not the one it starts
+  in.** A tie across a barline is what makes a note long enough to clash, and
+  the chord it clashes with is the next one — so checking only the starting bar
+  is blind in exactly the place the fault lives. It hid eighteen semitone
+  clashes across the five tracks, and they were audible as "the progressions
+  sound wrong". The two melodic lines are checked against each other for the
+  same interval, which the pad check cannot see.
+- **A tie may only follow the note it ties.** `bars()` throws on a tie after a
+  rest: it would lengthen a note that already stopped, so instead of a longer
+  note you get that note overlapping everything written after it.
 - **The pitch check measures INTO a note, not at its onset** — a quarter in, or
   120ms, whichever is sooner. At the onset it reads the attack transient rather
   than the pitch. It is a fairer place to look, not a lenient one: when it

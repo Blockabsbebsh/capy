@@ -191,7 +191,7 @@ export const spec = {
    change, not a volume change. */
 const MIX = 1.8;
 
-let rig = null, level = 1, vol = 0.75;
+let rig = null, playing = false, level = 1, vol = 0.75;
 
 function build(){
   const T = tone();
@@ -200,9 +200,15 @@ function build(){
   comp.connect(out);
   out.toDestination();
 
-  const verb = new T.Freeverb({ roomSize:0.55, dampening:3000, wet:1 });
+  /* JCReverb, not Freeverb. Freeverb builds a dozen comb and allpass filters
+     and costs 226ms to construct — over half the time `build()` took, on every
+     single start, and the player heard that as the music arriving late. This is
+     14ms, and the tail is shaped by the filter after it rather than by the
+     reverb's own dampening. */
+  const verb = new T.JCReverb({ roomSize:0.5, wet:1 });
+  const verbLp = new T.Filter(3000, 'lowpass');
   const verbIn = new T.Gain(1);
-  verbIn.connect(verb); verb.connect(comp);
+  verbIn.connect(verb); verb.connect(verbLp); verbLp.connect(comp);
   const send = (node, amt) => { const g = new T.Gain(amt); node.connect(g); g.connect(verbIn); return g; };
 
   /* An overdriven organ. The lowpass sits AFTER the distortion on purpose:
@@ -311,17 +317,26 @@ function build(){
     lead.triggerAttackRelease(hz(e.n - 12), ticks(e.d * 0.8, P), t, 0.25);
   }, LEAD.map(e => ({ time: ticks(e.b, P), ...e }))));
 
-  return { out, parts,
-    nodes:[out, comp, verb, verbIn, lead, grit, lLp, counter, cLp, bass, bLp,
+  return { out, parts, lfos:[],
+    nodes:[out, comp, verb, verbLp, verbIn, lead, grit, lLp, counter, cLp, bass, bLp,
            pad, pLp, kick, snare, snF, tamb, crash, tom] };
 }
 
+/* Builds the voices on the first call and KEEPS them. Rebuilding cost ~400ms
+   of blocked main thread every time the music started — at a level start, with
+   the game already busy, that is heard as the music arriving late. Pause and
+   resume, and coming back to a biome, now cost nothing. `dispose()` is the
+   real teardown. */
 export function start({ level: lv = level } = {}){
-  if (rig) return;
   const T = tone();
   level = lv;
+  // an OfflineContext is already "running" as far as rendering goes, and
+  // Tone.start() on one is meaningless — tools/music.js renders through here
   if (!T.getContext().isOffline) T.start();
-  rig = build();
+  if (!rig) rig = build();
+  else if (playing) return;
+  playing = true;
+  for (const l of rig.lfos) l.start();
   const tr = T.getTransport();
   tr.bpm.value = spec.bpm + spec.bpmUp * ramp(level);
   tr.timeSignature = BPB;
@@ -330,18 +345,39 @@ export function start({ level: lv = level } = {}){
   if (tr.state !== 'started') tr.start('+0.05');
 }
 
+/** Build the voices without playing. The first build of a track costs a few
+    hundred ms of blocked main thread; doing it while a menu is up means the
+    player never waits for it. Safe before any user gesture — constructing Tone
+    nodes does not need one, only starting audio does. */
+export function warm(){
+  if (!rig) rig = build();
+}
+
 /* `keepTransport` is for a theme change. Tone's transport is global and shared,
    and stopping it here only for the next track to start it again in the same
    tick makes it recompute an offset that lands a hair below zero — Tone then
    throws ("Value must be within [0, Infinity]", "Start time must be strictly
    greater than previous"). Leaving it running and letting the incoming track
    seek to 0 is both correct and quieter: no track restarts the clock, it just
-   takes it over. A caller stopping the music for real gets the clock stopped. */
+   takes it over. A caller stopping the music for real gets the clock stopped.
+
+   The voices are left built — see start(). */
 export function stop({ keepTransport = false } = {}){
-  if (!rig) return;
+  if (!rig || !playing) return;
+  playing = false;
   const T = tone();
-  for (const p of rig.parts){ p.stop(); p.dispose(); }
+  for (const p of rig.parts) p.stop();
+  for (const l of rig.lfos) l.stop();
   if (!keepTransport) T.getTransport().stop();
+}
+
+/** Tear the voices down for real. The game never needs this — it is for a host
+    that is finished with the track, and for the offline renderer, which builds
+    into a context that lives only for the length of one render. */
+export function dispose(){
+  if (!rig) return;
+  stop();
+  for (const p of rig.parts) p.dispose();
   for (const n of rig.nodes) n.dispose();
   rig = null;
 }
