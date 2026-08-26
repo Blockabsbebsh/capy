@@ -1,0 +1,62 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>music harness</title>
+<link rel="icon" href="data:,"><!-- no favicon request: the harness fails on any page error -->
+<!-- The five tracks, off the game page. Rendering audio does not need three.js,
+     a WebGL context or a booted game, and running the checks here means a
+     broken renderer reports a music fault rather than a game fault. -->
+<body style="font:14px/1.5 system-ui;background:#151a20;color:#dfe6ee;padding:24px">
+<h1 style="font-size:16px">music harness</h1>
+<p>Loaded by <code>tools/music.js</code>. Nothing to see; use the buttons to audition.</p>
+<div id="btns"></div>
+<script src="../vendor/tone.js"></script>
+<script type="module">
+const IDS = ['meadow', 'ponds', 'bubblegum', 'night', 'hell'];
+const mods = {};
+
+async function load(id){
+  if (!mods[id]) mods[id] = await import(`../js/music/${id}.js`);
+  return mods[id];
+}
+
+window.MusicHarness = {
+  ids: IDS,
+
+  async spec(id){ return (await load(id)).spec; },
+
+  async specs(){
+    const out = [];
+    for (const id of IDS) out.push((await load(id)).spec);
+    return out;
+  },
+
+  /* Render one track through the real start() path, so what is measured is what
+     the game plays rather than a second copy of the arrangement. Tone.Offline
+     swaps the global context for the duration of the callback, which is why the
+     tracks must build their nodes in start() and not at module load. */
+  async render(id, { level = 1, seconds = 24, rate = 44100 } = {}){
+    const mod = await load(id);
+    const buf = await Tone.Offline(async () => { mod.start({ level }); }, seconds, 1, rate);
+    mod.stop();
+    return { pcm: Array.from(buf.getChannelData(0)), rate: buf.sampleRate, id };
+  },
+};
+
+// audition buttons, for a human with headphones on
+let live = null;
+for (const id of IDS){
+  const b = document.createElement('button');
+  b.textContent = id;
+  b.style.cssText = 'margin:4px;padding:8px 14px;font:inherit;cursor:pointer';
+  b.onclick = async () => {
+    const mod = await load(id);
+    if (live && live !== mod) live.stop();
+    if (live === mod){ mod.stop(); live = null; b.style.outline = ''; return; }
+    await Tone.start();
+    mod.setVolume(0.8); mod.start({ level: 1 });
+    live = mod;
+  };
+  document.getElementById('btns').append(b);
+}
+window.__musicReady = true;
+</script>
