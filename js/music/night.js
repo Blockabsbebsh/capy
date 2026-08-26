@@ -129,7 +129,7 @@ export const spec = {
    at the same fader — so each carries its own offset and `tools/music.js`
    asserts they end up within 1.5x of each other. A theme change is a mood
    change, not a volume change. */
-const MIX = -1.9;
+const MIX = -2.55;
 
 let rig = null, playing = false, level = 1, vol = 0.75;
 
