@@ -325,16 +325,23 @@ export function start({ level: lv = level } = {}){
   const tr = T.getTransport();
   tr.bpm.value = spec.bpm + spec.bpmUp * ramp(level);
   tr.timeSignature = BPB;
-  tr.position = 0;
+  tr.position = 0;                 // every piece starts from its own bar one
   for (const p of rig.parts) p.start(0);
   if (tr.state !== 'started') tr.start('+0.05');
 }
 
-export function stop(){
+/* `keepTransport` is for a theme change. Tone's transport is global and shared,
+   and stopping it here only for the next track to start it again in the same
+   tick makes it recompute an offset that lands a hair below zero — Tone then
+   throws ("Value must be within [0, Infinity]", "Start time must be strictly
+   greater than previous"). Leaving it running and letting the incoming track
+   seek to 0 is both correct and quieter: no track restarts the clock, it just
+   takes it over. A caller stopping the music for real gets the clock stopped. */
+export function stop({ keepTransport = false } = {}){
   if (!rig) return;
   const T = tone();
   for (const p of rig.parts){ p.stop(); p.dispose(); }
-  T.getTransport().stop();
+  if (!keepTransport) T.getTransport().stop();
   for (const n of rig.nodes) n.dispose();
   rig = null;
 }

@@ -151,10 +151,13 @@ contract and each file's header comment is the piece's reasoning.
 - **Verify the data and the audio separately** (`tools/music.js` does both), and
   never try to read pitches back out of a mix — a square wave's 7th harmonic
   and the kick's sweep both read as notes nobody wrote.
-- **Measure a note a quarter of the way IN, never at its onset.** At the onset
-  you are reading the attack transient and the previous note's reverb tail;
-  where a melody moves by a semitone under a long tail, the note it just left
-  wins the pitch test and a correct track fails.
+- **The pitch check measures INTO a note, not at its onset** — a quarter in, or
+  120ms, whichever is sooner. At the onset it reads the attack transient rather
+  than the pitch. It is a fairer place to look, not a lenient one: when it
+  still fails there, the tail really is burying the note and **the fix is the
+  mix**. Night's lead delay was repeating each note on top of the next one, and
+  a saw bass's fifth harmonic is a major third — on a C that is an E, a
+  semitone under an F in the tune. Both were found this way.
 - **A bright pad will bury the tune.** Every "wrong note" that harness has ever
   flagged was a mix problem, not a data problem. Pads and basses are dark on
   purpose; the lead is the only thing allowed to be bright.

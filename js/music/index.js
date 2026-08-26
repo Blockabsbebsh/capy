@@ -48,7 +48,8 @@ export const Music = {
   setTheme(i){
     const next = clamp(i);
     if (next === cur) return;
-    if (playing) TRACKS[cur].stop();
+    // keepTransport: the clock is handed over, not stopped and restarted
+    if (playing) TRACKS[cur].stop({ keepTransport: true });
     cur = next;
     if (playing){ TRACKS[cur].setVolume(vol); TRACKS[cur].start({ level }); }
   },
