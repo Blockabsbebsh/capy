@@ -29,7 +29,7 @@
    then grouped 3+3+2 in eighths against the lead's 4/4. That cross-rhythm is
    why the two lines never sound locked together even though they share a bar.
    ======================================================================= */
-import { bars, grid, hz, midi, ticks, unitToDb, tone, ramp } from './lib.js';
+import { bars, grid, hz, midi, monotonic, ticks, unitToDb, tone, ramp } from './lib.js';
 
 const BPB = 4, TOTAL = 16, BEATS = BPB * TOTAL;
 
@@ -235,32 +235,39 @@ function build(){
   const tr = T.getTransport();
   const P = tr.PPQ;
   const parts = [];
-  const loop = p => { p.loop = true; p.loopStart = 0; p.loopEnd = ticks(BEATS, P); parts.push(p); return p; };
+  /* Builds the Part and wraps its callback: see monotonic() in lib.js. One Part
+     drives one voice, so this is what keeps a monophonic voice from being
+     triggered twice at the same instant when the page is running late. */
+  const loop = (cb, evs) => {
+    const p = new T.Part(monotonic(cb), evs);
+    p.loop = true; p.loopStart = 0; p.loopEnd = ticks(BEATS, P);
+    parts.push(p); return p;
+  };
 
-  loop(new T.Part((t, e) => lead.triggerAttackRelease(hz(e.n), ticks(e.d * 0.94, P), t),
-    LEAD.map(e => ({ time: ticks(e.b, P), ...e }))));
+  loop((t, e) => lead.triggerAttackRelease(hz(e.n), ticks(e.d * 0.94, P), t),
+    LEAD.map(e => ({ time: ticks(e.b, P), ...e })));
 
-  loop(new T.Part((t, e) => counter.triggerAttackRelease(hz(e.n), ticks(e.d * 0.96, P), t),
-    COUNTER.map(e => ({ time: ticks(e.b, P), ...e }))));
+  loop((t, e) => counter.triggerAttackRelease(hz(e.n), ticks(e.d * 0.96, P), t),
+    COUNTER.map(e => ({ time: ticks(e.b, P), ...e })));
 
-  loop(new T.Part((t, e) => {
+  loop((t, e) => {
     pluck.triggerAttack(hz(e.n), t);
     body.triggerAttackRelease(hz(e.n), ticks(Math.min(e.d, 0.5), P), t);
-  }, BASS.map(e => ({ time: ticks(e.b, P), ...e }))));
+  }, BASS.map(e => ({ time: ticks(e.b, P), ...e })));
 
-  loop(new T.Part((t, e) => pad.triggerAttackRelease(e.pad.map(hz), ticks(BPB * 0.94, P), t),
-    CHORDS.map((c, i) => ({ time: ticks(i * BPB, P), pad: c.padMidi }))));
+  loop((t, e) => pad.triggerAttackRelease(e.pad.map(hz), ticks(BPB * 0.94, P), t),
+    CHORDS.map((c, i) => ({ time: ticks(i * BPB, P), pad: c.padMidi })));
 
   for (const k of KIT)
-    loop(new T.Part((t) => { if (!k.fill || ramp(level) >= 0.5) hit[k.inst](t); },
-      k.beats.map(b => ({ time: ticks(b, P) }))));
+    loop((t) => { if (!k.fill || ramp(level) >= 0.5) hit[k.inst](t); },
+      k.beats.map(b => ({ time: ticks(b, P) })));
 
   /* The top octave of the tune joins for the last stretch of a biome, quietly.
      The phrase is unchanged; it only gains a sparkle. */
-  loop(new T.Part((t, e) => {
+  loop((t, e) => {
     if (ramp(level) < 0.8) return;
     lead.triggerAttackRelease(hz(e.n + 12), ticks(e.d * 0.6, P), t + 0.012, 0.18);
-  }, LEAD.map(e => ({ time: ticks(e.b, P), ...e }))));
+  }, LEAD.map(e => ({ time: ticks(e.b, P), ...e })));
 
   return { out, parts, lfos:[chorus],
     nodes:[out, comp, verb, verbLp, verbIn, vib, lead, counter, cLp, pluck, body, bLp,

@@ -29,7 +29,7 @@
    COUNTER-MELODY — a two-note pluck riff on the & of 2 and the & of 4, which
    are beats the lead never uses, so the two interlock instead of colliding.
    ======================================================================= */
-import { bars, grid, hz, midi, ticks, unitToDb, tone, ramp } from './lib.js';
+import { bars, grid, hz, midi, monotonic, ticks, unitToDb, tone, ramp } from './lib.js';
 
 const BPB = 4, TOTAL = 16, BEATS = BPB * TOTAL;
 
@@ -214,11 +214,19 @@ function build(){
     envelope:{ attack:0.001, decay:0.22, sustain:0, release:0.06 }, volume:-7,
   });
   kick.connect(comp);
-  const clapN = new T.NoiseSynth({
-    noise:{ type:'white' }, envelope:{ attack:0.001, decay:0.11, sustain:0 }, volume:-16,
-  });
+  /* Three separate sources, not one triggered three times. A NoiseSynth is
+     MONOPHONIC: re-triggering it 9ms into a 50ms note throws "Start time must
+     be strictly greater than previous start time" from inside the scheduled
+     callback, which took the transport down with it. Three of them is also
+     what a clap actually is — a handful of bursts a few ms apart — so they get
+     slightly different decays rather than being three copies. */
+  const claps = [0.11, 0.085, 0.13].map((decay, i) => new T.NoiseSynth({
+    noise:{ type:'white' }, envelope:{ attack:0.001, decay, sustain:0 },
+    volume:-16 - i * 1.5,
+  }));
   const clapF = new T.Filter(1500, 'bandpass'); clapF.Q.value = 1.1;
-  clapN.connect(clapF); clapF.connect(comp); send(clapF, 0.3);
+  for (const c of claps) c.connect(clapF);
+  clapF.connect(comp); send(clapF, 0.3);
   const hat = new T.NoiseSynth({
     noise:{ type:'white' }, envelope:{ attack:0.001, decay:0.028, sustain:0 }, volume:-22,
   });
@@ -238,7 +246,7 @@ function build(){
   const hit = {
     kick:t => kick.triggerAttackRelease('C1', '16n', t),
     // three taps a few ms apart is a clap; one is a snare
-    clap:t => { for (let i = 0; i < 3; i++) clapN.triggerAttackRelease('32n', t + i * 0.009); },
+    clap:t => claps.forEach((c, i) => c.triggerAttackRelease('32n', t + i * 0.009)),
     hat:t => hat.triggerAttackRelease('64n', t),
     pop:t => pop.triggerAttackRelease('C5', '64n', t),
   };
@@ -246,29 +254,36 @@ function build(){
   const tr = T.getTransport();
   const P = tr.PPQ;
   const parts = [];
-  const loop = p => { p.loop = true; p.loopStart = 0; p.loopEnd = ticks(BEATS, P); parts.push(p); return p; };
+  /* Builds the Part and wraps its callback: see monotonic() in lib.js. One Part
+     drives one voice, so this is what keeps a monophonic voice from being
+     triggered twice at the same instant when the page is running late. */
+  const loop = (cb, evs) => {
+    const p = new T.Part(monotonic(cb), evs);
+    p.loop = true; p.loopStart = 0; p.loopEnd = ticks(BEATS, P);
+    parts.push(p); return p;
+  };
 
-  loop(new T.Part((t, e) => lead.triggerAttackRelease(hz(e.n), ticks(e.d * 0.88, P), t),
-    LEAD.map(e => ({ time: ticks(e.b, P), ...e }))));
-  loop(new T.Part((t, e) => counter.triggerAttackRelease(hz(e.n), ticks(e.d * 0.8, P), t),
-    COUNTER.map(e => ({ time: ticks(e.b, P), ...e }))));
-  loop(new T.Part((t, e) => bass.triggerAttackRelease(hz(e.n), ticks(e.d * 0.85, P), t),
-    BASS.map(e => ({ time: ticks(e.b, P), ...e }))));
-  loop(new T.Part((t, e) => pad.triggerAttackRelease(e.pad.map(hz), ticks(BPB * 0.92, P), t),
-    CHORDS.map((c, i) => ({ time: ticks(i * BPB, P), pad: c.padMidi }))));
+  loop((t, e) => lead.triggerAttackRelease(hz(e.n), ticks(e.d * 0.88, P), t),
+    LEAD.map(e => ({ time: ticks(e.b, P), ...e })));
+  loop((t, e) => counter.triggerAttackRelease(hz(e.n), ticks(e.d * 0.8, P), t),
+    COUNTER.map(e => ({ time: ticks(e.b, P), ...e })));
+  loop((t, e) => bass.triggerAttackRelease(hz(e.n), ticks(e.d * 0.85, P), t),
+    BASS.map(e => ({ time: ticks(e.b, P), ...e })));
+  loop((t, e) => pad.triggerAttackRelease(e.pad.map(hz), ticks(BPB * 0.92, P), t),
+    CHORDS.map((c, i) => ({ time: ticks(i * BPB, P), pad: c.padMidi })));
 
   for (const k of KIT)
-    loop(new T.Part(t => { if (!k.fill || ramp(level) >= 0.5) hit[k.inst](t); },
-      k.beats.map(b => ({ time: ticks(b, P) }))));
+    loop(t => { if (!k.fill || ramp(level) >= 0.5) hit[k.inst](t); },
+      k.beats.map(b => ({ time: ticks(b, P) })));
 
-  loop(new T.Part((t, e) => {
+  loop((t, e) => {
     if (ramp(level) < 0.8) return;
     lead.triggerAttackRelease(hz(e.n - 12), ticks(e.d * 0.7, P), t, 0.2);   // down, not up: it is bright enough
-  }, LEAD.map(e => ({ time: ticks(e.b, P), ...e }))));
+  }, LEAD.map(e => ({ time: ticks(e.b, P), ...e })));
 
   return { out, parts, lfos:[chorus],
     nodes:[out, comp, verb, verbLp, verbIn, lead, lLp, bite, counter, bass, pad, pLp,
-           chorus, kick, clapN, clapF, hat, hatF, pop, popF] };
+           chorus, kick, ...claps, clapF, hat, hatF, pop, popF] };
 }
 
 /* Builds the voices on the first call and KEEPS them. Rebuilding cost ~400ms

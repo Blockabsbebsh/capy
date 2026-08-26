@@ -28,7 +28,7 @@
    melody and always on beats the melody leaves empty. It is the thing keeping
    time here, since the kit barely does.
    ======================================================================= */
-import { bars, grid, hz, midi, ticks, unitToDb, tone, ramp } from './lib.js';
+import { bars, grid, hz, midi, monotonic, ticks, unitToDb, tone, ramp } from './lib.js';
 
 const BPB = 4, TOTAL = 16, BEATS = BPB * TOTAL;
 
@@ -236,30 +236,37 @@ function build(){
   const tr = T.getTransport();
   const P = tr.PPQ;
   const parts = [];
-  const loop = p => { p.loop = true; p.loopStart = 0; p.loopEnd = ticks(BEATS, P); parts.push(p); return p; };
+  /* Builds the Part and wraps its callback: see monotonic() in lib.js. One Part
+     drives one voice, so this is what keeps a monophonic voice from being
+     triggered twice at the same instant when the page is running late. */
+  const loop = (cb, evs) => {
+    const p = new T.Part(monotonic(cb), evs);
+    p.loop = true; p.loopStart = 0; p.loopEnd = ticks(BEATS, P);
+    parts.push(p); return p;
+  };
 
-  loop(new T.Part((t, e) => {
+  loop((t, e) => {
     lead.triggerAttackRelease(hz(e.n), ticks(e.d * 0.96, P), t);
     air.triggerAttackRelease(hz(e.n + 12), ticks(e.d * 0.9, P), t);
-  }, LEAD.map(e => ({ time: ticks(e.b, P), ...e }))));
+  }, LEAD.map(e => ({ time: ticks(e.b, P), ...e })));
 
-  loop(new T.Part((t, e) => counter.triggerAttackRelease(hz(e.n), ticks(e.d * 0.96, P), t),
-    COUNTER.map(e => ({ time: ticks(e.b, P), ...e }))));
-  loop(new T.Part((t, e) => bass.triggerAttackRelease(hz(e.n), ticks(e.d, P), t),
-    BASS.map(e => ({ time: ticks(e.b, P), ...e }))));
+  loop((t, e) => counter.triggerAttackRelease(hz(e.n), ticks(e.d * 0.96, P), t),
+    COUNTER.map(e => ({ time: ticks(e.b, P), ...e })));
+  loop((t, e) => bass.triggerAttackRelease(hz(e.n), ticks(e.d, P), t),
+    BASS.map(e => ({ time: ticks(e.b, P), ...e })));
   // pads change every two bars up to bar 12 and every bar after, so they follow
   // the chord list rather than a fixed grid
-  loop(new T.Part((t, e) => pad.triggerAttackRelease(e.pad.map(hz), ticks(e.len * BPB * 0.96, P), t),
+  loop((t, e) => pad.triggerAttackRelease(e.pad.map(hz), ticks(e.len * BPB * 0.96, P), t),
     CHORDS.reduce((acc, c, i) => {
       const prev = acc[acc.length - 1];
       if (prev && prev.name === c.name && prev.len < 2) prev.len++;
       else acc.push({ time: ticks(i * BPB, P), pad: c.padMidi, name: c.name, len: 1 });
       return acc;
-    }, [])));
+    }, []));
 
   for (const k of KIT)
-    loop(new T.Part(t => { if (!k.fill || ramp(level) >= 0.5) hit[k.inst](t); },
-      k.beats.map(b => ({ time: ticks(b, P) }))));
+    loop(t => { if (!k.fill || ramp(level) >= 0.5) hit[k.inst](t); },
+      k.beats.map(b => ({ time: ticks(b, P) })));
 
   return { out, parts, lfos:[wobble, chorus],
     nodes:[out, comp, verb, verbLp, verbIn, lead, echo, air, counter, bass, bLp, pad,
