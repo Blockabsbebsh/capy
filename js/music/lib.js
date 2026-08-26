@@ -122,3 +122,26 @@ export function tone(){
 export function ramp(level, span = 10){
   return Math.min(1, Math.max(0, ((level - 1) % span) / (span - 1)));
 }
+
+/**
+ * Wrap a Part callback so the times it is handed are strictly increasing.
+ *
+ * Tone throws "Start time must be strictly greater than previous start time" if
+ * a MONOPHONIC voice is started twice at the same instant — and a busy page
+ * makes that happen without anyone writing it. Tone schedules ahead; when the
+ * main thread is late the scheduled time has already passed and Tone clamps it
+ * to now, so hits written milliseconds apart arrive together. A tambourine on
+ * six eighths, or a clap built from three taps, then kills the transport.
+ *
+ * One Part drives one voice, so per-Part monotonic time is per-voice monotonic
+ * time. The nudge is 2ms, which is inaudible and only ever applied to hits that
+ * were already late.
+ */
+export function monotonic(fn){
+  let last = -Infinity;
+  return (t, ...rest) => {
+    if (!(t > last + 0.002)) t = last + 0.002;
+    last = t;
+    return fn(t, ...rest);
+  };
+}

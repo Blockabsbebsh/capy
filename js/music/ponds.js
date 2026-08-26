@@ -29,7 +29,7 @@
    from D4 down to G#3 and back, which is slow enough that you hear it as the
    water rather than as a second tune.
    ======================================================================= */
-import { bars, grid, hz, midi, ticks, unitToDb, tone, ramp } from './lib.js';
+import { bars, grid, hz, midi, monotonic, ticks, unitToDb, tone, ramp } from './lib.js';
 
 const BPB = 4, TOTAL = 16, BEATS = BPB * TOTAL;
 
@@ -227,28 +227,35 @@ function build(){
   const tr = T.getTransport();
   const P = tr.PPQ;
   const parts = [];
-  const loop = p => { p.loop = true; p.loopStart = 0; p.loopEnd = ticks(BEATS, P); parts.push(p); return p; };
+  /* Builds the Part and wraps its callback: see monotonic() in lib.js. One Part
+     drives one voice, so this is what keeps a monophonic voice from being
+     triggered twice at the same instant when the page is running late. */
+  const loop = (cb, evs) => {
+    const p = new T.Part(monotonic(cb), evs);
+    p.loop = true; p.loopStart = 0; p.loopEnd = ticks(BEATS, P);
+    parts.push(p); return p;
+  };
 
-  loop(new T.Part((t, e) => lead.triggerAttackRelease(hz(e.n), ticks(e.d * 0.9, P), t),
-    LEAD.map(e => ({ time: ticks(e.b, P), ...e }))));
-  loop(new T.Part((t, e) => counter.triggerAttackRelease(hz(e.n), ticks(e.d * 0.95, P), t),
-    COUNTER.map(e => ({ time: ticks(e.b, P), ...e }))));
-  loop(new T.Part((t, e) => bass.triggerAttackRelease(hz(e.n), ticks(e.d, P), t),
-    BASS.map(e => ({ time: ticks(e.b, P), ...e }))));
+  loop((t, e) => lead.triggerAttackRelease(hz(e.n), ticks(e.d * 0.9, P), t),
+    LEAD.map(e => ({ time: ticks(e.b, P), ...e })));
+  loop((t, e) => counter.triggerAttackRelease(hz(e.n), ticks(e.d * 0.95, P), t),
+    COUNTER.map(e => ({ time: ticks(e.b, P), ...e })));
+  loop((t, e) => bass.triggerAttackRelease(hz(e.n), ticks(e.d, P), t),
+    BASS.map(e => ({ time: ticks(e.b, P), ...e })));
   // the pad changes every two bars, so it is triggered off the chord list
-  loop(new T.Part((t, e) => pad.triggerAttackRelease(e.pad.map(hz), ticks(BPB * 2 * 0.96, P), t),
+  loop((t, e) => pad.triggerAttackRelease(e.pad.map(hz), ticks(BPB * 2 * 0.96, P), t),
     CHORDS.filter((_, i) => i % 2 === 0)
-          .map((c, i) => ({ time: ticks(i * BPB * 2, P), pad: c.padMidi }))));
+          .map((c, i) => ({ time: ticks(i * BPB * 2, P), pad: c.padMidi })));
 
   for (const k of KIT)
-    loop(new T.Part(t => { if (!k.fill || ramp(level) >= 0.5) hit[k.inst](t); },
-      k.beats.map(b => ({ time: ticks(b, P) }))));
+    loop(t => { if (!k.fill || ramp(level) >= 0.5) hit[k.inst](t); },
+      k.beats.map(b => ({ time: ticks(b, P) })));
 
   // an octave of shimmer over the bells for the last stretch of the biome
-  loop(new T.Part((t, e) => {
+  loop((t, e) => {
     if (ramp(level) < 0.8) return;
     lead.triggerAttackRelease(hz(e.n + 12), ticks(e.d * 0.5, P), t + 0.02, 0.14);
-  }, LEAD.map(e => ({ time: ticks(e.b, P), ...e }))));
+  }, LEAD.map(e => ({ time: ticks(e.b, P), ...e })));
 
   return { out, parts, lfos:[wobble, chorus],
     nodes:[out, comp, verb, verbLp, verbIn, lead, echo, counter, cLp, bass, bLp, pad,

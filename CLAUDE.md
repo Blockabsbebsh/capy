@@ -168,6 +168,19 @@ contract and each file's header comment is the piece's reasoning.
   mix**. Night's lead delay was repeating each note on top of the next one, and
   a saw bass's fifth harmonic is a major third — on a C that is an E, a
   semitone under an F in the tune. Both were found this way.
+- **A monophonic Tone voice must never be triggered twice at the same instant**,
+  and a busy page will do that to you without anyone writing it. Tone schedules
+  ~100ms ahead; when the main thread is late the scheduled time has already
+  passed and Tone clamps it to now, so hits written milliseconds apart arrive
+  together and the voice throws from inside the callback, taking the transport
+  with it. `monotonic()` wraps every Part callback and keeps one voice's times
+  2ms apart, which is inaudible. A clap of three taps still wants three
+  sources — the guard stops the crash, it does not make one voice sound like
+  three.
+- **`tools/music.js` plays the game page with `lookAhead` forced to 0**, which
+  makes that collapse happen on every run instead of some of them. It reproduced
+  intermittently at the default and never on an idle page, so neither a render
+  nor a synthetic loop can stand in for it — several were tried.
 - **A bright pad will bury the tune.** Every "wrong note" that harness has ever
   flagged was a mix problem, not a data problem. Pads and basses are dark on
   purpose; the lead is the only thing allowed to be bright.

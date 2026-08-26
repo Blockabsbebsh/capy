@@ -96,7 +96,9 @@ const ok = (label, cond, detail = '') => {
 (async () => {
   const browser = await chromium.launch({
     executablePath: BROWSER,
-    args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox', '--mute-audio'],
+    args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox', '--mute-audio',
+           // the live pass needs a context that will actually run
+           '--autoplay-policy=no-user-gesture-required'],
   });
   const page = await browser.newPage({ viewport: { width: 700, height: 500 } });
   const errors = [];
@@ -299,6 +301,45 @@ const ok = (label, cond, detail = '') => {
   }
 
   ok('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
+
+  /* Everything above measures a RENDER. This plays the music on the actual game
+     page, walking the biomes the way a run does, with `lookAhead` forced to 0.
+
+     That last part is the whole check. Tone normally schedules ~100ms early, so
+     a hit built from several taps a few ms apart gets those taps as written. On
+     a page busy rendering a game the scheduled time arrives already spent and
+     Tone clamps it to now — and the taps collapse onto one instant. Doing that
+     to a MONOPHONIC voice throws from inside the callback and takes the
+     transport down with it, which is what a clap made of three triggers on one
+     NoiseSynth did in the game while all sixty-odd checks above it passed.
+
+     At lookAhead 0 every hit lands at ~now, so the collapse happens on every
+     run instead of on some of them. Reproduced intermittently at the default
+     and never at all on an idle page — hence this, and hence the game page
+     rather than a synthetic loop. */
+  console.log('live on the game page:');
+  const IDS = ['meadow', 'ponds', 'bubblegum', 'night', 'hell'];
+  const gameUrl = URL.replace(/tools\/music\.html.*$/, 'index.html');
+  const gpage = await browser.newPage({ viewport: { width: 800, height: 600 } });
+  const gerr = [];
+  gpage.on('pageerror', e => gerr.push(String(e.message)));
+  gpage.on('console', m => {
+    if (m.type() === 'error' && !m.text().includes('404')) gerr.push(m.text());
+  });
+  await gpage.goto(gameUrl, { waitUntil: 'load' });
+  await gpage.waitForFunction(() => window.Music);
+  await gpage.waitForTimeout(1500);
+  await gpage.evaluate(() => { Tone.getContext().lookAhead = 0; });
+  await gpage.evaluate(() => Audio.startMusic());
+  for (let i = 0; i < 5; i++){
+    const before = gerr.length;
+    await gpage.evaluate(t => Audio.setMusicTheme(t), i);
+    await gpage.waitForTimeout(2600);
+    ok(`${IDS[i]}: plays in the game without throwing`,
+       gerr.length === before, gerr.slice(before, before + 2).join(' | '));
+  }
+  await gpage.evaluate(() => Audio.stopMusic());
+  await gpage.close();
 
   await browser.close();
   if (fail.length){ console.error(`\n${fail.length} check(s) failed.`); process.exit(1); }
