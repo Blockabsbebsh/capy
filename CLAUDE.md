@@ -21,9 +21,16 @@ only grows, and every line of restated code comment dilutes the ones that bite.
 
 ## Hard constraints
 
-- **No build step, no ES modules.** `index.html` loads plain `<script>` tags.
-  Do not introduce a bundler, `type="module"`, or a runtime dependency without
-  asking — the point is that the repo is directly servable.
+- **No build step.** `index.html` loads plain `<script>` tags, and there is no
+  bundler. Do not introduce one, or a runtime dependency, without asking — the
+  point is that the repo is directly servable.
+- **Exactly ONE module script, and it is the music.** `js/music/index.js` is
+  `type="module"`; everything else is a classic script and must stay one. The
+  game's globals live in one shared lexical environment (below), which is why
+  nothing is namespaced — converting the game to modules would break all of it
+  at once. The music is modules because the five tracks are self-contained
+  pieces with no need of that scope, and it publishes `window.Music` for
+  `js/audio.js` to reach. Do not add a second one without the same argument.
 - **Relative paths, all-lowercase filenames.** Pages is case-sensitive.
 - **Script order is load-bearing.** Top-level `const`/`let` in classic scripts
   share one global lexical environment (which is why nothing needs namespacing)
@@ -35,6 +42,9 @@ only grows, and every line of restated code comment dilutes the ones that bite.
 
 `index.html` — CSS, markup, ordered script tags.
 `vendor/three.min.js` — three.js r160 UMD, inlined verbatim. Do not edit.
+`vendor/tone.js` — Tone.js 15.1.22 UMD (MIT), inlined verbatim. Do not edit.
+`js/music/` — the five biome tracks, as ES modules. `js/music/README.md`
+is their contract; `lib.js` is the notation they share.
 `assets/capybara.glb`, `assets/icons/src/` — art, the source of truth.
 `assets/icons/*.png`, `js/capymodel.js` — GENERATED. Do not hand-edit.
 `tools/icons.py`, `tools/glb2json.mjs` — the offline converters.
@@ -48,7 +58,7 @@ Load order, which is also roughly the dependency order:
 |---|---|
 | `config.js` | Tuning constants, `TYPES`, `POWERS`, `UPGRADES`, `THEMES`, `TOUCH`, `REDUCED` |
 | `icons.js` | `ICON_SRC` + `icon()` — the `<img>` for every perk and power-up icon |
-| `audio.js` | The `Audio` IIFE — synth primitives, the five written themes, every SFX |
+| `audio.js` | The `Audio` IIFE — synth primitives, every SFX, and the bridge to `window.Music` |
 | `scene.js` | Renderer, scene, sky texture + `skyBand`/`refreshSky`, camera + `fitCamera`, `refreshTouchMap` |
 | `materials.js` | `M()` helper and the flat `mat` library |
 | `theme.js` | `curTheme`, the theme colour lerp (`applyTheme`/`updateThemeMix`) |
@@ -75,18 +85,21 @@ Load order, which is also roughly the dependency order:
 | `gameflow.js` | `startGame`, pause/menu/`endGame`, button wiring |
 | `dev.js` | `?dev=1` level switcher + the RLS self-check. Deletable in one piece. |
 | `main.js` | `clock`, `animate()`, `onResize`, boot |
+| `music/index.js` | MODULE, and last. Imports the five tracks, publishes `window.Music` |
 
 ## Testing
 
 No unit-test framework. The harness is `tools/shoot.js` (67 assertions) and
-`tools/music.js`, run against a real browser:
+`tools/music.js` (which drives `tools/music.html`, not the game page — rendering
+audio needs no WebGL), run against a real browser:
 
 ```sh
 npm i playwright-core          # not committed; chromium is preinstalled
 pip install pillow numpy scipy # only for tools/icons.py
 python3 -m http.server 8765 &
 node tools/shoot.js --check                  # assertions, non-zero on failure
-node tools/music.js --wav                    # the five themes; also run --level 6+
+node tools/music.js --wav                    # the five tracks; also run --level 6+
+node tools/music.js --only meadow --wav      # one track, while writing it
 node tools/shoot.js --fmt                    # autopilot-walks every route + feast route
 node tools/shoot.js --touch                  # touch steering against a modelled thumb
 node tools/shoot.js --icons                  # every icon at the size it is drawn at
@@ -116,18 +129,42 @@ node tools/routes.js                         # the route editor, on :8766
 
 ## Music
 
+Five Tone.js modules under `js/music/`, one per biome. Each file owns its own
+instruments, effects, harmony and scheduling; `js/music/README.md` is the
+contract and each file's header comment is the piece's reasoning.
+
 - **Each biome is a written piece, not a reskin.** Parts are data, one string
   per bar; the melody is a phrase that repeats. Picking notes at random from a
   pentatonic pool is why it never used to sound like a tune.
+- **Rhythm is authored in BEATS, not on a step grid.** `pitch/beats` tokens, and
+  `bars()` throws if a bar does not add up. A shared step grid forces every part
+  onto one subdivision, which is how a piece ends up wall-to-wall eighth notes.
+- **A track builds its nodes in `start()`, never at module load.** `Tone.Offline`
+  swaps the global context for the duration of its callback, so anything built
+  at load belongs to the wrong context and renders silence. That is also what
+  lets `tools/music.js` measure the real `start()` path rather than a copy.
+- **One track plays at a time.** Tone has a single global transport; each track
+  claims its own tempo and metre on `start()`.
 - **Level fills a piece in; it never rewrites it.** Tempo creeps up, `+`-suffixed
   drum layers join at the halfway point — so **run `--level 6` or higher too**,
   or fill-layer bugs stay invisible.
 - **Verify the data and the audio separately** (`tools/music.js` does both), and
   never try to read pitches back out of a mix — a square wave's 7th harmonic
   and the kick's sweep both read as notes nobody wrote.
+- **The pitch check measures INTO a note, not at its onset** — a quarter in, or
+  120ms, whichever is sooner. At the onset it reads the attack transient rather
+  than the pitch. It is a fairer place to look, not a lenient one: when it
+  still fails there, the tail really is burying the note and **the fix is the
+  mix**. Night's lead delay was repeating each note on top of the next one, and
+  a saw bass's fifth harmonic is a major third — on a C that is an E, a
+  semitone under an F in the tune. Both were found this way.
 - **A bright pad will bury the tune.** Every "wrong note" that harness has ever
   flagged was a mix problem, not a data problem. Pads and basses are dark on
   purpose; the lead is the only thing allowed to be bright.
+- **The five carry per-track `MIX` trims, and `MUSIC_TRIM` in `audio.js` sets
+  music against SFX.** Music and SFX are two AudioContexts now, so nothing
+  balances them automatically. Both numbers are derived from measured RMS and
+  the arithmetic is written at each one; re-derive rather than nudge.
 
 ## High scores
 
