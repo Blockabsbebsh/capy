@@ -140,6 +140,18 @@ export function ramp(level, span = 10){
 export function monotonic(fn){
   let last = -Infinity;
   return (t, ...rest) => {
+    const T = tone();
+    const ctx = T.getContext();
+    /* Push the time out of the PAST first. Keeping our own requests increasing
+       is not enough on its own: Tone clamps any past time to `now` itself, and
+       it does that to each hit separately, so two requests 2ms apart that are
+       both already spent land on the same instant anyway — which is the very
+       thing this exists to prevent. An offline render is exempt: there is no
+       "late" there, and moving a note would move it in the rendered audio. */
+    if (!ctx.isOffline){
+      const floor = ctx.currentTime + 0.001;
+      if (t < floor) t = floor;
+    }
     if (!(t > last + 0.002)) t = last + 0.002;
     last = t;
     return fn(t, ...rest);
