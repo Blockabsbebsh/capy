@@ -136,19 +136,25 @@ export function ramp(level, span = 10){
  * One Part drives one voice, so per-Part monotonic time is per-voice monotonic
  * time. The nudge is 2ms, which is inaudible and only ever applied to hits that
  * were already late.
+ *
+ * `ctx` must be the context the Part was built in — see the note inside.
  */
-export function monotonic(fn){
+export function monotonic(fn, ctx){
   let last = -Infinity;
   return (t, ...rest) => {
-    const T = tone();
-    const ctx = T.getContext();
     /* Push the time out of the PAST first. Keeping our own requests increasing
        is not enough on its own: Tone clamps any past time to `now` itself, and
        it does that to each hit separately, so two requests 2ms apart that are
        both already spent land on the same instant anyway — which is the very
-       thing this exists to prevent. An offline render is exempt: there is no
-       "late" there, and moving a note would move it in the rendered audio. */
-    if (!ctx.isOffline){
+       thing this exists to prevent.
+
+       `ctx` is the context captured when the Part was BUILT, and it has to be:
+       Tone.Offline restores the global context before it renders, so asking for
+       the current one at event time hands you the LIVE clock during an offline
+       render. Flooring offline events against a live clock parked seconds ahead
+       pushes every note past the end of the render, and the render comes out
+       silent. Nothing is late in a render anyway, so offline is exempt. */
+    if (ctx && !ctx.isOffline){
       const floor = ctx.currentTime + 0.001;
       if (t < floor) t = floor;
     }

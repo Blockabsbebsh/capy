@@ -143,6 +143,12 @@ contract and each file's header comment is the piece's reasoning.
   swaps the global context for the duration of its callback, so anything built
   at load belongs to the wrong context and renders silence. That is also what
   lets `tools/music.js` measure the real `start()` path rather than a copy.
+- **`Tone.Offline` restores the global context BEFORE it renders**, so asking
+  for the current context inside a scheduled callback hands you the LIVE clock
+  during an offline render. Anything a callback needs from its context must be
+  captured when the Part is built. `monotonic()` did not, floored offline events
+  against a live clock parked seconds ahead, and rendered four of the five
+  tracks as pure silence — caught only because the pitch checks measure audio.
 - **One track plays at a time.** Tone has a single global transport; each track
   claims its own tempo and metre on `start()`.
 - **Level fills a piece in; it never rewrites it.** Tempo creeps up, `+`-suffixed

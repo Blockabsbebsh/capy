@@ -240,7 +240,7 @@ function build(){
      drives one voice, so this is what keeps a monophonic voice from being
      triggered twice at the same instant when the page is running late. */
   const loop = (cb, evs) => {
-    const p = new T.Part(monotonic(cb), evs);
+    const p = new T.Part(monotonic(cb, T.getContext()), evs);
     p.loop = true; p.loopStart = 0; p.loopEnd = ticks(BEATS, P);
     parts.push(p); return p;
   };
