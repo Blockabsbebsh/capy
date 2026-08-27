@@ -173,10 +173,15 @@ contract and each file's header comment is the piece's reasoning.
   ~100ms ahead; when the main thread is late the scheduled time has already
   passed and Tone clamps it to now, so hits written milliseconds apart arrive
   together and the voice throws from inside the callback, taking the transport
-  with it. `monotonic()` wraps every Part callback and keeps one voice's times
-  2ms apart, which is inaudible. A clap of three taps still wants three
-  sources — the guard stops the crash, it does not make one voice sound like
-  three.
+  with it. `monotonic()` wraps every Part callback and guards it.
+- **That guard has to push the time out of the PAST, not merely keep its own
+  requests increasing.** The first version only did the latter and Hell still
+  threw: Tone clamps each past time to `now` ITSELF, and separately, so two
+  requests 2ms apart that are both already spent land on the same instant
+  anyway. Floor at `now` first, then space them. Offline renders are exempt —
+  nothing is late there, and moving a note would move it in the audio.
+- A clap of three taps still wants three sources. The guard stops the crash; it
+  does not make one voice sound like three.
 - **`tools/music.js` plays the game page with `lookAhead` forced to 0**, which
   makes that collapse happen on every run instead of some of them. It reproduced
   intermittently at the default and never on an idle page, so neither a render
