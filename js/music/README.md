@@ -28,10 +28,19 @@ the file itself.
 </script>
 ```
 
-- `start({ level })` — builds the voices and starts the transport. Safe to call
-  from a click; it resumes Tone's context itself. Calling it twice is a no-op.
-- `stop()` — stops and disposes everything the track built.
+- `start({ level })` — builds the voices on the first call and starts the
+  transport. Safe to call from a click; it resumes Tone's context itself.
+  Calling it twice is a no-op.
+- `stop()` — stops playing. The voices stay built, so starting again is
+  instant; building them is a few hundred ms of blocked main thread and paying
+  that on every start is audible as the music arriving late.
 - `setVolume(v)` — 0..1, and it works whether or not the track is playing.
+- `warm()` — build the voices without playing, so the first `start()` costs
+  nothing. Safe before any user gesture: constructing Tone nodes does not need
+  one, only starting audio does.
+- `dispose()` — the real teardown, for a host that is finished with the track.
+  Also what the offline renderer needs, since its nodes belong to a context
+  that lives only for the length of one render.
 - `setLevel(n)` — optional, and specific to this game: the piece is unchanged,
   but the tempo creeps up across a biome's ten levels and the extra percussion
   joins at the halfway point.
@@ -44,7 +53,9 @@ bundle: Tone's ESM build is 555 files with bare-specifier dependencies and would
 need a bundler, and this repo deliberately does not have one.
 
 Only one track should play at a time — Tone has a single global transport, and
-they all schedule on it.
+they all schedule on it. To swap one for another, `stop({ keepTransport: true })`
+the outgoing one: the clock is handed over rather than stopped and restarted,
+which Tone does not like doing twice in the same tick.
 
 `lib.js` is shared: the note notation the five are written in, and nothing else.
 Keeping the parser in one place means a miscounted bar is caught the same way in

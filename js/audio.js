@@ -77,15 +77,15 @@ const Audio = (() => {
      the whole game was tuned at would be gone.
 
      Measured, not guessed. The five old themes rendered at RMS 0.0091-0.0110,
-     geometric mean 0.0101; the five new ones render at 0.0866 with their own
+     geometric mean 0.0101; the five new ones render at 0.0881 with their own
      fader at 0.75. `setVolume` is squared and sits after each track's
      compressor, so the scaling is exactly linear in v^2:
 
-         0.0866 * (0.55*T)^2 / 0.75^2 = 0.0101   ->   T = 0.47
+         0.0881 * (0.55*T)^2 / 0.75^2 = 0.0101   ->   T = 0.46
 
      Re-derive this if the tracks' MIX trims move. `tools/music.js` prints the
      RMS it measures, which is the left-hand side. */
-  const MUSIC_TRIM = 0.47;
+  const MUSIC_TRIM = 0.46;
 
   let musicVol = 0.55, musicTheme = 0, musicLevel = 1, musicOn = false;
   const musicMod = () => globalThis.Music || null;

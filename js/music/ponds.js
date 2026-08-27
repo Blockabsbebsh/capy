@@ -29,7 +29,7 @@
    from D4 down to G#3 and back, which is slow enough that you hear it as the
    water rather than as a second tune.
    ======================================================================= */
-import { bars, grid, hz, midi, ticks, unitToDb, tone, ramp } from './lib.js';
+import { bars, grid, hz, midi, monotonic, ticks, unitToDb, tone, ramp } from './lib.js';
 
 const BPB = 4, TOTAL = 16, BEATS = BPB * TOTAL;
 
@@ -41,7 +41,7 @@ const CHORDS = [
   ...CH('E/D',     'D2',  ['G#3','B3','E4','F#4']),   //  3-4  II over a D pedal
   ...CH('Bm11',    'B2',  ['F#3','A3','B3','E4']),    //  5-6
   ...CH('Amaj9',   'A2',  ['C#4','E4','B4']),         //  7-8
-  ...CH('G#m7b5',  'G#2', ['B3','D4','F#4','G#4']),   //  9-10 the #4 as a chord
+  ...CH('G#m7b5',  'G#2', ['B3','D4','F#4']),         //  9-10 the #4 as a chord
   ...CH('F#m7',    'F#2', ['A3','C#4','E4','F#4']),   // 11-12
   ...CH('Emaj9',   'E2',  ['G#3','B3','E4','F#4']),   // 13-14
   ...CH('A6/9',    'A2',  ['C#4','E4','F#4','B4']),   // 15-16 settles, never cadences
@@ -78,12 +78,12 @@ const COUNTER = bars([
   '-/2.5 E4/1.5',                          //  8
   '-/1 B3/3',                              //  9  G#m7b5
   '-/2.5 D4/1.5',                          // 10
-  '-/1.5 A3/2.5',                          // 11  F#m7   bottom of the descent
+  './1.5 A3/2.5',                          // 11  F#m7   bottom of the descent
   '-/2.5 C#4/1.5',                         // 12
   '-/1 B3/3',                              // 13  Emaj9
   '-/2.5 G#3/1.5',                         // 14
   '-/1.5 C#4/2.5',                         // 15  A6/9   climbing back
-  '-/2.5 E4/1.5',                          // 16
+  '-/2 E4/2',                              // 16         lands with the melody
 ], BPB, 'ponds counter');
 
 // roots, long and low, with a bar's worth of silence under every second chord
@@ -127,7 +127,7 @@ export const spec = {
    change, not a volume change. */
 const MIX = 1.2;
 
-let rig = null, level = 1, vol = 0.75;
+let rig = null, playing = false, level = 1, vol = 0.75;
 
 function build(){
   const T = tone();
@@ -138,9 +138,15 @@ function build(){
 
   // the reverb is the room this piece is played in, so it is long and it is fed
   // by everything except the bass, which only muddies it
-  const verb = new T.Freeverb({ roomSize:0.9, dampening:1800, wet:1 });
+  /* JCReverb, not Freeverb. Freeverb builds a dozen comb and allpass filters
+     and costs 226ms to construct — over half the time `build()` took, on every
+     single start, and the player heard that as the music arriving late. This is
+     14ms, and the tail is shaped by the filter after it rather than by the
+     reverb's own dampening. */
+  const verb = new T.JCReverb({ roomSize:0.85, wet:1 });
+  const verbLp = new T.Filter(1800, 'lowpass');
   const verbIn = new T.Gain(1);
-  verbIn.connect(verb); verb.connect(comp);
+  verbIn.connect(verb); verb.connect(verbLp); verbLp.connect(comp);
   const send = (node, amt) => { const g = new T.Gain(amt); node.connect(g); g.connect(verbIn); return g; };
 
   /* FM at a near-3:1 ratio with a short envelope on the modulator is a struck
@@ -183,9 +189,9 @@ function build(){
     envelope:{ attack:1.6, decay:1, sustain:0.8, release:3 },
     volume:-30,
   });
-  const wobble = new T.AutoFilter({ frequency:0.07, depth:0.55, baseFrequency:260, octaves:2.2 }).start();
+  const wobble = new T.AutoFilter({ frequency:0.07, depth:0.55, baseFrequency:260, octaves:2.2 });
   const pLp = new T.Filter(1100, 'lowpass');
-  const chorus = new T.Chorus({ frequency:0.35, delayTime:6, depth:0.7, wet:0.6 }).start();
+  const chorus = new T.Chorus({ frequency:0.35, delayTime:6, depth:0.7, wet:0.6 });
   pad.connect(wobble); wobble.connect(pLp); pLp.connect(chorus); chorus.connect(comp); send(chorus, 0.55);
 
   const kick = new T.MembraneSynth({
@@ -221,40 +227,56 @@ function build(){
   const tr = T.getTransport();
   const P = tr.PPQ;
   const parts = [];
-  const loop = p => { p.loop = true; p.loopStart = 0; p.loopEnd = ticks(BEATS, P); parts.push(p); return p; };
+  /* Builds the Part and wraps its callback: see monotonic() in lib.js. One Part
+     drives one voice, so this is what keeps a monophonic voice from being
+     triggered twice at the same instant when the page is running late. */
+  const loop = (cb, evs) => {
+    const p = new T.Part(monotonic(cb, T.getContext()), evs);
+    p.loop = true; p.loopStart = 0; p.loopEnd = ticks(BEATS, P);
+    parts.push(p); return p;
+  };
 
-  loop(new T.Part((t, e) => lead.triggerAttackRelease(hz(e.n), ticks(e.d * 0.9, P), t),
-    LEAD.map(e => ({ time: ticks(e.b, P), ...e }))));
-  loop(new T.Part((t, e) => counter.triggerAttackRelease(hz(e.n), ticks(e.d * 0.95, P), t),
-    COUNTER.map(e => ({ time: ticks(e.b, P), ...e }))));
-  loop(new T.Part((t, e) => bass.triggerAttackRelease(hz(e.n), ticks(e.d, P), t),
-    BASS.map(e => ({ time: ticks(e.b, P), ...e }))));
+  loop((t, e) => lead.triggerAttackRelease(hz(e.n), ticks(e.d * 0.9, P), t),
+    LEAD.map(e => ({ time: ticks(e.b, P), ...e })));
+  loop((t, e) => counter.triggerAttackRelease(hz(e.n), ticks(e.d * 0.95, P), t),
+    COUNTER.map(e => ({ time: ticks(e.b, P), ...e })));
+  loop((t, e) => bass.triggerAttackRelease(hz(e.n), ticks(e.d, P), t),
+    BASS.map(e => ({ time: ticks(e.b, P), ...e })));
   // the pad changes every two bars, so it is triggered off the chord list
-  loop(new T.Part((t, e) => pad.triggerAttackRelease(e.pad.map(hz), ticks(BPB * 2 * 0.96, P), t),
+  loop((t, e) => pad.triggerAttackRelease(e.pad.map(hz), ticks(BPB * 2 * 0.96, P), t),
     CHORDS.filter((_, i) => i % 2 === 0)
-          .map((c, i) => ({ time: ticks(i * BPB * 2, P), pad: c.padMidi }))));
+          .map((c, i) => ({ time: ticks(i * BPB * 2, P), pad: c.padMidi })));
 
   for (const k of KIT)
-    loop(new T.Part(t => { if (!k.fill || ramp(level) >= 0.5) hit[k.inst](t); },
-      k.beats.map(b => ({ time: ticks(b, P) }))));
+    loop(t => { if (!k.fill || ramp(level) >= 0.5) hit[k.inst](t); },
+      k.beats.map(b => ({ time: ticks(b, P) })));
 
   // an octave of shimmer over the bells for the last stretch of the biome
-  loop(new T.Part((t, e) => {
+  loop((t, e) => {
     if (ramp(level) < 0.8) return;
     lead.triggerAttackRelease(hz(e.n + 12), ticks(e.d * 0.5, P), t + 0.02, 0.14);
-  }, LEAD.map(e => ({ time: ticks(e.b, P), ...e }))));
+  }, LEAD.map(e => ({ time: ticks(e.b, P), ...e })));
 
-  return { out, parts,
-    nodes:[out, comp, verb, verbIn, lead, echo, counter, cLp, bass, bLp, pad,
+  return { out, parts, lfos:[wobble, chorus],
+    nodes:[out, comp, verb, verbLp, verbIn, lead, echo, counter, cLp, bass, bLp, pad,
            wobble, pLp, chorus, kick, rim, rimF, drip, dripF, shaker, shHp] };
 }
 
+/* Builds the voices on the first call and KEEPS them. Rebuilding cost ~400ms
+   of blocked main thread every time the music started — at a level start, with
+   the game already busy, that is heard as the music arriving late. Pause and
+   resume, and coming back to a biome, now cost nothing. `dispose()` is the
+   real teardown. */
 export function start({ level: lv = level } = {}){
-  if (rig) return;
   const T = tone();
   level = lv;
+  // an OfflineContext is already "running" as far as rendering goes, and
+  // Tone.start() on one is meaningless — tools/music.js renders through here
   if (!T.getContext().isOffline) T.start();
-  rig = build();
+  if (!rig) rig = build();
+  else if (playing) return;
+  playing = true;
+  for (const l of rig.lfos) l.start();
   const tr = T.getTransport();
   tr.bpm.value = spec.bpm + spec.bpmUp * ramp(level);
   tr.timeSignature = BPB;   // the transport is shared, so each track claims its metre
@@ -263,18 +285,39 @@ export function start({ level: lv = level } = {}){
   if (tr.state !== 'started') tr.start('+0.05');
 }
 
+/** Build the voices without playing. The first build of a track costs a few
+    hundred ms of blocked main thread; doing it while a menu is up means the
+    player never waits for it. Safe before any user gesture — constructing Tone
+    nodes does not need one, only starting audio does. */
+export function warm(){
+  if (!rig) rig = build();
+}
+
 /* `keepTransport` is for a theme change. Tone's transport is global and shared,
    and stopping it here only for the next track to start it again in the same
    tick makes it recompute an offset that lands a hair below zero — Tone then
    throws ("Value must be within [0, Infinity]", "Start time must be strictly
    greater than previous"). Leaving it running and letting the incoming track
    seek to 0 is both correct and quieter: no track restarts the clock, it just
-   takes it over. A caller stopping the music for real gets the clock stopped. */
+   takes it over. A caller stopping the music for real gets the clock stopped.
+
+   The voices are left built — see start(). */
 export function stop({ keepTransport = false } = {}){
-  if (!rig) return;
+  if (!rig || !playing) return;
+  playing = false;
   const T = tone();
-  for (const p of rig.parts){ p.stop(); p.dispose(); }
+  for (const p of rig.parts) p.stop();
+  for (const l of rig.lfos) l.stop();
   if (!keepTransport) T.getTransport().stop();
+}
+
+/** Tear the voices down for real. The game never needs this — it is for a host
+    that is finished with the track, and for the offline renderer, which builds
+    into a context that lives only for the length of one render. */
+export function dispose(){
+  if (!rig) return;
+  stop();
+  for (const p of rig.parts) p.dispose();
   for (const n of rig.nodes) n.dispose();
   rig = null;
 }

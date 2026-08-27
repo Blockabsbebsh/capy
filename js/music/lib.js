@@ -46,7 +46,7 @@ export const noteName = m => SPELL[((m % 12) + 12) % 12] + (Math.floor(m / 12) -
  */
 export function bars(list, beatsPerBar, label){
   const out = [];
-  let at = 0;
+  let at = 0, tied = false;      // is the previous token a note this may tie to?
   list.forEach((bar, i) => {
     let sum = 0;
     for (const tok of bar.trim().split(/\s+/)){
@@ -56,12 +56,17 @@ export function bars(list, beatsPerBar, label){
       const head = tok.slice(0, slash);
       const d = Number(tok.slice(slash + 1));
       if (!(d > 0)) throw new Error(`[${label}] bar ${i + 1}: bad length in "${tok}"`);
-      if (head === '.'){ /* rest */ }
+      if (head === '.'){ tied = false; }
       else if (head === '-'){
         const prev = out[out.length - 1];
         if (!prev) throw new Error(`[${label}] bar ${i + 1}: tie with nothing to tie to`);
+        /* A tie may only follow the note it ties. After a rest it would extend a
+           note that already stopped, which does not sound like a longer note —
+           it sounds like that note overlapping everything written after it. */
+        if (!tied) throw new Error(`[${label}] bar ${i + 1}: tie after a rest`);
         prev.d += d;
       } else {
+        tied = true;
         out.push({ b: at + sum, n: midi(head), d });
       }
       sum += d;
@@ -116,4 +121,45 @@ export function tone(){
     change, it only fills in. */
 export function ramp(level, span = 10){
   return Math.min(1, Math.max(0, ((level - 1) % span) / (span - 1)));
+}
+
+/**
+ * Wrap a Part callback so the times it is handed are strictly increasing.
+ *
+ * Tone throws "Start time must be strictly greater than previous start time" if
+ * a MONOPHONIC voice is started twice at the same instant — and a busy page
+ * makes that happen without anyone writing it. Tone schedules ahead; when the
+ * main thread is late the scheduled time has already passed and Tone clamps it
+ * to now, so hits written milliseconds apart arrive together. A tambourine on
+ * six eighths, or a clap built from three taps, then kills the transport.
+ *
+ * One Part drives one voice, so per-Part monotonic time is per-voice monotonic
+ * time. The nudge is 2ms, which is inaudible and only ever applied to hits that
+ * were already late.
+ *
+ * `ctx` must be the context the Part was built in — see the note inside.
+ */
+export function monotonic(fn, ctx){
+  let last = -Infinity;
+  return (t, ...rest) => {
+    /* Push the time out of the PAST first. Keeping our own requests increasing
+       is not enough on its own: Tone clamps any past time to `now` itself, and
+       it does that to each hit separately, so two requests 2ms apart that are
+       both already spent land on the same instant anyway — which is the very
+       thing this exists to prevent.
+
+       `ctx` is the context captured when the Part was BUILT, and it has to be:
+       Tone.Offline restores the global context before it renders, so asking for
+       the current one at event time hands you the LIVE clock during an offline
+       render. Flooring offline events against a live clock parked seconds ahead
+       pushes every note past the end of the render, and the render comes out
+       silent. Nothing is late in a render anyway, so offline is exempt. */
+    if (ctx && !ctx.isOffline){
+      const floor = ctx.currentTime + 0.001;
+      if (t < floor) t = floor;
+    }
+    if (!(t > last + 0.002)) t = last + 0.002;
+    last = t;
+    return fn(t, ...rest);
+  };
 }

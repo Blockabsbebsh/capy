@@ -96,7 +96,9 @@ const ok = (label, cond, detail = '') => {
 (async () => {
   const browser = await chromium.launch({
     executablePath: BROWSER,
-    args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox', '--mute-audio'],
+    args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox', '--mute-audio',
+           // the live pass needs a context that will actually run
+           '--autoplay-policy=no-user-gesture-required'],
   });
   const page = await browser.newPage({ viewport: { width: 700, height: 500 } });
   const errors = [];
@@ -133,17 +135,51 @@ const ok = (label, cond, detail = '') => {
 
     /* A melody note a semitone from a chord tone under it is the one interval
        that reads as a mistake rather than as colour. Sustained notes only: a
-       short passing note through a clash is ordinary voice leading. */
-    const chordAt = b => T.chords[Math.floor(b / T.beatsPerBar) % T.chords.length];
+       short passing note through a clash is ordinary voice leading.
+
+       EVERY bar the note sounds over, not just the one it starts in. That is
+       the whole check: an earlier version looked only at the starting bar and
+       so was blind to a note tied ACROSS a barline into the next chord, which
+       is exactly where this goes wrong — the tie is what makes the note long
+       enough to matter. It missed eighteen of them across the five tracks, and
+       they were audible. */
     const clash = [];
-    for (const e of [...lead, ...counter]){
-      if (e.d < 1) continue;
-      for (const p of chordAt(e.b).padMidi){
-        const d = Math.abs(e.n - p) % 12;
-        if (d === 1 || d === 11) clash.push(`${name(e.n)} vs ${name(p)}`);
+    for (const [who, part] of [['lead', lead], ['counter', counter]]){
+      for (const e of part){
+        if (e.d < 1) continue;
+        const first = Math.floor(e.b / T.beatsPerBar);
+        const last  = Math.floor((e.b + e.d - 1e-9) / T.beatsPerBar);
+        for (let bar = first; bar <= last; bar++){
+          const ch = T.chords[bar % T.chords.length];
+          // how much of the note actually sounds inside this bar; a hair over
+          // the barline is a graceful overlap, not a clash
+          const ov = Math.min(e.b + e.d, (bar + 1) * T.beatsPerBar)
+                   - Math.max(e.b, bar * T.beatsPerBar);
+          if (ov < 0.5) continue;
+          for (const p of ch.padMidi){
+            const d = Math.abs(e.n - p) % 12;
+            if (d === 1 || d === 11)
+              clash.push(`${who} ${name(e.n)}@${e.b} vs ${ch.name} ${name(p)}`
+                         + (bar !== first ? ' [tied in]' : ''));
+          }
+        }
       }
     }
-    ok(`${T.id}: no sustained semitone clashes`, clash.length === 0, clash.join(', '));
+    ok(`${T.id}: no sustained semitone clashes`, clash.length === 0, clash.slice(0, 6).join(', '));
+
+    /* And the two melodic lines against each other. Two voices a semitone apart
+       and sounding together is the same fault one octave sideways, and nothing
+       was looking for it — the pad check cannot see it because neither note is
+       in the pad. */
+    const cross = [];
+    for (const a of lead) for (const b of counter){
+      const ov = Math.min(a.b + a.d, b.b + b.d) - Math.max(a.b, b.b);
+      if (ov < 0.5) continue;
+      const d = Math.abs(a.n - b.n) % 12;
+      if (d === 1 || d === 11)
+        cross.push(`${name(a.n)}@${a.b} vs ${name(b.n)}@${b.b}`);
+    }
+    ok(`${T.id}: the two lines never rub a semitone`, cross.length === 0, cross.slice(0, 6).join(', '));
 
     // the brief: at least 8 bars, ideally 16, before the tune repeats itself
     const half = T.bars / 2, mid = half * T.beatsPerBar;
@@ -265,6 +301,45 @@ const ok = (label, cond, detail = '') => {
   }
 
   ok('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
+
+  /* Everything above measures a RENDER. This plays the music on the actual game
+     page, walking the biomes the way a run does, with `lookAhead` forced to 0.
+
+     That last part is the whole check. Tone normally schedules ~100ms early, so
+     a hit built from several taps a few ms apart gets those taps as written. On
+     a page busy rendering a game the scheduled time arrives already spent and
+     Tone clamps it to now — and the taps collapse onto one instant. Doing that
+     to a MONOPHONIC voice throws from inside the callback and takes the
+     transport down with it, which is what a clap made of three triggers on one
+     NoiseSynth did in the game while all sixty-odd checks above it passed.
+
+     At lookAhead 0 every hit lands at ~now, so the collapse happens on every
+     run instead of on some of them. Reproduced intermittently at the default
+     and never at all on an idle page — hence this, and hence the game page
+     rather than a synthetic loop. */
+  console.log('live on the game page:');
+  const IDS = ['meadow', 'ponds', 'bubblegum', 'night', 'hell'];
+  const gameUrl = URL.replace(/tools\/music\.html.*$/, 'index.html');
+  const gpage = await browser.newPage({ viewport: { width: 800, height: 600 } });
+  const gerr = [];
+  gpage.on('pageerror', e => gerr.push(String(e.message)));
+  gpage.on('console', m => {
+    if (m.type() === 'error' && !m.text().includes('404')) gerr.push(m.text());
+  });
+  await gpage.goto(gameUrl, { waitUntil: 'load' });
+  await gpage.waitForFunction(() => window.Music);
+  await gpage.waitForTimeout(1500);
+  await gpage.evaluate(() => { Tone.getContext().lookAhead = 0; });
+  await gpage.evaluate(() => Audio.startMusic());
+  for (let i = 0; i < 5; i++){
+    const before = gerr.length;
+    await gpage.evaluate(t => Audio.setMusicTheme(t), i);
+    await gpage.waitForTimeout(2600);
+    ok(`${IDS[i]}: plays in the game without throwing`,
+       gerr.length === before, gerr.slice(before, before + 2).join(' | '));
+  }
+  await gpage.evaluate(() => Audio.stopMusic());
+  await gpage.close();
 
   await browser.close();
   if (fail.length){ console.error(`\n${fail.length} check(s) failed.`); process.exit(1); }
