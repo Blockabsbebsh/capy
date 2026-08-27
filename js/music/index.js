@@ -48,16 +48,28 @@ export const Music = {
   setTheme(i){
     const next = clamp(i);
     if (next === cur) return;
+    // build the incoming voices BEFORE silencing the outgoing ones, so the gap
+    // between the two pieces is a beat rather than however long a build takes
+    TRACKS[next].warm();
     // keepTransport: the clock is handed over, not stopped and restarted
     if (playing) TRACKS[cur].stop({ keepTransport: true });
     cur = next;
     if (playing){ TRACKS[cur].setVolume(vol); TRACKS[cur].start({ level }); }
   },
+  /** Build a track's voices ahead of time. See warm() in any track file. */
+  warm(i){ TRACKS[clamp(i)].warm(); },
   setLevel(l){ level = l; TRACKS[cur].setLevel(l); },
   // duck() from the game lands here: one volume, applied live
   setVolume(v){ vol = Math.max(0, Math.min(1, v)); TRACKS[cur].setVolume(vol); },
 };
 
 globalThis.Music = Music;
+
+/* Warm the first biome once the page has gone quiet. Its voices take a few
+   hundred ms to build, and paying that here — while the menu is up and nothing
+   is waiting on the main thread — is the difference between the music starting
+   with the level and starting a beat after it. */
+const idle = globalThis.requestIdleCallback || (fn => setTimeout(fn, 1200));
+idle(() => { try { Music.warm(0); } catch (e) { /* no Tone yet: start() rebuilds */ } });
 // audio.js records anything asked for before this module ran, and this replays it
 if (typeof globalThis.__musicPending === 'function') globalThis.__musicPending(Music);

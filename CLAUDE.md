@@ -143,6 +143,12 @@ contract and each file's header comment is the piece's reasoning.
   swaps the global context for the duration of its callback, so anything built
   at load belongs to the wrong context and renders silence. That is also what
   lets `tools/music.js` measure the real `start()` path rather than a copy.
+- **`Tone.Offline` restores the global context BEFORE it renders**, so asking
+  for the current context inside a scheduled callback hands you the LIVE clock
+  during an offline render. Anything a callback needs from its context must be
+  captured when the Part is built. `monotonic()` did not, floored offline events
+  against a live clock parked seconds ahead, and rendered four of the five
+  tracks as pure silence — caught only because the pitch checks measure audio.
 - **One track plays at a time.** Tone has a single global transport; each track
   claims its own tempo and metre on `start()`.
 - **Level fills a piece in; it never rewrites it.** Tempo creeps up, `+`-suffixed
@@ -151,6 +157,16 @@ contract and each file's header comment is the piece's reasoning.
 - **Verify the data and the audio separately** (`tools/music.js` does both), and
   never try to read pitches back out of a mix — a square wave's 7th harmonic
   and the kick's sweep both read as notes nobody wrote.
+- **A note is checked against every bar it SOUNDS over, not the one it starts
+  in.** A tie across a barline is what makes a note long enough to clash, and
+  the chord it clashes with is the next one — so checking only the starting bar
+  is blind in exactly the place the fault lives. It hid eighteen semitone
+  clashes across the five tracks, and they were audible as "the progressions
+  sound wrong". The two melodic lines are checked against each other for the
+  same interval, which the pad check cannot see.
+- **A tie may only follow the note it ties.** `bars()` throws on a tie after a
+  rest: it would lengthen a note that already stopped, so instead of a longer
+  note you get that note overlapping everything written after it.
 - **The pitch check measures INTO a note, not at its onset** — a quarter in, or
   120ms, whichever is sooner. At the onset it reads the attack transient rather
   than the pitch. It is a fairer place to look, not a lenient one: when it
@@ -158,6 +174,24 @@ contract and each file's header comment is the piece's reasoning.
   mix**. Night's lead delay was repeating each note on top of the next one, and
   a saw bass's fifth harmonic is a major third — on a C that is an E, a
   semitone under an F in the tune. Both were found this way.
+- **A monophonic Tone voice must never be triggered twice at the same instant**,
+  and a busy page will do that to you without anyone writing it. Tone schedules
+  ~100ms ahead; when the main thread is late the scheduled time has already
+  passed and Tone clamps it to now, so hits written milliseconds apart arrive
+  together and the voice throws from inside the callback, taking the transport
+  with it. `monotonic()` wraps every Part callback and guards it.
+- **That guard has to push the time out of the PAST, not merely keep its own
+  requests increasing.** The first version only did the latter and Hell still
+  threw: Tone clamps each past time to `now` ITSELF, and separately, so two
+  requests 2ms apart that are both already spent land on the same instant
+  anyway. Floor at `now` first, then space them. Offline renders are exempt —
+  nothing is late there, and moving a note would move it in the audio.
+- A clap of three taps still wants three sources. The guard stops the crash; it
+  does not make one voice sound like three.
+- **`tools/music.js` plays the game page with `lookAhead` forced to 0**, which
+  makes that collapse happen on every run instead of some of them. It reproduced
+  intermittently at the default and never on an idle page, so neither a render
+  nor a synthetic loop can stand in for it — several were tried.
 - **A bright pad will bury the tune.** Every "wrong note" that harness has ever
   flagged was a mix problem, not a data problem. Pads and basses are dark on
   purpose; the lead is the only thing allowed to be bright.
