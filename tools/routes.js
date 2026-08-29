@@ -226,7 +226,11 @@ function serve(port){
       if (err || st.isDirectory()) return send(res, 404, 'not found');
       serveFile(res, file);
     });
-  }).listen(port, () => {
+  /* Loopback only. Unbound, this answers on every network interface: the PUT
+     handler above has no auth and no origin check, and a note's text lands in
+     js/routes.js verbatim, which is loaded as a script — a crafted note is
+     code execution for anyone who can reach the port, not just a bad route. */
+  }).listen(port, '127.0.0.1', () => {
     console.log(`route editor   http://localhost:${port}/`);
     console.log(`the game       http://localhost:${port}/index.html`);
     console.log(`editing        ${path.relative(process.cwd(), FILE)}  (git is the undo)`);
