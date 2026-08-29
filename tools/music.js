@@ -18,7 +18,7 @@
  * A human still has to say whether the tune is any good. `--wav` is for that.
  *
  *   npm i playwright-core            # not committed; chromium is preinstalled
- *   python3 -m http.server 8765 &
+ *   python3 -m http.server 8765 --bind 127.0.0.1 &
  *   node tools/music.js              # checks; exits non-zero on failure
  *   node tools/music.js --wav        # + write .shots/music-<id>.wav
  *   node tools/music.js --wav --level 10 --seconds 40

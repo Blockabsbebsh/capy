@@ -6,7 +6,7 @@
  * every time.
  *
  *   npm i playwright-core                  # not committed; chromium is preinstalled
- *   python3 -m http.server 8765 &
+ *   python3 -m http.server 8765 --bind 127.0.0.1 &
  *   node tools/shoot.js --check            # assertions; exits non-zero on failure
  *   node tools/shoot.js --biome hell,night # screenshot named biomes
  *   node tools/shoot.js --capy             # capybara turnaround

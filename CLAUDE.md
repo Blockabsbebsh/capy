@@ -96,7 +96,7 @@ audio needs no WebGL), run against a real browser:
 ```sh
 npm i playwright-core          # not committed; chromium is preinstalled
 pip install pillow numpy scipy # only for tools/icons.py
-python3 -m http.server 8765 &
+python3 -m http.server 8765 --bind 127.0.0.1 &
 node tools/shoot.js --check                  # assertions, non-zero on failure
 node tools/music.js --wav                    # the five tracks; also run --level 6+
 node tools/music.js --only meadow --wav      # one track, while writing it
