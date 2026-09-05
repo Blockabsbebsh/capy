@@ -448,8 +448,11 @@ function toast(msg, bad){
   toastT = setTimeout(() => el.classList.remove('on'), bad ? 9000 : 2600);
 }
 
+/* The server hands this page a fresh token on every launch (window.ROUTE_TOKEN,
+   inlined into this page's own HTML) and refuses any /api/routes request that
+   doesn't carry it — a page loaded from anywhere else has no way to know it. */
 async function load(){
-  const r = await fetch('/api/routes');
+  const r = await fetch('/api/routes', { headers:{ 'x-route-token': window.ROUTE_TOKEN } });
   const j = await r.json();
   S.routes = j.routes; S.dirty = false;
   if (S.sel >= S.routes.length) S.sel = S.routes.length - 1;
@@ -466,7 +469,7 @@ async function save(){
   S.busy = true;
   try {
     const r = await fetch('/api/routes', { method:'PUT',
-      headers:{ 'content-type':'application/json' },
+      headers:{ 'content-type':'application/json', 'x-route-token': window.ROUTE_TOKEN },
       body: JSON.stringify({ routes: S.routes }) });
     const j = await r.json();
     if (!r.ok){ toast(j.error || 'NOT saved', true); return false; }
