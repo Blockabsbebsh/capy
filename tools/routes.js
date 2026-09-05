@@ -30,16 +30,100 @@
    NOT preserved, which is why the file is written in exactly one style.
    ======================================================================= */
 'use strict';
-const fs = require('fs'), path = require('path'), http = require('http');
+const fs = require('fs'), path = require('path'), http = require('http'), crypto = require('crypto');
 
 const ROOT = path.resolve(__dirname, '..');
 const FILE = path.join(ROOT, 'js', 'routes.js');
 
-/* ------------------------------------------------------------------ read -
-   The array is evaluated rather than parsed: it is a JS literal in a file we
-   generate ourselves, so a real evaluator is both shorter and more honest than
-   a half-parser that would disagree with the browser about a trailing comma.
-   The notes are line-scanned separately and matched by id. */
+/* ------------------------------------------------------------------ parse -
+   A hand-written reader for exactly the grammar `shapeText` below writes:
+   an array of `{ id:'…', min:N, weight:N, beats:[ {x:N,z:N[,dash:true]}, … ] }`
+   objects. This used to be `new Function(body)()` — quicker to write, since a
+   real evaluator IS a parser for this — but the "note" field is free text a
+   page PUTs in and this file re-reads, and it lands in the array as a `//`
+   comment. A `//` comment ends at any of `\n`, a bare `\r`, or the Unicode
+   U+2028/U+2029 separators — `clean()` strips those from a note before it is
+   written, but nothing should also depend on that being the only guard, since
+   this reader runs on whatever is actually on disk (hand-edited, or written by
+   an older build). So: no evaluator. Comment-only lines are dropped before
+   parsing (notes are extracted from them separately, below, unparsed either
+   way), and everything else is tokenised as data — numbers, single-quoted
+   strings, `true` — never executed, so no text a note can carry becomes code. */
+function parseRouteArray(text){
+  let i = 0;
+  const n = text.length;
+  const ws = () => { while (i < n && /\s/.test(text[i])) i++; };
+  const fail = msg => { throw new Error(`${msg} at offset ${i}: ${JSON.stringify(text.slice(i, i + 24))}`); };
+  const expect = ch => { ws(); if (text[i] !== ch) fail(`expected '${ch}'`); i++; };
+  function value(){
+    ws();
+    const c = text[i];
+    if (c === '{') return object();
+    if (c === '[') return array();
+    if (c === "'") return string();
+    if (text.startsWith('true', i)){ i += 4; return true; }
+    if (/[-\d]/.test(c)) return number();
+    fail('unexpected token');
+  }
+  function string(){
+    expect("'");
+    let s = '';
+    while (text[i] !== "'"){
+      if (i >= n) fail('unterminated string');
+      s += text[i++];
+    }
+    i++;
+    return s;
+  }
+  function number(){
+    const start = i;
+    if (text[i] === '-') i++;
+    while (i < n && /[\d.]/.test(text[i])) i++;
+    const v = Number(text.slice(start, i));
+    if (!Number.isFinite(v)) fail('bad number');
+    return v;
+  }
+  function array(){
+    expect('[');
+    const out = [];
+    ws();
+    if (text[i] === ']'){ i++; return out; }
+    for (;;){
+      out.push(value());
+      ws();
+      if (text[i] === ','){ i++; ws(); if (text[i] === ']'){ i++; break; } continue; }
+      if (text[i] === ']'){ i++; break; }
+      fail("expected ',' or ']'");
+    }
+    return out;
+  }
+  function object(){
+    expect('{');
+    const out = {};
+    ws();
+    if (text[i] === '}'){ i++; return out; }
+    for (;;){
+      ws();
+      const start = i;
+      while (i < n && /[a-zA-Z0-9_]/.test(text[i])) i++;
+      const key = text.slice(start, i);
+      if (!key) fail('expected object key');
+      expect(':');
+      out[key] = value();
+      ws();
+      if (text[i] === ','){ i++; ws(); if (text[i] === '}'){ i++; break; } continue; }
+      if (text[i] === '}'){ i++; break; }
+      fail("expected ',' or '}'");
+    }
+    return out;
+  }
+  ws();
+  const result = array();
+  ws();
+  if (i !== n) fail('trailing content after the array');
+  return result;
+}
+
 function readShapes(){
   const src = fs.readFileSync(FILE, 'utf8');
   const lines = src.split('\n');
@@ -47,9 +131,6 @@ function readShapes(){
   const end = lines.findIndex((l, i) => i > start && /^\];/.test(l));
   if (start < 0 || end < 0)
     throw new Error(`${FILE}: no "const ROUTES = [ … ];" block at column 0`);
-
-  const body = lines.slice(start, end + 1).join('\n');
-  const shapes = new Function(body.replace(/^const /, 'var ') + '\nreturn ROUTES;')();
 
   /* Notes: `//` lines run together directly above a `{ id:'…'` line. A blank
      line breaks the run, so a comment that belongs to the array rather than to
@@ -63,6 +144,15 @@ function readShapes(){
     if (id){ if (pending.length) notes[id[1]] = pending.join('\n'); pending = []; continue; }
     if (!line.trim()) pending = [];
   }
+
+  /* The data: the same lines with every comment-only line dropped, so the
+     parser above never sees one — a note's text, whatever it contains, is
+     never in the string this function tokenises. */
+  const dataLines = lines.slice(start + 1, end).filter(l => !/^\s*\/\//.test(l));
+  let shapes;
+  try { shapes = parseRouteArray('[' + dataLines.join('\n') + ']'); }
+  catch (e){ throw new Error(`${FILE}: could not parse the ROUTES array — ${e.message}`); }
+
   for (const s of shapes) s.note = notes[s.id] || '';
   return { shapes, header: lines.slice(0, start + 1), footer: lines.slice(end) };
 }
@@ -152,13 +242,18 @@ function validate(shapes){
 }
 
 /* Everything the writer accepts, and nothing it does not: a PUT body is JSON
-   from a page, so the shapes that reach disk are rebuilt field by field. */
+   from a page, so the shapes that reach disk are rebuilt field by field.
+   A note is written back as a `//` comment (see shapeText below), and a `//`
+   comment ends at ANY ECMAScript LineTerminator — not just `\n`, but also a
+   bare `\r` and the Unicode U+2028/U+2029 separators. Strip all four, or a
+   note carrying one reopens the file to arbitrary trailing text landing in
+   the array as code once read back. */
 function clean(shapes){
   return shapes.map(s => ({
     id: String(s.id || '').trim(),
     min: Math.round(Number(s.min)),
     weight: Math.round(Number(s.weight)),
-    note: String(s.note || '').replace(/\r/g, ''),
+    note: String(s.note || '').replace(/[\r\u2028\u2029]/g, ''),
     beats: (Array.isArray(s.beats) ? s.beats : []).map(b => {
       const o = { x: Math.round(Number(b.x) * 100) / 100,
                   z: Math.round(Number(b.z) * 100) / 100 };
@@ -191,34 +286,72 @@ function serveFile(res, file){
   });
 }
 
+/* Loopback keeps other MACHINES out; it does nothing against other things on
+   THIS one — any page already open in a browser, any extension, any other
+   local process, can reach 127.0.0.1 exactly as the editor page does, and
+   none of that goes through same-origin restrictions (those protect what a
+   page can READ back, not whether the request fires). So `/api/routes`
+   requires a token generated fresh in memory each launch and handed only to
+   the page this server itself serves — nothing else can know it. The Origin
+   check below is a second, weaker layer on top of that, not instead of it: a
+   browser won't let page JS forge its own Origin header, but a bare local
+   script talking raw HTTP can set that header to anything, so it is the
+   token that is load-bearing here, not the Origin. */
 function serve(port){
+  const TOKEN = crypto.randomBytes(24).toString('hex');
+  const originOK = o => !o || o === `http://127.0.0.1:${port}` || o === `http://localhost:${port}`;
+
+  function serveEditor(res){
+    fs.readFile(path.join(__dirname, 'routeeditor.html'), 'utf8', (err, html) => {
+      if (err) return send(res, 404, 'not found');
+      const tag = '<script src="/tools/routeeditor.js"></script>';
+      const withToken = html.replace(tag,
+        `<script>window.ROUTE_TOKEN=${JSON.stringify(TOKEN)};</script>\n${tag}`);
+      send(res, 200, withToken, MIME['.html']);
+    });
+  }
+
   http.createServer((req, res) => {
     const url = new URL(req.url, 'http://localhost');
     const p = decodeURIComponent(url.pathname);
 
-    if (p === '/api/routes' && req.method === 'GET'){
-      try { return sendJSON(res, 200, { routes: readShapes().shapes, file: 'js/routes.js' }); }
-      catch (e){ return sendJSON(res, 500, { error: String(e.message) }); }
-    }
-    if (p === '/api/routes' && req.method === 'PUT'){
-      let body = '';
-      req.on('data', c => { body += c; if (body.length > 1e6) req.destroy(); });
-      req.on('end', () => {
-        let shapes;
-        try { shapes = clean(JSON.parse(body).routes); }
-        catch (e){ return sendJSON(res, 400, { error: 'bad JSON: ' + e.message }); }
-        const errs = validate(shapes);
-        if (errs.length) return sendJSON(res, 400, { error: errs.join('\n'), errors: errs });
-        try { writeShapes(shapes); }
+    if (p === '/api/routes'){
+      if (!originOK(req.headers.origin) || req.headers['x-route-token'] !== TOKEN)
+        return send(res, 403, 'forbidden');
+
+      if (req.method === 'GET'){
+        try { return sendJSON(res, 200, { routes: readShapes().shapes, file: 'js/routes.js' }); }
         catch (e){ return sendJSON(res, 500, { error: String(e.message) }); }
-        console.log(`  wrote js/routes.js — ${shapes.length} routes`);
-        // read back, so the page ends up holding exactly what is on disk
-        return sendJSON(res, 200, { ok: true, routes: readShapes().shapes });
-      });
-      return;
+      }
+      if (req.method === 'PUT'){
+        let body = '';
+        req.on('data', c => { body += c; if (body.length > 1e6) req.destroy(); });
+        req.on('end', () => {
+          let shapes;
+          try { shapes = clean(JSON.parse(body).routes); }
+          catch (e){ return sendJSON(res, 400, { error: 'bad JSON: ' + e.message }); }
+          const errs = validate(shapes);
+          if (errs.length) return sendJSON(res, 400, { error: errs.join('\n'), errors: errs });
+          try { writeShapes(shapes); }
+          catch (e){ return sendJSON(res, 500, { error: String(e.message) }); }
+          console.log(`  wrote js/routes.js — ${shapes.length} routes`);
+          // read back, so the page ends up holding exactly what is on disk
+          return sendJSON(res, 200, { ok: true, routes: readShapes().shapes });
+        });
+        return;
+      }
+      return send(res, 405, 'method not allowed');
     }
 
-    if (p === '/' || p === '/editor') return serveFile(res, path.join(__dirname, 'routeeditor.html'));
+    if (p === '/' || p === '/editor') return serveEditor(res);
+
+    /* This otherwise hands out any file under ROOT with no allowlist, and a
+       dot-prefixed path is repo plumbing, never a game asset: `.git` in
+       particular holds the full history, including anything ever committed
+       and since removed from HEAD — serving it was never a choice anyone
+       made, just a static server with no denylist reaching further than
+       intended. */
+    if (p.split('/').some(seg => seg.startsWith('.'))) return send(res, 403, 'forbidden');
 
     const file = path.join(ROOT, p);
     if (!file.startsWith(ROOT + path.sep)) return send(res, 403, 'forbidden');
@@ -226,10 +359,6 @@ function serve(port){
       if (err || st.isDirectory()) return send(res, 404, 'not found');
       serveFile(res, file);
     });
-  /* Loopback only. Unbound, this answers on every network interface: the PUT
-     handler above has no auth and no origin check, and a note's text lands in
-     js/routes.js verbatim, which is loaded as a script — a crafted note is
-     code execution for anyone who can reach the port, not just a bad route. */
   }).listen(port, '127.0.0.1', () => {
     console.log(`route editor   http://localhost:${port}/`);
     console.log(`the game       http://localhost:${port}/index.html`);
